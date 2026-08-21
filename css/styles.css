@@ -148,7 +148,7 @@ input, select, textarea { font-family: inherit; -webkit-appearance: none; appear
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     border-top: 1px solid #334155;
     padding-bottom: env(safe-area-inset-bottom, 0);
     z-index: 50;
