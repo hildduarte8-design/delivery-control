@@ -218,6 +218,28 @@
     </div>
 </section>
 
+    <!-- ABA 5: CONFIGURAÇÕES -->
+<section id="tab-settings" class="tab-content">
+    <div class="section-title">⚙️ Configurações da Loja</div>
+    
+    <div class="card">
+        <div class="form-group">
+            <label>Nome da Loja / Delivery</label>
+            <input type="text" id="cfg_store_name" placeholder="Ex: Meu Delivery">
+        </div>
+        
+        <div class="form-group">
+            <label>WhatsApp para Receber Pedidos</label>
+            <input type="tel" id="cfg_phone" placeholder="33999999999" inputmode="numeric">
+            <small style="color:#94A3B8; font-size:11px; display:block; margin-top:4px;">
+                Digite apenas números com DDD (Ex: 33999999999).
+            </small>
+        </div>
+
+        <button class="btn btn-large" onclick="saveSettings()">💾 Salvar Configurações</button>
+    </div>
+</section>
+
 </main>
 
 <!-- BOTÃO FLUTUANTE E SEU MENU CORRETO -->
@@ -247,6 +269,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
         Gastos
     </button>
+    <button data-tab="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Config
+    </button>
 </nav>
 
 <div class="toast" id="toast"></div>
@@ -273,5 +299,6 @@
 <script src="js/notifications.js"></script>
 <script src="js/pwa.js"></script>
 <script src="js/app.js"></script>
+<script src="js/settings.js"></script>
 </body>
 </html>
