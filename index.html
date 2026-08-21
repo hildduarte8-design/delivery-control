@@ -50,6 +50,20 @@
         <div class="trend" id="balanceTrend">Sem movimentações ainda</div>
     </div>
 
+    <!-- CARD DO CARDÁPIO DIGITAL -->
+    <div class="card" style="background: linear-gradient(135deg, rgba(245,158,11,0.15) 0%, rgba(30,41,59,1) 100%); border-color: rgba(245,158,11,0.3);">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+                <div style="font-size:14px; font-weight:800; color:#F59E0B;">📖 Cardápio Digital</div>
+                <div style="font-size:12px; color:#94A3B8; margin-top:2px;">Envie para os clientes fazerem pedidos</div>
+            </div>
+            <div style="display:flex; gap:6px;">
+                <button class="btn btn-sm btn-secondary" onclick="navigator.clipboard.writeText(window.location.origin + '/cardapio.html'); showToast('Link copiado!');">📋 Copiar Link</button>
+                <button class="btn btn-sm" style="background:#F59E0B;" onclick="window.open('cardapio.html', '_blank')">Abrir</button>
+            </div>
+        </div>
+    </div>
+
     <div class="grid-2">
         <div class="mini-card">
             <div class="top">
@@ -206,12 +220,14 @@
 
 </main>
 
+<!-- BOTÃO FLUTUANTE E SEU MENU CORRETO -->
 <button class="fab" id="fabBtn">+</button>
 <div class="fab-menu" id="fabMenu">
     <button onclick="quickAction('sale')"><span class="icon-wrap" style="background:rgba(16,185,129,0.15);color:#10B981;">💰</span> Nova Entrada</button>
     <button onclick="quickAction('stock')"><span class="icon-wrap" style="background:rgba(255,107,53,0.15);color:#FF6B35;">📦</span> Novo Insumo</button>
     <button onclick="quickAction('logistics')"><span class="icon-wrap" style="background:rgba(239,68,68,0.15);color:#EF4444;">🛵</span> Gasto Logística</button>
     <button onclick="quickAction('fixed')"><span class="icon-wrap" style="background:rgba(59,130,246,0.15);color:#3B82F6;">📋</span> Conta Fixa</button>
+    <button onclick="window.open('cardapio.html', '_blank')"><span class="icon-wrap" style="background:rgba(245,158,11,0.15);color:#F59E0B;">📖</span> Ver Cardápio</button>
 </div>
 
 <nav class="bottom-nav">
