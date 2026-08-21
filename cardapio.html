@@ -133,12 +133,32 @@
 </div>
 
 <script>
+    let orderType = 'delivery'; // 'delivery' ou 'pickup'
+
     const products = {
         marmita: { name: 'Marmita Executiva', price: 20.00, qty: 0 },
         batata: { name: 'Batata Recheada', price: 25.00, qty: 0 },
         pastel: { name: 'Pastel Especial', price: 12.00, qty: 0 },
         suco: { name: 'Suco de Morango (Puro)', price: 10.00, qty: 0 }
     };
+
+    function setOrderType(type) {
+        orderType = type;
+        const buttons = document.querySelectorAll('#orderTypeToggle button');
+        buttons[0].classList.toggle('active', type === 'delivery');
+        buttons[1].classList.toggle('active', type === 'pickup');
+
+        const addressInput = document.getElementById('cli-address');
+        const summaryLabel = document.getElementById('summary-label');
+
+        if (type === 'pickup') {
+            addressInput.style.display = 'none';
+            summaryLabel.textContent = 'Total do Pedido:';
+        } else {
+            addressInput.style.display = 'block';
+            summaryLabel.textContent = 'Subtotal (sem frete):';
+        }
+    }
 
     function updateQty(id, delta) {
         if (products[id].qty + delta >= 0) {
@@ -169,7 +189,7 @@
 
     function sendWhatsApp() {
         const name = document.getElementById('cli-name').value.trim() || 'Não informado';
-        const address = document.getElementById('cli-address').value.trim() || 'Retirada no Balcão';
+        const address = orderType === 'delivery' ? (document.getElementById('cli-address').value.trim() || 'A combinar') : 'Retirada no Balcão';
         const subtotal = getSubtotal();
         const items = buildOrderText();
 
@@ -178,14 +198,19 @@
             return;
         }
 
+        const typeLabel = orderType === 'delivery' ? '🛵 Entrega' : '🏪 Retirada no Balcão';
+        const totalLine = orderType === 'delivery' 
+            ? `*Subtotal:* R$ ${subtotal.toFixed(2)}\n_(Aguardando cálculo da taxa de entrega)_`
+            : `*TOTAL FINAL:* R$ ${subtotal.toFixed(2)} (Sem frete)`;
+
         const msg = `*NOVO PEDIDO - DELIVERY*\n\n` +
+                    `*Tipo:* ${typeLabel}\n` +
                     `*Cliente:* ${name}\n` +
                     `*Endereço:* ${address}\n\n` +
                     `*Itens:*\n${items}\n` +
-                    `*Subtotal:* R$ ${subtotal.toFixed(2)}\n` +
-                    `_(Aguardando cálculo da taxa de entrega)_`;
+                    `${totalLine}`;
 
-        const phone = "5533999999999"; // Substitua pelo seu número do WhatsApp com DDD
+        const phone = "5533999999999"; // Coloque seu WhatsApp
         window.open(`https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(msg)}`, '_blank');
     }
 
@@ -198,8 +223,7 @@
 
         document.getElementById('rec-date').textContent = new Date().toLocaleString('pt-BR');
         document.getElementById('rec-name').textContent = document.getElementById('cli-name').value || 'Não informado';
-        document.getElementById('rec-address').textContent = document.getElementById('cli-address').value || 'Retirada';
-        document.getElementById('rec-subtotal').textContent = `R$ ${subtotal.toFixed(2)}`;
+        document.getElementById('rec-address').textContent = orderType === 'delivery' ? (document.getElementById('cli-address').value || 'A combinar') : 'Retirada no Balcão';
 
         let itemsHtml = '';
         Object.values(products).forEach(p => {
@@ -208,6 +232,20 @@
             }
         });
         document.getElementById('rec-items').innerHTML = itemsHtml;
+
+        const freightArea = document.getElementById('rec-freight-area');
+        if (orderType === 'pickup') {
+            freightArea.innerHTML = `
+                <p><strong>Frete:</strong> R$ 0,00 (Retirada)</p>
+                <p style="font-size: 16px; margin-top: 8px;"><strong>TOTAL: R$ ${subtotal.toFixed(2)}</strong></p>
+            `;
+        } else {
+            freightArea.innerHTML = `
+                <p><strong>Subtotal:</strong> R$ ${subtotal.toFixed(2)}</p>
+                <p><strong>Frete (à caneta): R$ ____________</strong></p>
+                <p style="font-size: 16px; margin-top: 8px;"><strong>TOTAL: R$ __________________</strong></p>
+            `;
+        }
 
         const receiptEl = document.getElementById('printable-receipt');
         receiptEl.style.display = 'block';
