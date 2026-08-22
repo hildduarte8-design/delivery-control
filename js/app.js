@@ -28,11 +28,45 @@ function showWelcome() {
     `);
 }
 
+function checkAdminAuth() {
+    const settings = DB.load('dly_settings', {});
+    const savedPassword = settings.password;
+
+    // Se nenhuma senha foi definida ainda, libera o acesso livremente
+    if (!savedPassword) return;
+
+    // Se já foi autenticado nesta sessão do navegador, libera
+    if (sessionStorage.getItem('dly_auth') === 'true') return;
+
+    // Solicita a senha para desbloquear a interface
+    openModal('🔒 Acesso Restrito', `
+        <div class="form-group" style="margin-top: 10px;">
+            <label>Digite a senha do gestor</label>
+            <input type="password" id="admin_pass_input" placeholder="****" style="margin-top: 6px;">
+        </div>
+        <button class="btn btn-large" onclick="validatePassword()" style="margin-top: 12px;">Entrar no Painel</button>
+    `);
+}
+
+function validatePassword() {
+    const input = document.getElementById('admin_pass_input')?.value;
+    const settings = DB.load('dly_settings', {});
+
+    if (input && input === settings.password) {
+        sessionStorage.setItem('dly_auth', 'true');
+        closeModal();
+        showToast('Acesso liberado!');
+    } else {
+        showToast('Senha incorreta!', 'error');
+    }
+}
+
 function init() {
     setupManifest();
     setupServiceWorker();
     loadAll();
     updateHeader();
+    checkAdminAuth();
     switchTab('dashboard');
     renderDashboard();
     setInterval(updateHeader, 60000);
