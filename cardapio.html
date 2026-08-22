@@ -30,6 +30,12 @@
 <body>
 
 <div class="menu-container no-print">
+    <div style="margin-bottom: 12px;">
+        <button class="btn btn-sm btn-secondary" onclick="window.location.href='index.html'" style="width: auto;">
+            ← Voltar para o Painel
+        </button>
+    </div>
+
     <div style="text-align: center; margin-bottom: 20px;">
         <h2 style="color: #FF6B35; font-size: 24px;">Cardápio Digital</h2>
         <p style="color: #94A3B8; font-size: 13px;">Monte seu pedido abaixo</p>
@@ -91,11 +97,19 @@
         </div>
     </div>
 
-    <div style="height: 180px;"></div>
+    <div style="height: 220px;"></div>
 </div>
 
 <!-- BARRA DE CONFIRMAÇÃO DO PEDIDO -->
 <div class="cart-bar no-print">
+    <div class="form-group" style="margin-bottom: 8px;">
+        <label style="font-size: 12px; color: #94A3B8;">Tipo de Pedido</label>
+        <div class="toggle-group group-2" id="orderTypeToggle">
+            <button class="active" onclick="setOrderType('delivery')">🛵 Entrega</button>
+            <button onclick="setOrderType('pickup')">🏪 Retirada no Balcão</button>
+        </div>
+    </div>
+
     <div class="form-group" style="margin-bottom: 8px;">
         <input type="text" id="cli-name" placeholder="Seu nome" style="padding: 8px 12px; min-height: 40px; font-size: 13px;">
     </div>
@@ -104,7 +118,7 @@
     </div>
     
     <div class="cart-summary">
-        <span style="font-size: 13px; color: #94A3B8;">Subtotal (sem frete):</span>
+        <span style="font-size: 13px; color: #94A3B8;" id="summary-label">Subtotal (sem frete):</span>
         <span style="font-size: 20px; font-weight: 800; color: #FF6B35;" id="cart-subtotal">R$ 0,00</span>
     </div>
 
@@ -116,7 +130,7 @@
 
 <!-- ÁREA OCULTA APENAS PARA IMPRESSÃO DO COMPROVANTE -->
 <div id="printable-receipt" style="display: none;">
-    <h2 style="text-align: center; margin-bottom: 10px;">DELIVERY CONTROL</h2>
+    <h2 style="text-align: center; margin-bottom: 10px;" id="rec-store-name">DELIVERY CONTROL</h2>
     <p>--------------------------------</p>
     <p><strong>Data:</strong> <span id="rec-date"></span></p>
     <p><strong>Cliente:</strong> <span id="rec-name"></span></p>
@@ -125,9 +139,7 @@
     <p><strong>ITENS DO PEDIDO:</strong></p>
     <div id="rec-items"></div>
     <p>--------------------------------</p>
-    <p><strong>Subtotal:</strong> <span id="rec-subtotal"></span></p>
-    <p><strong>Frete (à caneta): R$ ____________</strong></p>
-    <p style="font-size: 16px; margin-top: 8px;"><strong>TOTAL: R$ __________________</strong></p>
+    <div id="rec-freight-area"></div>
     <p>--------------------------------</p>
     <p style="text-align: center; margin-top: 15px;">Obrigado pela preferência!</p>
 </div>
@@ -198,20 +210,23 @@
             return;
         }
 
+        const settings = JSON.parse(localStorage.getItem('dly_settings')) || {};
+        const storePhone = settings.phone ? `55${settings.phone}` : '5533999999999';
+        const storeName = settings.storeName || 'DELIVERY CONTROL';
+
         const typeLabel = orderType === 'delivery' ? '🛵 Entrega' : '🏪 Retirada no Balcão';
         const totalLine = orderType === 'delivery' 
             ? `*Subtotal:* R$ ${subtotal.toFixed(2)}\n_(Aguardando cálculo da taxa de entrega)_`
             : `*TOTAL FINAL:* R$ ${subtotal.toFixed(2)} (Sem frete)`;
 
-        const msg = `*NOVO PEDIDO - DELIVERY*\n\n` +
+        const msg = `*NOVO PEDIDO - ${storeName.toUpperCase()}*\n\n` +
                     `*Tipo:* ${typeLabel}\n` +
                     `*Cliente:* ${name}\n` +
                     `*Endereço:* ${address}\n\n` +
                     `*Itens:*\n${items}\n` +
                     `${totalLine}`;
 
-        const phone = "5533999999999"; // Coloque seu WhatsApp
-        window.open(`https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(msg)}`, '_blank');
+        window.open(`https://api.whatsapp.com/send?phone=${storePhone}&text=${encodeURIComponent(msg)}`, '_blank');
     }
 
     function printReceipt() {
@@ -221,6 +236,8 @@
             return;
         }
 
+        const settings = JSON.parse(localStorage.getItem('dly_settings')) || {};
+        document.getElementById('rec-store-name').textContent = (settings.storeName || 'DELIVERY CONTROL').toUpperCase();
         document.getElementById('rec-date').textContent = new Date().toLocaleString('pt-BR');
         document.getElementById('rec-name').textContent = document.getElementById('cli-name').value || 'Não informado';
         document.getElementById('rec-address').textContent = orderType === 'delivery' ? (document.getElementById('cli-address').value || 'A combinar') : 'Retirada no Balcão';
