@@ -59,7 +59,7 @@
             </div>
             <div style="display:flex; gap:6px;">
                 <button class="btn btn-sm btn-secondary" onclick="navigator.clipboard.writeText(window.location.origin + '/cardapio.html'); showToast('Link copiado!');">📋 Copiar Link</button>
-                <button class="btn btn-sm" style="background:#F59E0B;" onclick="window.open('cardapio.html', '_blank')">Abrir</button>
+                <button class="btn btn-sm" style="background:#F59E0B;" onclick="window.location.href='cardapio.html'">Abrir</button>
             </div>
         </div>
     </div>
@@ -218,7 +218,7 @@
     </div>
 </section>
 
-    <!-- ABA 5: CONFIGURAÇÕES -->
+<!-- ABA 5: CONFIGURAÇÕES -->
 <section id="tab-settings" class="tab-content">
     <div class="section-title">⚙️ Configurações da Loja</div>
     
@@ -249,7 +249,7 @@
     <button onclick="quickAction('stock')"><span class="icon-wrap" style="background:rgba(255,107,53,0.15);color:#FF6B35;">📦</span> Novo Insumo</button>
     <button onclick="quickAction('logistics')"><span class="icon-wrap" style="background:rgba(239,68,68,0.15);color:#EF4444;">🛵</span> Gasto Logística</button>
     <button onclick="quickAction('fixed')"><span class="icon-wrap" style="background:rgba(59,130,246,0.15);color:#3B82F6;">📋</span> Conta Fixa</button>
-    <button onclick="window.open('cardapio.html', '_blank')"><span class="icon-wrap" style="background:rgba(245,158,11,0.15);color:#F59E0B;">📖</span> Ver Cardápio</button>
+    <button onclick="window.location.href='cardapio.html'"><span class="icon-wrap" style="background:rgba(245,158,11,0.15);color:#F59E0B;">📖</span> Ver Cardápio</button>
 </div>
 
 <nav class="bottom-nav">
