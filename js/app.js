@@ -69,6 +69,7 @@ function init() {
     checkAdminAuth();
     switchTab('dashboard');
     renderDashboard();
+    updateNotificationBadge();
     setInterval(updateHeader, 60000);
     checkWeeklyNotification();
 }
