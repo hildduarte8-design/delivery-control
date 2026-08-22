@@ -2,7 +2,8 @@ function setupManifest() {
     const manifest = {
         name: "Delivery Control",
         short_name: "Delivery",
-        start_url: "/",
+        start_url: window.location.origin + "/",
+        scope: window.location.origin + "/",
         display: "standalone",
         background_color: "#0F172A",
         theme_color: "#FF6B35"
