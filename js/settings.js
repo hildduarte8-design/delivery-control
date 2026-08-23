@@ -382,64 +382,131 @@ async function deleteProduct(id, name) {
     }
 }
 
-// --- EXPORTAR CARDÁPIO EM PDF ---
+// --- EXPORTAR CARDÁPIO ATUALIZADO EM PDF (APENAS ITENS ATIVOS) ---
 async function exportMenuToPDF() {
-    try {
-        if (typeof dbClient === 'undefined') return showToast('Sem conexão com o banco', 'error');
+    // 1. Abre a janela imediatamente no clique para o navegador NÃO bloquear como pop-up
+    const pdfWindow = window.open('', '_blank');
+    if (!pdfWindow) {
+        if (typeof showToast === 'function') showToast('Permita pop-ups no navegador para abrir o PDF', 'error');
+        else alert('Permita pop-ups no navegador para abrir o PDF');
+        return;
+    }
 
-        const { data: products } = await dbClient
+    // Tela temporária de carregamento
+    pdfWindow.document.write(`
+        <html>
+            <head><title>Gerando Cardápio PDF...</title></head>
+            <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #0F172A; color: #F1F5F9;">
+                <h2>⏳ Gerando seu Cardápio em PDF...</h2>
+                <p style="color: #94A3B8;">Aguarde um instante.</p>
+            </body>
+        </html>
+    `);
+
+    try {
+        if (typeof dbClient === 'undefined') {
+            pdfWindow.close();
+            return typeof showToast === 'function' ? showToast('Sem conexão com o banco', 'error') : alert('Sem conexão');
+        }
+
+        // 2. Busca APENAS os produtos ativos (is_active = true)
+        const { data: products, error } = await dbClient
             .from('products')
             .select('*')
             .eq('is_active', true)
-            .order('display_order', { ascending: true });
+            .order('display_order', { ascending: true })
+            .order('created_at', { ascending: false });
 
-        const settings = DB.load('dly_settings', { storeName: 'Nosso Delivery' });
-
-        const pdfWindow = window.open('', '_blank');
-        if (!pdfWindow) return showToast('Permita pop-ups para gerar o PDF', 'error');
-
-        const itemsHtml = (products || []).map(p => {
-            const discount = Number(p.discount_pct || 0);
-            const originalPrice = Number(p.price);
-            const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
-
-            return `
-                <div style="display:flex; justify-content:space-between; border-bottom:1px solid #eee; padding:10px 0; align-items:center;">
-                    <div>
-                        <strong style="font-size:15px; color:#222;">${p.name}</strong><br>
-                        <span style="font-size:12px; color:#666;">${p.description || ''}</span>
-                    </div>
-                    <div style="text-align:right;">
-                        <span style="font-weight:bold; font-size:15px; color:#e65100;">R$ ${finalPrice.toFixed(2)}</span>
-                        ${discount > 0 ? `<br><s style="color:#999; font-size:11px;">R$ ${originalPrice.toFixed(2)}</s>` : ''}
-                    </div>
+        if (error || !products || products.length === 0) {
+            pdfWindow.document.body.innerHTML = `
+                <div style="text-align:center; padding:40px; color:#EF4444;">
+                    <h3>Nenhum prato ativo encontrado no cardápio.</h3>
+                    <p style="color:#94A3B8;">Ative pelo menos um item no gestor para gerar o PDF.</p>
                 </div>
             `;
-        }).join('');
+            return;
+        }
 
+        const settings = (typeof DB !== 'undefined' && DB.load) 
+            ? DB.load('dly_settings', { storeName: 'Nosso Delivery' }) 
+            : { storeName: 'Nosso Delivery' };
+
+        // 3. Agrupa os produtos ativos por Categoria
+        const grouped = {};
+        products.forEach(p => {
+            const cat = p.category || 'Geral';
+            if (!grouped[cat]) grouped[cat] = [];
+            grouped[cat].push(p);
+        });
+
+        let categoriesHtml = '';
+        for (const [catName, items] of Object.entries(grouped)) {
+            categoriesHtml += `
+                <div style="margin-top: 20px; border-bottom: 2px solid #FF6B35; padding-bottom: 4px;">
+                    <h3 style="margin: 0; color: #FF6B35; font-size: 15px; text-transform: uppercase;">📌 ${catName}</h3>
+                </div>
+            `;
+
+            items.forEach(p => {
+                const discount = Number(p.discount_pct || 0);
+                const originalPrice = Number(p.price);
+                const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
+
+                categoriesHtml += `
+                    <div style="display: flex; justify-content: space-between; border-bottom: 1px dotted #ccc; padding: 8px 0; align-items: flex-start;">
+                        <div style="max-width: 75%;">
+                            <strong style="font-size: 14px; color: #111;">${p.name}</strong>
+                            ${p.description ? `<br><span style="font-size: 11px; color: #666; line-height: 1.3;">${p.description}</span>` : ''}
+                        </div>
+                        <div style="text-align: right; min-width: 80px;">
+                            <strong style="font-size: 14px; color: #D97706;">R$ ${finalPrice.toFixed(2)}</strong>
+                            ${discount > 0 ? `<br><s style="color: #999; font-size: 11px;">R$ ${originalPrice.toFixed(2)}</s>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // 4. Escreve a página final pronta para impressão/salvar em PDF
+        pdfWindow.document.open();
         pdfWindow.document.write(`
             <!DOCTYPE html>
-            <html>
+            <html lang="pt-BR">
             <head>
-                <title>Cardápio - ${settings.storeName}</title>
                 <meta charset="UTF-8">
+                <title>Cardápio - ${settings.storeName}</title>
+                <style>
+                    @media print {
+                        body { padding: 10px; }
+                    }
+                </style>
             </head>
-            <body style="font-family: Arial, sans-serif; padding: 30px; max-width: 600px; margin: 0 auto; color: #333;">
-                <h1 style="text-align:center; margin-bottom:4px; color:#111;">${settings.storeName.toUpperCase()}</h1>
-                <p style="text-align:center; color:#777; font-size:13px; margin-bottom:24px;">Cardápio Oficial de Pedidos</p>
-                ${itemsHtml}
-                <div style="text-align:center; margin-top:30px; font-size:12px; color:#888;">
+            <body style="font-family: Arial, sans-serif; padding: 25px; max-width: 600px; margin: 0 auto; color: #222; background: #fff;">
+                <div style="text-align: center; border-bottom: 2px solid #222; padding-bottom: 12px; margin-bottom: 10px;">
+                    <h1 style="margin: 0; font-size: 22px; text-transform: uppercase; color: #111;">${settings.storeName.toUpperCase() || 'NOSSO DELIVERY'}</h1>
+                    <p style="margin: 4px 0 0 0; color: #666; font-size: 12px;">Cardápio Oficial de Produtos Disponíveis</p>
+                </div>
+
+                ${categoriesHtml}
+
+                <div style="text-align: center; margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee; font-size: 11px; color: #777;">
                     Faça seu pedido diretamente pelo nosso WhatsApp!
                 </div>
+
                 <script>
-                    window.onload = function() { window.print(); }
+                    window.onload = function() {
+                        setTimeout(function() {
+                            window.print();
+                        }, 300);
+                    }
                 </script>
             </body>
             </html>
         `);
         pdfWindow.document.close();
+
     } catch (e) {
-        showToast('Erro ao gerar PDF do cardápio', 'error');
+        if (pdfWindow) pdfWindow.document.body.innerHTML = '<h3 style="color:#EF4444; text-align:center; padding-top:40px;">Erro ao gerar PDF do cardápio.</h3>';
     }
 }
 
