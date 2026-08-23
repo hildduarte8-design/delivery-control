@@ -252,7 +252,7 @@ function openNewProductModal() {
         </div>
         <div class="form-group">
             <label>Categoria *</label>
-            <input type="text" id="prd_category" placeholder="Ex: Marmitas, Batatas, Bebidas, Sobremesas" list="cat_list">
+            <input type="text" id="prd_category" placeholder="Ex: Marmitas, Bebidas..." list="cat_list">
             <datalist id="cat_list">
                 <option value="Especialidades">
                 <option value="Marmitas">
@@ -334,39 +334,6 @@ async function saveNewProduct() {
             const { error } = await dbClient.from('products').insert([{ 
                 name, 
                 category,
-                price, 
-                discount_pct, 
-                description, 
-                image_url: imageUrl, 
-                is_cross_sell, 
-                is_active: true 
-            }]);
-
-            if (error) {
-                showToast('Erro ao salvar produto no banco', 'error');
-                if (saveBtn) {
-                    saveBtn.disabled = false;
-                    saveBtn.textContent = 'Salvar no Cardápio';
-                }
-                return;
-            }
-
-            if (typeof closeModal === 'function') closeModal();
-            showToast('Prato adicionado com sucesso!');
-            renderAdminProductsList();
-        }
-    } catch (e) {
-        showToast('Erro inesperado ao salvar produto', 'error');
-        if (saveBtn) {
-            saveBtn.disabled = false;
-            saveBtn.textContent = 'Salvar no Cardápio';
-        }
-    }
-}
-
-        if (typeof dbClient !== 'undefined') {
-            const { error } = await dbClient.from('products').insert([{ 
-                name, 
                 price, 
                 discount_pct, 
                 description, 
