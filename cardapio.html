@@ -322,8 +322,17 @@
                 return;
             }
 
+            // Tratamento dinâmico do número de telefone configurado
             const settings = JSON.parse(localStorage.getItem('dly_settings')) || {};
-            const storePhone = settings.phone ? `55${settings.phone}` : '5533999999999';
+            let storePhone = settings.phone ? settings.phone.replace(/\D/g, '') : '';
+
+            if (storePhone && !storePhone.startsWith('55')) {
+                storePhone = '55' + storePhone;
+            }
+            if (!storePhone) {
+                storePhone = '5533999999999';
+            }
+
             const storeName = settings.storeName || 'DELIVERY CONTROL';
 
             const order = data.order;
