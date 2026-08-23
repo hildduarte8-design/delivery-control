@@ -237,12 +237,22 @@
             </small>
         </div>
 
+        <!-- NOVO: CAPTURA DO GPS DA LOJA -->
+        <div class="form-group">
+            <label>Localização Exata da Loja (Ponto de Partida)</label>
+            <button type="button" id="btn_store_gps" class="btn btn-secondary btn-sm" onclick="getStoreGPS()" style="margin-top: 6px; width: 100%; background: #3B82F6; color: #fff;">
+                📍 Capturar GPS Atual da Loja
+            </button>
+            <input type="hidden" id="cfg_store_lat">
+            <input type="hidden" id="cfg_store_lon">
+            <small style="color:#94A3B8; font-size:11px; display:block; margin-top:4px;">
+                Clique estando dentro do estabelecimento para gravar a origem exata das entregas.
+            </small>
+        </div>
+
         <div class="form-group">
             <label>Senha de Acesso ao Painel</label>
             <input type="password" id="cfg_password" placeholder="Defina uma senha de gestor">
-            <small style="color:#94A3B8; font-size:11px; display:block; margin-top:4px;">
-                Protege o acesso às finanças e estoque.
-            </small>
         </div>
 
         <button class="btn btn-large" onclick="saveSettings()">💾 Salvar Configurações</button>
