@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="css/styles.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛵</text></svg>">
     <style>
-        .menu-container { max-width: 600px; margin: 0 auto; padding: 16px; padding-bottom: 360px; }
+        .menu-container { max-width: 600px; margin: 0 auto; padding: 16px; padding-bottom: 110px; }
         .product-card { background: #1E293B; border: 1px solid #334155; border-radius: 14px; padding: 14px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
         .product-info h4 { font-size: 16px; color: #F1F5F9; margin-bottom: 4px; }
         .product-info p { font-size: 12px; color: #94A3B8; margin-bottom: 6px; }
@@ -16,8 +16,12 @@
         .qty-btn { background: #334155; color: #FFF; border: none; width: 28px; height: 28px; border-radius: 6px; font-weight: bold; cursor: pointer; }
         .qty-value { font-weight: 700; min-width: 18px; text-align: center; }
         
-        .cart-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #1E293B; border-top: 1px solid #334155; padding: 16px; border-top-left-radius: 20px; border-top-right-radius: 20px; box-shadow: 0 -4px 20px rgba(0,0,0,0.5); z-index: 100; }
-        .cart-summary { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        /* Barra Flutuante Discreta no Rodapé */
+        .cart-bar-floating { position: fixed; bottom: 0; left: 0; right: 0; background: #1E293B; border-top: 1px solid #334155; padding: 12px 16px; border-top-left-radius: 20px; border-top-right-radius: 20px; box-shadow: 0 -4px 20px rgba(0,0,0,0.5); z-index: 90; display: none; align-items: center; justify-content: space-between; max-width: 600px; margin: 0 auto; }
+
+        /* Modal de Finalização do Pedido */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); display: none; align-items: flex-end; justify-content: center; z-index: 200; }
+        .modal-body { background: #1E293B; border-top-left-radius: 24px; border-top-right-radius: 24px; padding: 20px; width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; border-top: 1px solid #334155; box-shadow: 0 -10px 30px rgba(0,0,0,0.8); }
 
         /* Estilo exclusivo para IMPRESSÃO do Comprovante/PDF */
         @media print {
@@ -93,37 +97,61 @@
     </div>
 </div>
 
-<!-- BARRA DE CONFIRMAÇÃO DO PEDIDO -->
-<div class="cart-bar no-print">
-    <div class="form-group" style="margin-bottom: 8px;">
-        <label style="font-size: 12px; color: #94A3B8;">Tipo de Pedido</label>
-        <div class="toggle-group group-2" id="orderTypeToggle">
-            <button class="active" onclick="setOrderType('delivery')">🛵 Entrega</button>
-            <button onclick="setOrderType('pickup')">🏪 Retirada no Balcão</button>
-        </div>
+<!-- BARRA FLUTUANTE DISCRETA NO RODAPÉ -->
+<div id="cart-floating-bar" class="cart-bar-floating no-print">
+    <div>
+        <div style="font-size: 11px; color: #94A3B8;" id="float-qty-label">0 itens selecionados</div>
+        <div style="font-size: 18px; font-weight: 800; color: #FF6B35;" id="float-total-val">R$ 0,00</div>
     </div>
-
-    <div class="form-group" style="margin-bottom: 8px;">
-        <input type="text" id="cli-name" placeholder="Seu nome" style="padding: 8px 12px; min-height: 40px; font-size: 13px;">
-    </div>
-
-    <!-- BOTÃO DE GPS -->
-    <button type="button" id="btn-gps" class="btn btn-sm" onclick="getGPSLocation()" style="margin-bottom: 8px; width: 100%; background: #3B82F6; color: #fff; font-size: 12px; font-weight: 600; padding: 8px;">
-        📍 Usar Minha Localização Atual (GPS)
+    <button class="btn btn-sm" onclick="openCheckoutModal()" style="background: #10B981; font-weight: 700; padding: 10px 18px; font-size: 14px;">
+        Ver Pedido ➔
     </button>
+</div>
 
-    <div class="form-group" style="margin-bottom: 12px;">
-        <input type="text" id="cli-address" placeholder="Endereço de entrega" style="padding: 8px 12px; min-height: 40px; font-size: 13px;">
-    </div>
-    
-    <div class="cart-summary">
-        <span style="font-size: 13px; color: #94A3B8;" id="summary-label">Subtotal (sem frete):</span>
-        <span style="font-size: 20px; font-weight: 800; color: #FF6B35;" id="cart-subtotal">R$ 0,00</span>
-    </div>
+<!-- MODAL / JANELA DE FINALIZAÇÃO DO PEDIDO -->
+<div id="checkout-modal" class="modal-overlay no-print">
+    <div class="modal-body">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
+            <h3 style="color: #F1F5F9; font-size: 18px;">🛒 Finalizar Pedido</h3>
+            <button onclick="closeCheckoutModal()" style="background: transparent; border: none; color: #94A3B8; font-size: 22px; cursor: pointer; font-weight: bold;">✕</button>
+        </div>
 
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-        <button class="btn btn-secondary btn-sm" onclick="printReceipt()">🖨️ Imprimir PDF</button>
-        <button class="btn btn-sm" style="background: #25D366;" onclick="sendWhatsApp()">📲 Pedir no Whats</button>
+        <div class="form-group" style="margin-bottom: 12px;">
+            <label style="font-size: 12px; color: #94A3B8; margin-bottom: 6px; display: block;">Tipo de Entrega</label>
+            <div class="toggle-group group-2" id="orderTypeToggle">
+                <button class="active" onclick="setOrderType('delivery')">🛵 Entrega</button>
+                <button onclick="setOrderType('pickup')">🏪 Retirada no Balcão</button>
+            </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 10px;">
+            <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Seu Nome</label>
+            <input type="text" id="cli-name" placeholder="Digite seu nome" style="padding: 10px 12px; font-size: 13px; width: 100%;">
+        </div>
+
+        <!-- BOTÃO E CAMPO DE GPS -->
+        <div id="delivery-address-group">
+            <button type="button" id="btn-gps" class="btn btn-sm" onclick="getGPSLocation()" style="margin-bottom: 10px; width: 100%; background: #3B82F6; color: #fff; font-size: 12px; font-weight: 600; padding: 10px;">
+                📍 Usar Minha Localização Atual (GPS)
+            </button>
+
+            <div class="form-group" style="margin-bottom: 14px;">
+                <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Endereço de Entrega</label>
+                <input type="text" id="cli-address" placeholder="Rua, número e bairro" style="padding: 10px 12px; font-size: 13px; width: 100%;">
+            </div>
+        </div>
+
+        <div style="background: #0F172A; border: 1px solid #334155; border-radius: 12px; padding: 12px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; color: #F1F5F9;">
+                <span id="summary-label">Subtotal (sem frete):</span>
+                <span style="color: #FF6B35;" id="modal-subtotal">R$ 0,00</span>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <button class="btn btn-secondary btn-sm" onclick="printReceipt()" style="padding: 12px;">🖨️ Imprimir PDF</button>
+            <button class="btn btn-sm" style="background: #25D366; font-weight: bold; padding: 12px;" onclick="sendWhatsApp()">📲 Pedir no Whats</button>
+        </div>
     </div>
 </div>
 
@@ -146,9 +174,11 @@
 <script>
     let orderType = 'delivery';
 
-    // Coordenadas fixas e taxa de entrega (Teófilo Otoni - MG)
-    const STORE_LAT = -17.8575; 
-    const STORE_LON = -41.5053; 
+    // Busca as coordenadas dinâmicas da loja salvas no painel de configurações
+    const settings = JSON.parse(localStorage.getItem('dly_settings')) || {};
+    const STORE_LAT = settings.storeLat ? parseFloat(settings.storeLat) : -17.8575; 
+    const STORE_LON = settings.storeLon ? parseFloat(settings.storeLon) : -41.5053; 
+
     const BASE_FEE = 4.00;      
     const PRICE_PER_KM = 1.50;  
 
@@ -159,45 +189,68 @@
         suco: { name: 'Suco de Morango (Puro)', price: 10.00, qty: 0 }
     };
 
-    function setOrderType(type) {
-        orderType = type;
-        const buttons = document.querySelectorAll('#orderTypeToggle button');
-        buttons[0].classList.toggle('active', type === 'delivery');
-        buttons[1].classList.toggle('active', type === 'pickup');
-
-        const addressInput = document.getElementById('cli-address');
-        const gpsBtn = document.getElementById('btn-gps');
-        const summaryLabel = document.getElementById('summary-label');
-
-        if (type === 'pickup') {
-            addressInput.style.display = 'none';
-            if (gpsBtn) gpsBtn.style.display = 'none';
-            summaryLabel.textContent = 'Total do Pedido:';
-        } else {
-            addressInput.style.display = 'block';
-            if (gpsBtn) gpsBtn.style.display = 'block';
-            summaryLabel.textContent = 'Subtotal (sem frete):';
-        }
-    }
-
     function updateQty(id, delta) {
         if (products[id].qty + delta >= 0) {
             products[id].qty += delta;
             document.getElementById(`qty-${id}`).textContent = products[id].qty;
-            calculateSubtotal();
+            calculateTotals();
         }
+    }
+
+    function getTotalItemsCount() {
+        return Object.values(products).reduce((acc, p) => acc + p.qty, 0);
     }
 
     function getSubtotal() {
         return Object.values(products).reduce((acc, p) => acc + (p.price * p.qty), 0);
     }
 
-    function calculateSubtotal() {
+    function calculateTotals() {
+        const count = getTotalItemsCount();
         const subtotal = getSubtotal();
-        document.getElementById('cart-subtotal').textContent = subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const formatted = subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+        const bar = document.getElementById('cart-floating-bar');
+        
+        if (count > 0) {
+            bar.style.display = 'flex';
+            document.getElementById('float-qty-label').textContent = `${count} ${count === 1 ? 'item selecionado' : 'itens selecionados'}`;
+            document.getElementById('float-total-val').textContent = formatted;
+            document.getElementById('modal-subtotal').textContent = formatted;
+        } else {
+            bar.style.display = 'none';
+            closeCheckoutModal();
+        }
     }
 
-    // --- FUNÇÕES DE GPS E CÁLCULO DE FRETE ---
+    function openCheckoutModal() {
+        if (getSubtotal() === 0) return;
+        document.getElementById('checkout-modal').style.display = 'flex';
+    }
+
+    function closeCheckoutModal() {
+        document.getElementById('checkout-modal').style.display = 'none';
+    }
+
+    function setOrderType(type) {
+        orderType = type;
+        const buttons = document.querySelectorAll('#orderTypeToggle button');
+        buttons[0].classList.toggle('active', type === 'delivery');
+        buttons[1].classList.toggle('active', type === 'pickup');
+
+        const deliveryGroup = document.getElementById('delivery-address-group');
+        const summaryLabel = document.getElementById('summary-label');
+
+        if (type === 'pickup') {
+            deliveryGroup.style.display = 'none';
+            summaryLabel.textContent = 'Total do Pedido:';
+        } else {
+            deliveryGroup.style.display = 'block';
+            summaryLabel.textContent = 'Subtotal (sem frete):';
+        }
+    }
+
+    // --- GPS E CÁLCULO DE FRETE ---
     function getGPSLocation() {
         if (!navigator.geolocation) {
             alert("Seu navegador não suporta GPS. Digite o endereço manualmente.");
@@ -214,7 +267,11 @@
                 const lon = position.coords.longitude;
 
                 const km = calculateDistanceKm(STORE_LAT, STORE_LON, lat, lon);
-                const fee = Math.ceil(BASE_FEE + (km * PRICE_PER_KM));
+                
+                let fee = BASE_FEE;
+                if (km > 0.3) {
+                    fee = Math.ceil(BASE_FEE + (km * PRICE_PER_KM));
+                }
 
                 try {
                     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
@@ -248,7 +305,7 @@
         if (!modal) {
             modal = document.createElement('div');
             modal.id = 'gps-help-modal';
-            modal.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; z-index:999; padding:20px;';
+            modal.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; z-index:300; padding:20px;';
             document.body.appendChild(modal);
         }
 
@@ -320,8 +377,8 @@
                 return;
             }
 
-            const settings = JSON.parse(localStorage.getItem('dly_settings')) || {};
-            let storePhone = settings.phone ? settings.phone.replace(/\D/g, '') : '';
+            const currentSettings = JSON.parse(localStorage.getItem('dly_settings')) || {};
+            let storePhone = currentSettings.phone ? currentSettings.phone.replace(/\D/g, '') : '';
 
             if (storePhone && !storePhone.startsWith('55')) {
                 storePhone = '55' + storePhone;
@@ -330,7 +387,7 @@
                 storePhone = '5533999999999';
             }
 
-            const storeName = settings.storeName || 'DELIVERY CONTROL';
+            const storeName = currentSettings.storeName || 'DELIVERY CONTROL';
 
             const order = data.order;
             let itemsFormatted = '';
@@ -364,8 +421,8 @@
             return;
         }
 
-        const settings = JSON.parse(localStorage.getItem('dly_settings')) || {};
-        document.getElementById('rec-store-name').textContent = (settings.storeName || 'DELIVERY CONTROL').toUpperCase();
+        const currentSettings = JSON.parse(localStorage.getItem('dly_settings')) || {};
+        document.getElementById('rec-store-name').textContent = (currentSettings.storeName || 'DELIVERY CONTROL').toUpperCase();
         document.getElementById('rec-date').textContent = new Date().toLocaleString('pt-BR');
         document.getElementById('rec-name').textContent = document.getElementById('cli-name').value || 'Não informado';
         document.getElementById('rec-address').textContent = orderType === 'delivery' ? (document.getElementById('cli-address').value || 'A combinar') : 'Retirada no Balcão';
