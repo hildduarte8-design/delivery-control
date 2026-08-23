@@ -16,14 +16,14 @@
         .qty-btn { background: #334155; color: #FFF; border: none; width: 28px; height: 28px; border-radius: 6px; font-weight: bold; cursor: pointer; }
         .qty-value { font-weight: 700; min-width: 18px; text-align: center; }
         
-        /* Barra Flutuante Discreta */
+        /* Barra Flutuante Discreta no Rodapé */
         .cart-bar-floating { position: fixed; bottom: 0; left: 0; right: 0; background: #1E293B; border-top: 1px solid #334155; padding: 12px 16px; border-top-left-radius: 20px; border-top-right-radius: 20px; box-shadow: 0 -4px 20px rgba(0,0,0,0.5); z-index: 90; display: none; align-items: center; justify-content: space-between; max-width: 600px; margin: 0 auto; }
 
         /* Modal de Finalização do Pedido */
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); display: none; align-items: flex-end; justify-content: center; z-index: 200; }
         .modal-body { background: #1E293B; border-top-left-radius: 24px; border-top-right-radius: 24px; padding: 20px; width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; border-top: 1px solid #334155; box-shadow: 0 -10px 30px rgba(0,0,0,0.8); }
 
-        /* Estilo para IMPRESSÃO */
+        /* Estilo exclusivo para IMPRESSÃO do Comprovante/PDF */
         @media print {
             body * { visibility: hidden; }
             #printable-receipt, #printable-receipt * { visibility: visible; }
@@ -97,7 +97,7 @@
     </div>
 </div>
 
-<!-- BARRA FLUTUANTE DE PEDIDO -->
+<!-- BARRA FLUTUANTE DISCRETA NO RODAPÉ -->
 <div id="cart-floating-bar" class="cart-bar-floating no-print">
     <div>
         <div style="font-size: 11px; color: #94A3B8;" id="float-qty-label">0 itens selecionados</div>
@@ -108,7 +108,7 @@
     </button>
 </div>
 
-<!-- MODAL DE CHECKOUT -->
+<!-- MODAL / JANELA DE FINALIZAÇÃO DO PEDIDO -->
 <div id="checkout-modal" class="modal-overlay no-print">
     <div class="modal-body">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
@@ -125,37 +125,34 @@
         </div>
 
         <div class="form-group" style="margin-bottom: 10px;">
-            <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Seu Nome *</label>
-            <input type="text" id="cli-name" placeholder="Como podemos te chamar?" style="padding: 10px 12px; font-size: 13px; width: 100%;">
+            <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Seu Nome</label>
+            <input type="text" id="cli-name" placeholder="Digite seu nome" style="padding: 10px 12px; font-size: 13px; width: 100%;">
         </div>
 
-        <!-- DADOS DE ENTREGA -->
+        <!-- BOTÃO E CAMPO DE GPS -->
         <div id="delivery-address-group">
             <button type="button" id="btn-gps" class="btn btn-sm" onclick="getGPSLocation()" style="margin-bottom: 10px; width: 100%; background: #3B82F6; color: #fff; font-size: 12px; font-weight: 600; padding: 10px;">
                 📍 Usar Minha Localização Atual (GPS)
             </button>
 
-            <div class="form-group" style="margin-bottom: 10px;">
-                <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Rua e Bairro *</label>
-                <input type="text" id="cli-address" placeholder="Ex: Rua São José, Centro" style="padding: 10px 12px; font-size: 13px; width: 100%;">
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px;">
-                <div>
-                    <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Número / Apto *</label>
-                    <input type="text" id="cli-number" placeholder="Ex: 123" style="padding: 10px 12px; font-size: 13px; width: 100%;">
-                </div>
-                <div>
-                    <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Ponto de Referência</label>
-                    <input type="text" id="cli-ref" placeholder="Ex: Perto do mercado" style="padding: 10px 12px; font-size: 13px; width: 100%;">
-                </div>
+            <div class="form-group" style="margin-bottom: 14px;">
+                <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Endereço de Entrega</label>
+                <input type="text" id="cli-address" placeholder="Rua, número e bairro" style="padding: 10px 12px; font-size: 13px; width: 100%;">
             </div>
         </div>
 
         <div style="background: #0F172A; border: 1px solid #334155; border-radius: 12px; padding: 12px; margin-bottom: 16px;">
-            <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; color: #F1F5F9;">
-                <span id="summary-label">Subtotal (sem frete):</span>
-                <span style="color: #FF6B35;" id="modal-subtotal">R$ 0,00</span>
+            <div style="display: flex; justify-content: space-between; font-size: 13px; color: #94A3B8; margin-bottom: 4px;">
+                <span>Subtotal:</span>
+                <span id="modal-subtotal-val">R$ 0,00</span>
+            </div>
+            <div id="modal-freight-row" style="display: flex; justify-content: space-between; font-size: 13px; color: #94A3B8; margin-bottom: 8px;">
+                <span>Frete (GPS):</span>
+                <span id="modal-freight-val">R$ 0,00</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; color: #F1F5F9; border-top: 1px solid #334155; padding-top: 8px;">
+                <span>TOTAL FINAL:</span>
+                <span style="color: #FF6B35;" id="modal-total-val">R$ 0,00</span>
             </div>
         </div>
 
@@ -166,15 +163,13 @@
     </div>
 </div>
 
-<!-- IMPRESSÃO DO COMPROVANTE -->
+<!-- ÁREA OCULTA APENAS PARA IMPRESSÃO DO COMPROVANTE -->
 <div id="printable-receipt" style="display: none;">
     <h2 style="text-align: center; margin-bottom: 10px;" id="rec-store-name">DELIVERY CONTROL</h2>
     <p>--------------------------------</p>
     <p><strong>Data:</strong> <span id="rec-date"></span></p>
     <p><strong>Cliente:</strong> <span id="rec-name"></span></p>
     <p><strong>Endereço:</strong> <span id="rec-address"></span></p>
-    <p><strong>Número:</strong> <span id="rec-number"></span></p>
-    <p><strong>Referência:</strong> <span id="rec-ref"></span></p>
     <p>--------------------------------</p>
     <p><strong>ITENS DO PEDIDO:</strong></p>
     <div id="rec-items"></div>
@@ -186,6 +181,7 @@
 
 <script>
     let orderType = 'delivery';
+    let currentDeliveryFee = 0; // Armazena o valor do frete calculado via GPS
 
     const settings = JSON.parse(localStorage.getItem('dly_settings')) || {};
     const STORE_LAT = settings.storeLat ? parseFloat(settings.storeLat) : -17.8575; 
@@ -220,15 +216,29 @@
     function calculateTotals() {
         const count = getTotalItemsCount();
         const subtotal = getSubtotal();
-        const formatted = subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const freight = orderType === 'delivery' ? currentDeliveryFee : 0;
+        const totalFinal = subtotal + freight;
+
+        const subtotalFormatted = subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const freightFormatted = freight.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const totalFormatted = totalFinal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
         const bar = document.getElementById('cart-floating-bar');
         
         if (count > 0) {
             bar.style.display = 'flex';
             document.getElementById('float-qty-label').textContent = `${count} ${count === 1 ? 'item selecionado' : 'itens selecionados'}`;
-            document.getElementById('float-total-val').textContent = formatted;
-            document.getElementById('modal-subtotal').textContent = formatted;
+            document.getElementById('float-total-val').textContent = subtotalFormatted;
+            
+            // Atualiza o resumo no Modal
+            document.getElementById('modal-subtotal-val').textContent = subtotalFormatted;
+            document.getElementById('modal-freight-val').textContent = freightFormatted;
+            document.getElementById('modal-total-val').textContent = totalFormatted;
+
+            const freightRow = document.getElementById('modal-freight-row');
+            if (freightRow) {
+                freightRow.style.display = orderType === 'delivery' ? 'flex' : 'none';
+            }
         } else {
             bar.style.display = 'none';
             closeCheckoutModal();
@@ -251,17 +261,17 @@
         buttons[1].classList.toggle('active', type === 'pickup');
 
         const deliveryGroup = document.getElementById('delivery-address-group');
-        const summaryLabel = document.getElementById('summary-label');
 
         if (type === 'pickup') {
             deliveryGroup.style.display = 'none';
-            summaryLabel.textContent = 'Total do Pedido:';
+            currentDeliveryFee = 0;
         } else {
             deliveryGroup.style.display = 'block';
-            summaryLabel.textContent = 'Subtotal (sem frete):';
         }
+        calculateTotals();
     }
 
+    // --- GPS E CÁLCULO DE FRETE ---
     function getGPSLocation() {
         if (!navigator.geolocation) {
             alert("Seu navegador não suporta GPS. Digite o endereço manualmente.");
@@ -284,26 +294,63 @@
                     fee = Math.ceil(BASE_FEE + (km * PRICE_PER_KM));
                 }
 
+                currentDeliveryFee = fee; // Atualiza a variável global do frete
+
                 try {
                     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
                     const data = await res.json();
                     const street = data.address.road || data.address.suburb || "Endereço via GPS";
                     
-                    document.getElementById('cli-address').value = `${street} (📍 ~${km.toFixed(1)} km - Frete: R$ ${fee.toFixed(2)})`;
+                    document.getElementById('cli-address').value = `${street} (📍 GPS: ~${km.toFixed(1)} km - Frete: R$ ${fee.toFixed(2)})`;
                     btn.textContent = "✅ Localização Capturada!";
                 } catch (e) {
                     document.getElementById('cli-address').value = `📍 GPS (~${km.toFixed(1)} km - Frete est.: R$ ${fee.toFixed(2)})`;
                     btn.textContent = "✅ Localização Capturada!";
                 }
                 btn.disabled = false;
+                calculateTotals();
             },
             (error) => {
                 btn.disabled = false;
                 btn.textContent = "📍 Usar Minha Localização Atual (GPS)";
-                alert("Sinal de GPS indisponível. Por favor, digite o endereço.");
+
+                if (error.code === error.PERMISSION_DENIED) {
+                    showGPSDenyHelp();
+                } else {
+                    alert("Sinal de GPS fraco ou indisponível. Tente novamente ou digite o endereço.");
+                }
             },
             { enableHighAccuracy: true, timeout: 10000 }
         );
+    }
+
+    function showGPSDenyHelp() {
+        let modal = document.getElementById('gps-help-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'gps-help-modal';
+            modal.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; z-index:300; padding:20px;';
+            document.body.appendChild(modal);
+        }
+
+        modal.innerHTML = `
+            <div style="background:#1E293B; border-radius:16px; border:1px solid #334155; padding:20px; max-width:400px; width:100%; text-align:center;">
+                <div style="font-size:40px; margin-bottom:10px;">📍⚠️</div>
+                <h3 style="color:#F1F5F9; font-size:17px; margin-bottom:8px;">Precisamos do seu GPS</h3>
+                <p style="color:#94A3B8; font-size:13px; line-height:1.5; margin-bottom:14px;">
+                    Parece que o acesso à localização foi bloqueado. Para calcular o frete exato sem erros, ative a permissão:
+                </p>
+                <div style="background:#0F172A; border:1px solid #334155; border-radius:10px; padding:12px; text-align:left; font-size:12px; color:#CBD5E1; margin-bottom:16px; line-height:1.6;">
+                    <strong>🔒 No Android (Chrome):</strong> Toque no ícone de cadeado ao lado do endereço ➔ Permissões ➔ Ative "Localização".<br><br>
+                    <strong>📱 No iPhone (Safari):</strong> Toque no ícone "aA" ou cadeado ➔ Ajustes do Site ➔ Localização ➔ Permitir.
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button onclick="document.getElementById('gps-help-modal').style.display='none'" style="flex:1; background:#334155; color:#fff; border:none; padding:10px; border-radius:8px; font-size:12px; font-weight:bold; cursor:pointer;">Digitar Manualmente</button>
+                    <button onclick="document.getElementById('gps-help-modal').style.display='none'; getGPSLocation();" style="flex:1; background:#3B82F6; color:#fff; border:none; padding:10px; border-radius:8px; font-size:12px; font-weight:bold; cursor:pointer;">🔄 Tentar Novamente</button>
+                </div>
+            </div>
+        `;
+        modal.style.display = 'flex';
     }
 
     function calculateDistanceKm(lat1, lon1, lat2, lon2) {
@@ -320,8 +367,6 @@
     async function sendWhatsApp() {
         const name = document.getElementById('cli-name').value.trim() || 'Não informado';
         const address = document.getElementById('cli-address').value.trim() || 'A combinar';
-        const number = document.getElementById('cli-number').value.trim() || 'S/N';
-        const ref = document.getElementById('cli-ref').value.trim() || 'Não informada';
         const subtotal = getSubtotal();
 
         if (subtotal === 0) {
@@ -359,42 +404,45 @@
             const currentSettings = JSON.parse(localStorage.getItem('dly_settings')) || {};
             let storePhone = currentSettings.phone ? currentSettings.phone.replace(/\D/g, '') : '';
 
-            if (storePhone && !storePhone.startsWith('55')) storePhone = '55' + storePhone;
-            if (!storePhone) storePhone = '5533999999999';
+            if (storePhone && !storePhone.startsWith('55')) {
+                storePhone = '55' + storePhone;
+            }
+            if (!storePhone) {
+                storePhone = '5533999999999';
+            }
 
-            const storeName = currentSettings.storeName || 'DELIVERY CONTROL';
+            const storeName = currentSettings.storeName || 'MADY';
+
             const order = data.order;
-            
             let itemsFormatted = '';
             order.items.forEach(i => {
                 itemsFormatted += `• *${i.qty}x ${i.name}* — R$ ${i.totalPrice.toFixed(2)}\n`;
             });
 
             const typeLabel = order.orderType === 'delivery' ? '🛵 *Entrega*' : '🏪 *Retirada no Balcão*';
-            
-            // MENSAGEM ESTILO OLACLICK / WHATSAPP MODERNO
-            let msg = `🛍️ *NOVO PEDIDO - ${storeName.toUpperCase()}*\n`;
-            msg += `═══════════════════════\n\n`;
-            msg += `📍 *TIPO:* ${typeLabel}\n`;
-            msg += `👤 *CLIENTE:* ${order.clientName}\n`;
+            const totalFinal = order.subtotal + (order.orderType === 'delivery' ? currentDeliveryFee : 0);
 
+            let totalsSection = '';
             if (order.orderType === 'delivery') {
-                msg += `🏠 *ENDEREÇO:* ${order.address}\n`;
-                msg += `🔢 *NÚMERO:* ${number}\n`;
-                msg += `🎯 *REFERÊNCIA:* ${ref}\n`;
-            }
-
-            msg += `\n📋 *ITENS DO PEDIDO:*\n${itemsFormatted}\n`;
-            msg += `═══════════════════════\n`;
-
-            if (order.orderType === 'delivery') {
-                msg += `💵 *SUBTOTAL:* R$ ${order.subtotal.toFixed(2)}\n`;
-                msg += `🛵 *FRETE:* _(Aguardando cálculo/confirmação da loja)_\n`;
+                const freteTxt = currentDeliveryFee > 0 ? `R$ ${currentDeliveryFee.toFixed(2)}` : 'A combinar';
+                totalsSection = `💵 *SUBTOTAL:* R$ ${order.subtotal.toFixed(2)}\n` +
+                                `🛵 *FRETE:* ${freteTxt}\n` +
+                                `💰 *TOTAL FINAL:* R$ ${totalFinal.toFixed(2)}`;
             } else {
-                msg += `💰 *TOTAL FINAL:* R$ ${order.subtotal.toFixed(2)}\n`;
+                totalsSection = `💵 *SUBTOTAL:* R$ ${order.subtotal.toFixed(2)}\n` +
+                                `🏪 *FRETE:* R$ 0.00 (Retirada)\n` +
+                                `💰 *TOTAL FINAL:* R$ ${order.subtotal.toFixed(2)}`;
             }
 
-            msg += `\n✨ _Obrigado pela preferência! Aguardo a confirmação._`;
+            const msg = `🛍️ *NOVO PEDIDO - ${storeName.toUpperCase()}*\n` +
+                        `═══════════════════════\n\n` +
+                        `📍 *TIPO:* ${typeLabel}\n` +
+                        `👤 *CLIENTE:* ${order.clientName}\n` +
+                        `🏠 *ENDEREÇO:* ${order.address}\n\n` +
+                        `📋 *ITENS DO PEDIDO:*\n${itemsFormatted}\n` +
+                        `═══════════════════════\n` +
+                        `${totalsSection}\n\n` +
+                        `✨ _Obrigado pela preferência! Aguardo a confirmação._`;
 
             window.open(`https://api.whatsapp.com/send?phone=${storePhone}&text=${encodeURIComponent(msg)}`, '_blank');
 
@@ -415,8 +463,6 @@
         document.getElementById('rec-date').textContent = new Date().toLocaleString('pt-BR');
         document.getElementById('rec-name').textContent = document.getElementById('cli-name').value || 'Não informado';
         document.getElementById('rec-address').textContent = orderType === 'delivery' ? (document.getElementById('cli-address').value || 'A combinar') : 'Retirada no Balcão';
-        document.getElementById('rec-number').textContent = document.getElementById('cli-number').value || 'S/N';
-        document.getElementById('rec-ref').textContent = document.getElementById('cli-ref').value || 'Não informada';
 
         let itemsHtml = '';
         Object.values(products).forEach(p => {
@@ -427,6 +473,8 @@
         document.getElementById('rec-items').innerHTML = itemsHtml;
 
         const freightArea = document.getElementById('rec-freight-area');
+        const totalFinal = subtotal + (orderType === 'delivery' ? currentDeliveryFee : 0);
+
         if (orderType === 'pickup') {
             freightArea.innerHTML = `
                 <p><strong>Frete:</strong> R$ 0,00 (Retirada)</p>
@@ -435,8 +483,8 @@
         } else {
             freightArea.innerHTML = `
                 <p><strong>Subtotal:</strong> R$ ${subtotal.toFixed(2)}</p>
-                <p><strong>Frete (à caneta): R$ ____________</strong></p>
-                <p style="font-size: 16px; margin-top: 8px;"><strong>TOTAL: R$ __________________</strong></p>
+                <p><strong>Frete (GPS):</strong> R$ ${currentDeliveryFee.toFixed(2)}</p>
+                <p style="font-size: 16px; margin-top: 8px;"><strong>TOTAL: R$ ${totalFinal.toFixed(2)}</strong></p>
             `;
         }
 
