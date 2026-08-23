@@ -45,6 +45,32 @@ function renderDashboard() {
             </div>
         </div>
 
+        <!-- CARD DO CARDÁPIO DIGITAL NO DASHBOARD -->
+<div class="card" style="background: linear-gradient(135deg, rgba(245,158,11,0.15) 0%, rgba(30,41,59,1) 100%); border-color: rgba(245,158,11,0.3); padding: 16px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+        <div>
+            <div style="font-size:15px; font-weight:800; color:#F59E0B;">📖 Cardápio Digital</div>
+            <div style="font-size:12px; color:#94A3B8; margin-top:2px;">Divulgue sua loja e receba pedidos organizados</div>
+        </div>
+        <span style="font-size: 24px;">🛵</span>
+    </div>
+    
+    <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+        <button class="btn btn-sm btn-secondary" onclick="navigator.clipboard.writeText(window.location.origin + '/cardapio.html'); showToast('Link copiado!');" style="font-size:12px; padding:10px;">
+            📋 Copiar Link
+        </button>
+        <button class="btn btn-sm" style="background:#25D366; color:#fff; font-size:12px; padding:10px;" onclick="window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent('Olá! Confira nosso cardápio e faça seu pedido por aqui: ' + window.location.origin + '/cardapio.html'), '_blank')">
+            📲 Enviar Whats
+        </button>
+        <button class="btn btn-sm btn-secondary" onclick="exportMenuToPDF()" style="font-size:12px; padding:10px;">
+            📄 Baixar PDF
+        </button>
+        <button class="btn btn-sm" style="background:#F59E0B; color:#fff; font-size:12px; padding:10px;" onclick="window.location.href='cardapio.html'">
+            👁️ Abrir
+        </button>
+    </div>
+</div>
+
         <!-- PRODUTOS MAIS VENDIDOS -->
         <div class="card" style="margin-bottom:16px;">
             <div style="font-size:13px; font-weight:bold; color:#F1F5F9; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
