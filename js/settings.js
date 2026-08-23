@@ -1,4 +1,4 @@
-// js/settings.js - Configurações da Loja, Identidade Visual e Gestão do Cardápio
+// js/settings.js - Configurações, Identidade Visual, Validações, Upload, Reordenação, Cross-Sell e PDF
 
 function applyDynamicTheme(color) {
     if (!color) return;
@@ -138,7 +138,7 @@ async function saveSettings() {
     showToast('Configurações e marca salvas!');
 }
 
-// --- GESTÃO DE PRATOS DO CARDÁPIO & UPLOAD DE FOTOS ---
+// --- GESTÃO DE PRATOS, REORDENAÇÃO, UPLOAD E CROSS-SELL ---
 
 async function uploadProductImage(file) {
     try {
@@ -177,6 +177,7 @@ async function renderAdminProductsList() {
         const { data: products, error } = await dbClient
             .from('products')
             .select('*')
+            .order('display_order', { ascending: true })
             .order('created_at', { ascending: false });
 
         if (error || !products || products.length === 0) {
@@ -184,22 +185,48 @@ async function renderAdminProductsList() {
             return;
         }
 
-        container.innerHTML = products.map(p => `
-            <div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding:12px;">
-                <div style="display:flex; align-items:center; gap:12px;">
-                    ${p.image_url ? `<img src="${p.image_url}" style="width:44px; height:44px; border-radius:10px; object-fit:cover;">` : '<span style="font-size:24px;">🍽️</span>'}
-                    <div>
-                        <div style="font-weight:700; color:#F1F5F9; font-size:14px;">${p.name}</div>
-                        <div style="font-size:12px; color:#FF6B35; font-weight:600;">R$ ${Number(p.price).toFixed(2)}</div>
+        container.innerHTML = products.map((p, index) => {
+            const discount = Number(p.discount_pct || 0);
+            const originalPrice = Number(p.price);
+            const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
+
+            return `
+                <div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding:10px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <div class="reorder-btns">
+                            <button class="btn-arrow" onclick="moveProductOrder('${p.id}', ${p.display_order || index}, -1)" title="Subir Posição">▲</button>
+                            <button class="btn-arrow" onclick="moveProductOrder('${p.id}', ${p.display_order || index}, 1)" title="Descer Posição">▼</button>
+                        </div>
+                        ${p.image_url ? `<img src="${p.image_url}" style="width:42px; height:42px; border-radius:8px; object-fit:cover;">` : '<span style="font-size:22px;">🍽️</span>'}
+                        <div>
+                            <div style="font-weight:700; color:#F1F5F9; font-size:13px;">
+                                ${p.name} ${p.is_cross_sell ? '<small style="color:#60A5FA;">[Cross-Sell]</small>' : ''}
+                            </div>
+                            <div style="font-size:12px; color:#FF6B35; font-weight:600;">
+                                R$ ${finalPrice.toFixed(2)} ${discount > 0 ? `<small style="color:#EF4444;">(-${discount}%)</small>` : ''}
+                            </div>
+                        </div>
                     </div>
+                    <button class="btn btn-sm ${p.is_active ? 'btn-success' : 'btn-danger'}" onclick="toggleProductActive('${p.id}', ${!p.is_active})" style="width:auto; padding:6px 10px; font-size:11px;">
+                        ${p.is_active ? '🟢 Ativo' : '🔴 Pausado'}
+                    </button>
                 </div>
-                <button class="btn btn-sm ${p.is_active ? 'btn-success' : 'btn-danger'}" onclick="toggleProductActive('${p.id}', ${!p.is_active})" style="width:auto; padding:6px 12px; font-size:12px;">
-                    ${p.is_active ? '🟢 Ativo' : '🔴 Pausado'}
-                </button>
-            </div>
-        `).join('');
+            `;
+        }).join('');
     } catch (e) {
         container.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:20px; font-size:13px;">Erro ao carregar cardápio.</div>';
+    }
+}
+
+async function moveProductOrder(id, currentOrder, direction) {
+    try {
+        const newOrder = currentOrder + direction;
+        if (typeof dbClient !== 'undefined') {
+            await dbClient.from('products').update({ display_order: newOrder }).eq('id', id);
+            renderAdminProductsList();
+        }
+    } catch (e) {
+        showToast('Erro ao reordenar prato', 'error');
     }
 }
 
@@ -223,31 +250,43 @@ function openNewProductModal() {
             <label>Nome do Prato *</label>
             <input type="text" id="prd_name" placeholder="Ex: Marmita Executiva">
         </div>
-        <div class="form-group">
-            <label>Preço (R$) *</label>
-            <input type="number" step="0.01" id="prd_price" placeholder="20.00">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+            <div class="form-group">
+                <label>Preço (R$) *</label>
+                <input type="number" step="0.01" id="prd_price" placeholder="20.00">
+            </div>
+            <div class="form-group">
+                <label>Desconto (%)</label>
+                <input type="number" id="prd_discount" placeholder="Ex: 10" min="0" max="100">
+            </div>
         </div>
         <div class="form-group">
-            <label>Descrição</label>
+            <label>Descrição detalhada</label>
             <textarea id="prd_desc" placeholder="Ingredientes e detalhes do prato..."></textarea>
         </div>
         <div class="form-group">
-            <label>Foto do Prato (Celular/PC)</label>
-            <input type="file" id="prd_file" accept="image/*" style="padding: 10px; font-size: 13px;">
+            <label>Foto do Prato (Galeria/PC)</label>
+            <input type="file" id="prd_file" accept="image/*" style="padding: 10px; font-size: 12px;">
         </div>
         <div class="form-group">
             <label>Ou Cole a URL da Foto (Opcional)</label>
             <input type="text" id="prd_img" placeholder="https://link-da-foto.com/imagem.jpg">
         </div>
-        <button class="btn btn-large" id="btn_save_prd" onclick="saveNewProduct()">Salvar no Cardápio</button>
+        <div class="form-group" style="display:flex; align-items:center; gap:8px; margin-top:10px;">
+            <input type="checkbox" id="prd_cross_sell" style="width:18px; height:18px;">
+            <label for="prd_cross_sell" style="margin:0; font-size:12px; color:#F1F5F9;">Ofertar como Acompanhamento/Bebida (Cross-Sell)</label>
+        </div>
+        <button class="btn btn-large" id="btn_save_prd" onclick="saveNewProduct()" style="margin-top:10px;">Salvar no Cardápio</button>
     `);
 }
 
 async function saveNewProduct() {
     const name = document.getElementById('prd_name')?.value.trim();
     const price = Number(document.getElementById('prd_price')?.value || 0);
+    const discount_pct = Number(document.getElementById('prd_discount')?.value || 0);
     const description = document.getElementById('prd_desc')?.value.trim() || '';
     const urlInput = document.getElementById('prd_img')?.value.trim() || '';
+    const is_cross_sell = document.getElementById('prd_cross_sell')?.checked || false;
     const fileInput = document.getElementById('prd_file');
     const saveBtn = document.getElementById('btn_save_prd');
 
@@ -259,7 +298,7 @@ async function saveNewProduct() {
     try {
         let imageUrl = urlInput;
 
-        // Se selecionou arquivo do dispositivo, faz o upload para o Supabase
+        // Se selecionou arquivo do dispositivo, faz upload para o Supabase
         if (fileInput && fileInput.files.length > 0) {
             if (saveBtn) {
                 saveBtn.disabled = true;
@@ -270,7 +309,7 @@ async function saveNewProduct() {
             if (uploadedUrl) {
                 imageUrl = uploadedUrl;
             } else {
-                showToast('Erro ao enviar foto. Verifique se o bucket "product-images" está criado e público no Supabase.', 'error');
+                showToast('Erro ao enviar foto. Verifique o bucket no Supabase.', 'error');
                 if (saveBtn) {
                     saveBtn.disabled = false;
                     saveBtn.textContent = 'Salvar no Cardápio';
@@ -283,8 +322,10 @@ async function saveNewProduct() {
             const { error } = await dbClient.from('products').insert([{ 
                 name, 
                 price, 
+                discount_pct, 
                 description, 
                 image_url: imageUrl, 
+                is_cross_sell, 
                 is_active: true 
             }]);
 
@@ -302,11 +343,72 @@ async function saveNewProduct() {
             renderAdminProductsList();
         }
     } catch (e) {
-        showToast('Erro ao salvar produto no banco', 'error');
+        showToast('Erro inesperado ao salvar produto', 'error');
         if (saveBtn) {
             saveBtn.disabled = false;
             saveBtn.textContent = 'Salvar no Cardápio';
         }
+    }
+}
+
+// --- EXPORTAR CARDÁPIO EM PDF PARA CLIENTES LEIGOS ---
+async function exportMenuToPDF() {
+    try {
+        if (typeof dbClient === 'undefined') return showToast('Sem conexão com o banco', 'error');
+
+        const { data: products } = await dbClient
+            .from('products')
+            .select('*')
+            .eq('is_active', true)
+            .order('display_order', { ascending: true });
+
+        const settings = DB.load('dly_settings', { storeName: 'Nosso Delivery' });
+
+        const pdfWindow = window.open('', '_blank');
+        if (!pdfWindow) return showToast('Permita pop-ups no navegador para gerar o PDF', 'error');
+
+        const itemsHtml = (products || []).map(p => {
+            const discount = Number(p.discount_pct || 0);
+            const originalPrice = Number(p.price);
+            const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
+
+            return `
+                <div style="display:flex; justify-content:space-between; border-bottom:1px solid #eee; padding:10px 0; align-items:center;">
+                    <div>
+                        <strong style="font-size:15px; color:#222;">${p.name}</strong><br>
+                        <span style="font-size:12px; color:#666;">${p.description || ''}</span>
+                    </div>
+                    <div style="text-align:right;">
+                        <span style="font-weight:bold; font-size:15px; color:#e65100;">R$ ${finalPrice.toFixed(2)}</span>
+                        ${discount > 0 ? `<br><s style="color:#999; font-size:11px;">R$ ${originalPrice.toFixed(2)}</s>` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        pdfWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Cardápio - ${settings.storeName}</title>
+                <meta charset="UTF-8">
+            </head>
+            <body style="font-family: Arial, sans-serif; padding: 30px; max-width: 600px; margin: 0 auto; color: #333;">
+                <h1 style="text-align:center; margin-bottom:4px; color:#111;">${settings.storeName.toUpperCase()}</h1>
+                <p style="text-align:center; color:#777; font-size:13px; margin-bottom:24px;">Cardápio Oficial de Pedidos</p>
+                ${itemsHtml}
+                <div style="text-align:center; margin-top:30px; font-size:12px; color:#888;">
+                    Faça seu pedido diretamente pelo nosso WhatsApp!
+                </div>
+                <script>
+                    window.onload = function() { window.print(); }
+                </script>
+            </body>
+            </html>
+        `);
+        pdfWindow.document.close();
+    } catch (e) {
+        showToast('Erro ao gerar PDF do cardápio', 'error');
     }
 }
 
