@@ -138,7 +138,34 @@ async function saveSettings() {
     showToast('Configurações e marca salvas!');
 }
 
-// --- GESTÃO DE PRATOS DO CARDÁPIO (LISTAR / LIGA / DESLIGA / NOVO) ---
+// --- GESTÃO DE PRATOS DO CARDÁPIO & UPLOAD DE FOTOS ---
+
+async function uploadProductImage(file) {
+    try {
+        if (typeof dbClient === 'undefined') return null;
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const filePath = `dishes/${fileName}`;
+
+        const { data, error } = await dbClient.storage
+            .from('product-images')
+            .upload(filePath, file, { cacheControl: '3600', upsert: false });
+
+        if (error) {
+            console.error('Erro no upload da imagem:', error);
+            return null;
+        }
+
+        const { data: publicUrlData } = dbClient.storage
+            .from('product-images')
+            .getPublicUrl(filePath);
+
+        return publicUrlData.publicUrl;
+    } catch (e) {
+        console.error('Erro ao processar imagem:', e);
+        return null;
+    }
+}
 
 async function renderAdminProductsList() {
     const container = document.getElementById('admin-products-list');
@@ -205,10 +232,14 @@ function openNewProductModal() {
             <textarea id="prd_desc" placeholder="Ingredientes e detalhes do prato..."></textarea>
         </div>
         <div class="form-group">
-            <label>URL da Foto (Opcional)</label>
+            <label>Foto do Prato (Celular/PC)</label>
+            <input type="file" id="prd_file" accept="image/*" style="padding: 10px; font-size: 13px;">
+        </div>
+        <div class="form-group">
+            <label>Ou Cole a URL da Foto (Opcional)</label>
             <input type="text" id="prd_img" placeholder="https://link-da-foto.com/imagem.jpg">
         </div>
-        <button class="btn btn-large" onclick="saveNewProduct()">Salvar no Cardápio</button>
+        <button class="btn btn-large" id="btn_save_prd" onclick="saveNewProduct()">Salvar no Cardápio</button>
     `);
 }
 
@@ -216,7 +247,9 @@ async function saveNewProduct() {
     const name = document.getElementById('prd_name')?.value.trim();
     const price = Number(document.getElementById('prd_price')?.value || 0);
     const description = document.getElementById('prd_desc')?.value.trim() || '';
-    const image_url = document.getElementById('prd_img')?.value.trim() || '';
+    const urlInput = document.getElementById('prd_img')?.value.trim() || '';
+    const fileInput = document.getElementById('prd_file');
+    const saveBtn = document.getElementById('btn_save_prd');
 
     if (!name || price <= 0) {
         showToast('Preencha o nome e um preço válido!', 'error');
@@ -224,21 +257,56 @@ async function saveNewProduct() {
     }
 
     try {
+        let imageUrl = urlInput;
+
+        // Se selecionou arquivo do dispositivo, faz o upload para o Supabase
+        if (fileInput && fileInput.files.length > 0) {
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.textContent = '⌛ Enviando foto...';
+            }
+
+            const uploadedUrl = await uploadProductImage(fileInput.files[0]);
+            if (uploadedUrl) {
+                imageUrl = uploadedUrl;
+            } else {
+                showToast('Erro ao enviar foto. Verifique se o bucket "product-images" está criado e público no Supabase.', 'error');
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Salvar no Cardápio';
+                }
+                return;
+            }
+        }
+
         if (typeof dbClient !== 'undefined') {
-            await dbClient.from('products').insert([{ 
+            const { error } = await dbClient.from('products').insert([{ 
                 name, 
                 price, 
                 description, 
-                image_url, 
+                image_url: imageUrl, 
                 is_active: true 
             }]);
-            
+
+            if (error) {
+                showToast('Erro ao salvar produto no banco', 'error');
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Salvar no Cardápio';
+                }
+                return;
+            }
+
             if (typeof closeModal === 'function') closeModal();
             showToast('Prato adicionado com sucesso!');
             renderAdminProductsList();
         }
     } catch (e) {
         showToast('Erro ao salvar produto no banco', 'error');
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Salvar no Cardápio';
+        }
     }
 }
 
