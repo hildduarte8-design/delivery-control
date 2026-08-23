@@ -1,23 +1,66 @@
 // js/settings.js
 
 function loadSettingsUI() {
-    const settings = DB.load('dly_settings', { storeName: '', phone: '', password: '' });
+    const settings = DB.load('dly_settings', { storeName: '', phone: '', password: '', storeLat: '', storeLon: '' });
     
     const nameEl = document.getElementById('cfg_store_name');
     const phoneEl = document.getElementById('cfg_phone');
     const passEl = document.getElementById('cfg_password');
+    const latEl = document.getElementById('cfg_store_lat');
+    const lonEl = document.getElementById('cfg_store_lon');
+    const btnGps = document.getElementById('btn_store_gps');
 
     if (nameEl) nameEl.value = settings.storeName || '';
     if (phoneEl) phoneEl.value = settings.phone || '';
     if (passEl) passEl.value = settings.password || '';
+    if (latEl) latEl.value = settings.storeLat || '';
+    if (lonEl) lonEl.value = settings.storeLon || '';
+
+    if (btnGps && settings.storeLat) {
+        btnGps.textContent = "✅ Localização da Loja Gravada!";
+        btnGps.style.background = "#10B981";
+    }
+}
+
+function getStoreGPS() {
+    if (!navigator.geolocation) {
+        showToast('Seu navegador não suporta GPS', 'error');
+        return;
+    }
+    const btn = document.getElementById('btn_store_gps');
+    if (btn) btn.textContent = '⌛ Capturando posição da loja...';
+
+    navigator.geolocation.getCurrentPosition(
+        (pos) => {
+            const lat = pos.coords.latitude;
+            const lon = pos.coords.longitude;
+
+            const latEl = document.getElementById('cfg_store_lat');
+            const lonEl = document.getElementById('cfg_store_lon');
+            if (latEl) latEl.value = lat;
+            if (lonEl) lonEl.value = lon;
+
+            if (btn) {
+                btn.textContent = '✅ Localização da Loja Capturada!';
+                btn.style.background = '#10B981';
+            }
+            showToast('GPS da loja capturado! Lembre-se de clicar em Salvar.');
+        },
+        (err) => {
+            if (btn) btn.textContent = '📍 Capturar GPS Atual da Loja';
+            showToast('Erro ao obter sinal do GPS. Verifique a permissão.', 'error');
+        },
+        { enableHighAccuracy: true }
+    );
 }
 
 async function saveSettings() {
     const storeName = document.getElementById('cfg_store_name')?.value.trim() || '';
     let rawPhone = document.getElementById('cfg_phone')?.value.replace(/\D/g, '') || '';
     const password = document.getElementById('cfg_password')?.value.trim() || '';
+    const storeLat = document.getElementById('cfg_store_lat')?.value || '';
+    const storeLon = document.getElementById('cfg_store_lon')?.value || '';
 
-    // Se a pessoa digitou 55 no início do DDD, ajusta para salvar apenas o DDD + Número
     if (rawPhone.startsWith('55') && rawPhone.length > 11) {
         rawPhone = rawPhone.slice(2);
     }
@@ -28,21 +71,21 @@ async function saveSettings() {
     }
     
     if (rawPhone.length < 10 || rawPhone.length > 11) {
-        showToast('Informe um WhatsApp válido com DDD (Ex: 33999999999)', 'error');
+        showToast('Informe um WhatsApp válido com DDD', 'error');
         return;
     }
 
     const updated = {
         storeName,
         phone: rawPhone,
-        password
+        password,
+        storeLat,
+        storeLon
     };
 
-    // 1. Salva na memória do navegador (offline)
     DB.save('dly_settings', updated);
     state.settings = updated;
 
-    // 2. Salva permanentemente no Supabase (Nuvem)
     try {
         if (typeof dbClient !== 'undefined') {
             await dbClient.from('store_settings').upsert({
@@ -54,13 +97,12 @@ async function saveSettings() {
             });
         }
     } catch (e) {
-        console.error('Erro ao sincronizar configurações com o Supabase:', e);
+        console.error('Erro ao salvar no Supabase:', e);
     }
 
-    showToast('Configurações salvas com sucesso!');
+    showToast('Configurações salvas!');
 }
 
-// Garante o carregamento automático dos dados nos campos ao abrir o app e ao clicar na aba
 document.addEventListener('DOMContentLoaded', () => {
     loadSettingsUI();
     document.querySelector('.bottom-nav button[data-tab="settings"]')?.addEventListener('click', loadSettingsUI);
