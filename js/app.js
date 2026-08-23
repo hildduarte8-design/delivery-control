@@ -1,4 +1,4 @@
-// js/app.js - Inicialização, Autenticação, Relógio e Gestos de Navegação
+// js/app.js - Inicialização, Autenticação, Relógio e Gestos de Navegação com Física Tátil
 
 function updateHeader() {
     const d = new Date();
@@ -68,67 +68,101 @@ function validatePassword() {
     }
 }
 
-// --- NAVEGAÇÃO POR GESTOS (ARRASTAR TELA NO MOBILE) ---
+// --- NAVEGAÇÃO POR GESTOS (ACOMPANHAMENTO EM TEMPO REAL, RESISTÊNCIA E SNAP-BACK) ---
 function initGestureNavigation() {
-    let touchStartX = 0;
-    let touchStartY = 0;
-    let touchEndX = 0;
-    let touchEndY = 0;
+    let startX = 0;
+    let startY = 0;
+    let currentX = 0;
+    let isDragging = false;
 
     const tabsOrder = ['dashboard', 'stock', 'sales', 'expenses', 'settings'];
     const mainContainer = document.querySelector('main');
 
     if (!mainContainer) return;
 
+    mainContainer.style.willChange = 'transform, opacity';
+
     mainContainer.addEventListener('touchstart', (e) => {
         // Ignora toques em modais, inputs, seletores ou listas horizontais
-        if (e.target.closest('.cross-sell-items, .subtabs, .modal-overlay, input, textarea, select')) {
-            touchStartX = 0;
-            touchStartY = 0;
+        if (e.target.closest('.cross-sell-items, .subtabs, .modal-overlay, input, textarea, select, .category-scroll-bar')) {
+            isDragging = false;
             return;
         }
-        touchStartX = e.changedTouches[0].screenX;
-        touchStartY = e.changedTouches[0].screenY;
+
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        currentX = startX;
+        isDragging = true;
+        
+        // Remove animações CSS durante o movimento para o container seguir o dedo instantaneamente
+        mainContainer.style.transition = 'none';
     }, { passive: true });
 
-    mainContainer.addEventListener('touchend', (e) => {
-        if (touchStartX === 0) return;
+    mainContainer.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
 
-        touchEndX = e.changedTouches[0].screenX;
-        touchEndY = e.changedTouches[0].screenY;
-        handleSwipeGesture();
+        currentX = e.touches[0].clientX;
+        const deltaX = currentX - startX;
+        const deltaY = e.touches[0].clientY - startY;
+
+        // Se o usuário estiver fazendo scroll vertical da página, ignora o swipe lateral
+        if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaX) < 15) {
+            isDragging = false;
+            mainContainer.style.transform = 'translateX(0px)';
+            mainContainer.style.opacity = '1';
+            return;
+        }
+
+        const activeNavBtn = document.querySelector('.bottom-nav button.active');
+        const currentTab = activeNavBtn ? activeNavBtn.dataset.tab : 'dashboard';
+        const currentIndex = tabsOrder.indexOf(currentTab);
+
+        const isFirstTab = currentIndex === 0 && deltaX > 0;
+        const isLastTab = currentIndex === tabsOrder.length - 1 && deltaX < 0;
+
+        if (isFirstTab || isLastTab) {
+            // Resistência de borracha se tentar arrastar além do início/fim
+            mainContainer.style.transform = `translateX(${deltaX / 3}px)`;
+        } else {
+            // Deslocamento real acompanhando o dedo
+            mainContainer.style.transform = `translateX(${deltaX}px)`;
+            
+            // Leve feedback de opacidade para antecipar a troca de tela
+            const progress = Math.min(Math.abs(deltaX) / (window.innerWidth * 0.4), 1);
+            mainContainer.style.opacity = `${1 - (progress * 0.2)}`;
+        }
     }, { passive: true });
 
-    function handleSwipeGesture() {
-        const deltaX = touchEndX - touchStartX;
-        const deltaY = touchEndY - touchStartY;
+    mainContainer.addEventListener('touchend', () => {
+        if (!isDragging) return;
+        isDragging = false;
 
-        // Movimento horizontal significativo (maior que 60px)
-        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 60) {
-            const activeNavBtn = document.querySelector('.bottom-nav button.active');
-            const currentTab = activeNavBtn ? activeNavBtn.dataset.tab : 'dashboard';
-            const currentIndex = tabsOrder.indexOf(currentTab);
+        const deltaX = currentX - startX;
+        const threshold = window.innerWidth * 0.30; // Mínimo de 30% da largura da tela para confirmar troca
+        const activeNavBtn = document.querySelector('.bottom-nav button.active');
+        const currentTab = activeNavBtn ? activeNavBtn.dataset.tab : 'dashboard';
+        const currentIndex = tabsOrder.indexOf(currentTab);
 
-            if (currentIndex === -1) return;
+        // Devolve a transição CSS para o efeito elástico de encaixe suave
+        mainContainer.style.transition = 'transform 0.25s ease-out, opacity 0.25s ease-out';
+        mainContainer.style.opacity = '1';
 
-            if (deltaX < 0) {
-                // Arrastou para a esquerda ➔ Avança a aba
-                if (currentIndex < tabsOrder.length - 1) {
-                    const nextTab = tabsOrder[currentIndex + 1];
-                    if (typeof switchTab === 'function') switchTab(nextTab);
-                }
-            } else {
-                // Arrastou para a direita ➔ Volta a aba
-                if (currentIndex > 0) {
-                    const prevTab = tabsOrder[currentIndex - 1];
-                    if (typeof switchTab === 'function') switchTab(prevTab);
-                }
+        if (Math.abs(deltaX) >= threshold && currentIndex !== -1) {
+            if (deltaX < 0 && currentIndex < tabsOrder.length - 1) {
+                // Arrastou para a esquerda (>=30%) -> Avança
+                if (typeof switchTab === 'function') switchTab(tabsOrder[currentIndex + 1]);
+            } else if (deltaX > 0 && currentIndex > 0) {
+                // Arrastou para a direita (>=30%) -> Volta
+                if (typeof switchTab === 'function') switchTab(tabsOrder[currentIndex - 1]);
             }
         }
-        
-        touchStartX = 0;
-        touchStartY = 0;
-    }
+
+        // Snap-Back: Volta a posição física do container para a origem
+        mainContainer.style.transform = 'translateX(0px)';
+
+        startX = 0;
+        currentX = 0;
+    }, { passive: true });
 }
 
 function init() {
