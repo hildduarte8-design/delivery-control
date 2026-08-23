@@ -1,4 +1,4 @@
-// js/menu.js - Lógica Dinâmica do Cardápio, Descontos, Cross-Sell e Frete GPS
+// js/menu.js - Lógica Dinâmica com Categorias, Descontos, Cross-Sell e GPS
 
 const MenuApp = {
     orderType: 'delivery',
@@ -7,6 +7,7 @@ const MenuApp = {
     PRICE_PER_KM: 1.50,
     products: {},
     rawProductsList: [],
+    selectedCategory: 'all',
 
     async init() {
         await this.loadStoreSettings();
@@ -51,19 +52,80 @@ const MenuApp = {
             }
 
             this.rawProductsList = items;
-            this.products = {};
-
-            container.innerHTML = items.map(p => {
+            
+            // Mantém a quantidade selecionada anteriormente
+            items.forEach(p => {
                 const discount = Number(p.discount_pct || 0);
                 const originalPrice = Number(p.price);
                 const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
+                const prevQty = this.products[p.id]?.qty || 0;
 
                 this.products[p.id] = { 
                     name: p.name, 
                     price: finalPrice, 
                     isCrossSell: p.is_cross_sell,
-                    qty: 0 
+                    category: p.category || 'Geral',
+                    qty: prevQty 
                 };
+            });
+
+            this.renderCategoriesBar();
+            this.renderProductsList();
+
+        } catch (e) {
+            container.innerHTML = '<div style="text-align:center; color:#EF4444; padding:30px;">Erro ao carregar cardápio.</div>';
+        }
+    },
+
+    renderCategoriesBar() {
+        const categoryBar = document.getElementById('category-bar');
+        if (!categoryBar) return;
+
+        const categories = ['all', ...new Set(this.rawProductsList.map(p => p.category || 'Geral'))];
+
+        categoryBar.innerHTML = categories.map(cat => {
+            const label = cat === 'all' ? 'Todos' : cat;
+            const activeClass = this.selectedCategory === cat ? 'active' : '';
+            return `<button class="category-chip ${activeClass}" onclick="MenuApp.filterCategory('${cat}')">${label}</button>`;
+        }).join('');
+    },
+
+    filterCategory(cat) {
+        this.selectedCategory = cat;
+        this.renderCategoriesBar();
+        this.renderProductsList();
+    },
+
+    renderProductsList() {
+        const container = document.getElementById('products-container');
+        if (!container) return;
+
+        const filteredItems = this.selectedCategory === 'all' 
+            ? this.rawProductsList 
+            : this.rawProductsList.filter(p => (p.category || 'Geral') === this.selectedCategory);
+
+        if (filteredItems.length === 0) {
+            container.innerHTML = '<div style="text-align:center; color:#94A3B8; padding:30px;">Nenhum item nesta categoria.</div>';
+            return;
+        }
+
+        // Agrupa por categoria para exibir títulos de seção se estiver mostrando 'Todos'
+        const grouped = {};
+        filteredItems.forEach(p => {
+            const cat = p.category || 'Geral';
+            if (!grouped[cat]) grouped[cat] = [];
+            grouped[cat].push(p);
+        });
+
+        let html = '';
+        for (const [catName, products] of Object.entries(grouped)) {
+            html += `<div class="section-title" style="margin-top:16px;">📌 ${catName}</div>`;
+            
+            products.forEach(p => {
+                const discount = Number(p.discount_pct || 0);
+                const originalPrice = Number(p.price);
+                const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
+                const qty = this.products[p.id]?.qty || 0;
 
                 let priceHtml = `<div class="product-price">R$ ${finalPrice.toFixed(2)}</div>`;
                 if (discount > 0) {
@@ -76,7 +138,7 @@ const MenuApp = {
                     `;
                 }
 
-                return `
+                html += `
                     <div class="product-card">
                         <div style="display:flex; align-items:center; gap:12px; flex:1;">
                             ${p.image_url ? `<img src="${p.image_url}" style="width:60px; height:60px; border-radius:10px; object-fit:cover;">` : '<span style="font-size:32px;">🍽️</span>'}
@@ -88,16 +150,15 @@ const MenuApp = {
                         </div>
                         <div class="qty-controls">
                             <button class="qty-btn" onclick="MenuApp.updateQty('${p.id}', -1)">-</button>
-                            <span class="qty-value" id="qty-${p.id}">0</span>
+                            <span class="qty-value" id="qty-${p.id}">${qty}</span>
                             <button class="qty-btn" onclick="MenuApp.updateQty('${p.id}', 1)">+</button>
                         </div>
                     </div>
                 `;
-            }).join('');
-
-        } catch (e) {
-            container.innerHTML = '<div style="text-align:center; color:#EF4444; padding:30px;">Erro ao carregar cardápio.</div>';
+            });
         }
+
+        container.innerHTML = html;
     },
 
     getStoreCoordinates() {
