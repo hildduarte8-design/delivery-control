@@ -1,18 +1,103 @@
-// js/menu.js - Estado e Regras de Negócio do Cardápio Digital
+// js/menu.js - Lógica Dinâmica do Cardápio, Descontos, Cross-Sell e Frete GPS
 
 const MenuApp = {
     orderType: 'delivery',
     currentDeliveryFee: 0,
-    
-    // Regras de Tarifa
     BASE_FEE: 4.00,
     PRICE_PER_KM: 1.50,
+    products: {},
+    rawProductsList: [],
 
-    products: {
-        marmita: { name: 'Marmita Executiva', price: 20.00, qty: 0 },
-        batata: { name: 'Batata Recheada', price: 25.00, qty: 0 },
-        pastel: { name: 'Pastel Especial', price: 12.00, qty: 0 },
-        suco: { name: 'Suco de Morango (Puro)', price: 10.00, qty: 0 }
+    async init() {
+        await this.loadStoreSettings();
+        await this.loadProductsFromDatabase();
+    },
+
+    async loadStoreSettings() {
+        try {
+            if (typeof dbClient === 'undefined') return;
+            const { data } = await dbClient.from('store_settings').select('*').single();
+            if (data) {
+                if (data.primary_color) {
+                    document.documentElement.style.setProperty('--primary-color', data.primary_color);
+                }
+                const titleEl = document.getElementById('store-title');
+                if (titleEl && data.store_name) {
+                    titleEl.textContent = data.store_name;
+                }
+            }
+        } catch (e) {
+            console.error('Erro ao carregar loja:', e);
+        }
+    },
+
+    async loadProductsFromDatabase() {
+        const container = document.getElementById('products-container');
+        if (!container) return;
+
+        try {
+            if (typeof dbClient === 'undefined') return;
+
+            const { data: items, error } = await dbClient
+                .from('products')
+                .select('*')
+                .eq('is_active', true)
+                .order('display_order', { ascending: true })
+                .order('created_at', { ascending: false });
+
+            if (error || !items || items.length === 0) {
+                container.innerHTML = '<div style="text-align:center; color:#94A3B8; padding:30px;">Nenhum item disponível no momento.</div>';
+                return;
+            }
+
+            this.rawProductsList = items;
+            this.products = {};
+
+            container.innerHTML = items.map(p => {
+                const discount = Number(p.discount_pct || 0);
+                const originalPrice = Number(p.price);
+                const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
+
+                this.products[p.id] = { 
+                    name: p.name, 
+                    price: finalPrice, 
+                    isCrossSell: p.is_cross_sell,
+                    qty: 0 
+                };
+
+                let priceHtml = `<div class="product-price">R$ ${finalPrice.toFixed(2)}</div>`;
+                if (discount > 0) {
+                    priceHtml = `
+                        <div class="price-tag-container">
+                            <div class="product-price">R$ ${finalPrice.toFixed(2)}</div>
+                            <div class="old-price">R$ ${originalPrice.toFixed(2)}</div>
+                            <div class="discount-badge">${discount}% OFF</div>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="product-card">
+                        <div style="display:flex; align-items:center; gap:12px; flex:1;">
+                            ${p.image_url ? `<img src="${p.image_url}" style="width:60px; height:60px; border-radius:10px; object-fit:cover;">` : '<span style="font-size:32px;">🍽️</span>'}
+                            <div class="product-info">
+                                <h4>${p.name}</h4>
+                                <p>${p.description || ''}</p>
+                                ${priceHtml}
+                            </div>
+                        </div>
+                        <div class="qty-controls">
+                            <button class="qty-btn" onclick="MenuApp.updateQty('${p.id}', -1)">-</button>
+                            <span class="qty-value" id="qty-${p.id}">0</span>
+                            <button class="qty-btn" onclick="MenuApp.updateQty('${p.id}', 1)">+</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+        } catch (e) {
+            container.innerHTML = '<div style="text-align:center; color:#EF4444; padding:30px;">Erro ao carregar cardápio.</div>';
+        }
     },
 
     getStoreCoordinates() {
@@ -21,14 +106,15 @@ const MenuApp = {
             lat: settings.storeLat ? parseFloat(settings.storeLat) : -17.8575,
             lon: settings.storeLon ? parseFloat(settings.storeLon) : -41.5053,
             phone: settings.phone ? settings.phone.replace(/\D/g, '') : '',
-            storeName: settings.storeName || 'MADY'
+            storeName: settings.storeName || 'Delivery'
         };
     },
 
     updateQty(id, delta) {
         if (this.products[id] && this.products[id].qty + delta >= 0) {
             this.products[id].qty += delta;
-            document.getElementById(`qty-${id}`).textContent = this.products[id].qty;
+            const el = document.getElementById(`qty-${id}`);
+            if (el) el.textContent = this.products[id].qty;
             this.calculateTotals();
         }
     },
@@ -70,8 +156,37 @@ const MenuApp = {
         }
     },
 
+    renderCrossSellOffers() {
+        const section = document.getElementById('cross-sell-section');
+        const listContainer = document.getElementById('cross-sell-items-list');
+        if (!section || !listContainer) return;
+
+        const crossSellItems = this.rawProductsList.filter(p => p.is_cross_sell && this.products[p.id]?.qty === 0);
+
+        if (crossSellItems.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+
+        listContainer.innerHTML = crossSellItems.map(p => {
+            const price = this.products[p.id].price;
+            return `
+                <div class="cross-item-card">
+                    <div class="cross-item-name">${p.name}</div>
+                    <div class="cross-item-price">R$ ${price.toFixed(2)}</div>
+                    <button class="btn btn-sm" onclick="MenuApp.updateQty('${p.id}', 1); MenuApp.renderCrossSellOffers();" style="font-size:11px; padding:4px 8px; width:100%;">
+                        + Adicionar
+                    </button>
+                </div>
+            `;
+        }).join('');
+
+        section.style.display = 'block';
+    },
+
     openCheckoutModal() {
         if (this.getSubtotal() === 0) return;
+        this.renderCrossSellOffers();
         document.getElementById('checkout-modal').style.display = 'flex';
     },
 
@@ -160,60 +275,47 @@ const MenuApp = {
             if (!number) return alert('Por favor, digite o NÚMERO da sua casa!');
         }
 
-        const itemsList = Object.keys(this.products)
-            .filter(id => this.products[id].qty > 0)
-            .map(id => ({ id, name: this.products[id].name, qty: this.products[id].qty }));
+        const storeCoords = this.getStoreCoordinates();
+        let storePhone = storeCoords.phone;
+        if (storePhone && !storePhone.startsWith('55')) storePhone = '55' + storePhone;
+        if (!storePhone) storePhone = '5533999999999';
 
-        try {
-            const response = await fetch('/api/validate-order', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ clientName: name, address, orderType: this.orderType, items: itemsList })
-            });
-
-            const data = await response.json();
-            if (!data.success) return alert(`Atenção: ${data.error}`);
-
-            const storeCoords = this.getStoreCoordinates();
-            let storePhone = storeCoords.phone;
-            if (storePhone && !storePhone.startsWith('55')) storePhone = '55' + storePhone;
-            if (!storePhone) storePhone = '5533999999999';
-
-            const order = data.order;
-            let itemsFormatted = '';
-            order.items.forEach(i => { itemsFormatted += `• *${i.qty}x ${i.name}* — R$ ${i.totalPrice.toFixed(2)}\n`; });
-
-            const typeLabel = order.orderType === 'delivery' ? '🛵 *Entrega*' : '🏪 *Retirada no Balcão*';
-            const totalFinal = order.subtotal + (order.orderType === 'delivery' ? this.currentDeliveryFee : 0);
-
-            let totalsSection = '';
-            if (order.orderType === 'delivery') {
-                const freteTxt = this.currentDeliveryFee > 0 ? `R$ ${this.currentDeliveryFee.toFixed(2)}` : 'A combinar';
-                totalsSection = `💵 *SUBTOTAL:* R$ ${order.subtotal.toFixed(2)}\n` +
-                                `🛵 *FRETE:* ${freteTxt}\n` +
-                                `💰 *TOTAL FINAL:* R$ ${totalFinal.toFixed(2)}`;
-            } else {
-                totalsSection = `💵 *SUBTOTAL:* R$ ${order.subtotal.toFixed(2)}\n` +
-                                `🏪 *FRETE:* R$ 0.00 (Retirada)\n` +
-                                `💰 *TOTAL FINAL:* R$ ${order.subtotal.toFixed(2)}`;
+        let itemsFormatted = '';
+        Object.keys(this.products).forEach(id => {
+            const p = this.products[id];
+            if (p.qty > 0) {
+                itemsFormatted += `• *${p.qty}x ${p.name}* — R$ ${(p.price * p.qty).toFixed(2)}\n`;
             }
+        });
 
-            const msg = `🛍️ *NOVO PEDIDO - ${storeCoords.storeName.toUpperCase()}*\n` +
-                        `═══════════════════════\n\n` +
-                        `📍 *TIPO:* ${typeLabel}\n` +
-                        `👤 *CLIENTE:* ${order.clientName}\n` +
-                        `🏠 *ENDEREÇO:* ${order.address}\n` +
-                        `🔢 *NÚMERO:* ${number || 'S/N'}\n` +
-                        `🎯 *REFERÊNCIA:* ${reference || 'Não informada'}\n\n` +
-                        `📋 *ITENS DO PEDIDO:*\n${itemsFormatted}\n` +
-                        `═══════════════════════\n` +
-                        `${totalsSection}\n\n` +
-                        `✨ _Obrigado pela preferência! Aguardo a confirmação._`;
+        const typeLabel = this.orderType === 'delivery' ? '🛵 *Entrega*' : '🏪 *Retirada no Balcão*';
+        const totalFinal = subtotal + (this.orderType === 'delivery' ? this.currentDeliveryFee : 0);
 
-            window.open(`https://api.whatsapp.com/send?phone=${storePhone}&text=${encodeURIComponent(msg)}`, '_blank');
-        } catch (err) {
-            alert('Ocorreu um erro ao validar o pedido. Tente novamente.');
+        let totalsSection = '';
+        if (this.orderType === 'delivery') {
+            const freteTxt = this.currentDeliveryFee > 0 ? `R$ ${this.currentDeliveryFee.toFixed(2)}` : 'A combinar';
+            totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
+                            `🛵 *FRETE:* ${freteTxt}\n` +
+                            `💰 *TOTAL FINAL:* R$ ${totalFinal.toFixed(2)}`;
+        } else {
+            totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
+                            `🏪 *FRETE:* R$ 0.00 (Retirada)\n` +
+                            `💰 *TOTAL FINAL:* R$ ${subtotal.toFixed(2)}`;
         }
+
+        const msg = `🛍️ *NOVO PEDIDO - ${storeCoords.storeName.toUpperCase()}*\n` +
+                    `═══════════════════════\n\n` +
+                    `📍 *TIPO:* ${typeLabel}\n` +
+                    `👤 *CLIENTE:* ${name}\n` +
+                    `🏠 *ENDEREÇO:* ${address}\n` +
+                    `🔢 *NÚMERO:* ${number || 'S/N'}\n` +
+                    `🎯 *REFERÊNCIA:* ${reference || 'Não informada'}\n\n` +
+                    `📋 *ITENS DO PEDIDO:*\n${itemsFormatted}\n` +
+                    `═══════════════════════\n` +
+                    `${totalsSection}\n\n` +
+                    `✨ _Obrigado pela preferência! Aguardo a confirmação._`;
+
+        window.open(`https://api.whatsapp.com/send?phone=${storePhone}&text=${encodeURIComponent(msg)}`, '_blank');
     },
 
     printReceipt() {
@@ -263,3 +365,7 @@ const MenuApp = {
         receiptEl.style.display = 'none';
     }
 };
+
+document.addEventListener('DOMContentLoaded', () => {
+    MenuApp.init();
+});
