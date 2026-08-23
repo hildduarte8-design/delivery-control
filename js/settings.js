@@ -1,4 +1,4 @@
-// js/settings.js - Configurações, Identidade Visual, Validações, Upload, Edição, Exclusão e PDF
+// js/settings.js - Configurações, Logo, Identidade Visual, Cardápio em PDF, Upload, Edição e Exclusão
 
 function applyDynamicTheme(color) {
     if (!color) return;
@@ -69,18 +69,57 @@ function getStoreGPS() {
     );
 }
 
+// --- UPLOAD DE IMAGEM / LOGO ---
+async function uploadProductImage(file) {
+    try {
+        if (typeof dbClient === 'undefined') return null;
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const filePath = `dishes/${fileName}`;
+
+        const { error } = await dbClient.storage
+            .from('product-images')
+            .upload(filePath, file, { cacheControl: '3600', upsert: false });
+
+        if (error) {
+            console.error('Erro no upload:', error);
+            return null;
+        }
+
+        const { data: publicUrlData } = dbClient.storage
+            .from('product-images')
+            .getPublicUrl(filePath);
+
+        return publicUrlData.publicUrl;
+    } catch (e) {
+        return null;
+    }
+}
+
+// --- SALVAR CONFIGURAÇÕES DA LOJA E LOGO ---
 async function saveSettings() {
     const storeName = document.getElementById('cfg_store_name')?.value.trim() || '';
     let rawPhone = document.getElementById('cfg_phone')?.value.replace(/\D/g, '') || '';
     const password = document.getElementById('cfg_password')?.value.trim() || '';
     const storeLat = document.getElementById('cfg_store_lat')?.value || '';
     const storeLon = document.getElementById('cfg_store_lon')?.value || '';
-    const logoUrl = document.getElementById('cfg_logo_url')?.value.trim() || '';
+    let logoUrl = document.getElementById('cfg_logo_url')?.value.trim() || '';
+    const logoFileInput = document.getElementById('cfg_logo_file');
     const primaryColor = document.getElementById('cfg_primary_color')?.value || '#FF6B35';
 
     if (rawPhone.startsWith('55') && rawPhone.length > 11) rawPhone = rawPhone.slice(2);
     if (!storeName) return showToast('Informe o nome da loja', 'error');
     if (rawPhone.length < 10 || rawPhone.length > 11) return showToast('Informe um WhatsApp válido com DDD', 'error');
+
+    // Se houver arquivo de logo selecionado, envia pro Supabase
+    if (logoFileInput && logoFileInput.files.length > 0) {
+        showToast('⌛ Enviando logo da loja...');
+        const uploadedLogo = await uploadProductImage(logoFileInput.files[0]);
+        if (uploadedLogo) {
+            logoUrl = uploadedLogo;
+            if (document.getElementById('cfg_logo_url')) document.getElementById('cfg_logo_url').value = logoUrl;
+        }
+    }
 
     const updated = { storeName, phone: rawPhone, password, storeLat, storeLon, logoUrl, primaryColor };
     DB.save('dly_settings', updated);
@@ -105,31 +144,7 @@ async function saveSettings() {
     showToast('Configurações e marca salvas!');
 }
 
-// --- UPLOAD DE IMAGEM ---
-async function uploadProductImage(file) {
-    try {
-        if (typeof dbClient === 'undefined') return null;
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-        const filePath = `dishes/${fileName}`;
-
-        const { error } = await dbClient.storage
-            .from('product-images')
-            .upload(filePath, file, { cacheControl: '3600', upsert: false });
-
-        if (error) return null;
-
-        const { data: publicUrlData } = dbClient.storage
-            .from('product-images')
-            .getPublicUrl(filePath);
-
-        return publicUrlData.publicUrl;
-    } catch (e) {
-        return null;
-    }
-}
-
-// --- RENDERIZAÇÃO DA LISTA COM EDITAÇÃO E EXCLUSÃO ---
+// --- RENDERIZAÇÃO DA LISTA DE PRATOS NO GESTOR ---
 async function renderAdminProductsList() {
     const container = document.getElementById('admin-products-list');
     if (!container) return;
@@ -148,7 +163,7 @@ async function renderAdminProductsList() {
             return;
         }
 
-        window.currentAdminProducts = products; // Salva em memória para facilitar edição rápida
+        window.currentAdminProducts = products;
 
         container.innerHTML = products.map((p, index) => {
             const discount = Number(p.discount_pct || 0);
@@ -179,7 +194,6 @@ async function renderAdminProductsList() {
                         </button>
                     </div>
                     
-                    <!-- BOTÕES DE AÇÃO: EDITAR E EXCLUIR -->
                     <div style="display:flex; gap:6px; border-top:1px solid #334155; padding-top:8px; margin-top:2px;">
                         <button class="btn btn-sm btn-secondary" onclick="openProductModal('${p.id}')" style="flex:1; font-size:11px; padding:6px;">✏️ Editar</button>
                         <button class="btn btn-sm" onclick="deleteProduct('${p.id}', '${p.name}')" style="background:#EF4444; color:#fff; font-size:11px; padding:6px; width:auto;">🗑️ Excluir</button>
@@ -216,7 +230,7 @@ async function toggleProductActive(id, newStatus) {
     }
 }
 
-// --- ABRIR MODAL PARA NOVO PRATO OU EDIÇÃO DE EXISTENTE ---
+// --- ABRIR MODAL PARA NOVO PRATO OU EDIÇÃO ---
 function openProductModal(productId = null) {
     if (typeof openModal !== 'function') return;
 
@@ -231,7 +245,6 @@ function openProductModal(productId = null) {
         }
     }
 
-    // Pega as categorias padrão e junta dinamicamente com as novas que você já criou
     const defaultCategories = ["Especialidades", "Marmitas", "Batatas Recheadas", "Pastéis", "Bebidas", "Sobremesas"];
     const customCategories = window.currentAdminProducts 
         ? window.currentAdminProducts.map(item => item.category).filter(Boolean)
@@ -268,7 +281,7 @@ function openProductModal(productId = null) {
             <textarea id="prd_desc" placeholder="Ingredientes e detalhes do prato...">${p.description || ''}</textarea>
         </div>
         <div class="form-group">
-            <label>Trocar Foto (Galeria/PC)</label>
+            <label>Foto do Prato (Galeria/PC)</label>
             <input type="file" id="prd_file" accept="image/*" style="padding: 10px; font-size: 12px;">
         </div>
         <div class="form-group">
@@ -285,7 +298,6 @@ function openProductModal(productId = null) {
     `);
 }
 
-// Mantido para compatibilidade caso o botão antigo chame openNewProductModal
 function openNewProductModal() {
     openProductModal(null);
 }
@@ -318,7 +330,7 @@ async function saveProduct() {
             if (uploadedUrl) {
                 imageUrl = uploadedUrl;
             } else {
-                showToast('Erro ao enviar foto. Verifique o bucket.', 'error');
+                showToast('Erro ao enviar foto. Tente novamente.', 'error');
                 if (saveBtn) {
                     saveBtn.disabled = false;
                     saveBtn.textContent = 'Salvar no Cardápio';
@@ -334,11 +346,9 @@ async function saveProduct() {
 
             let error = null;
             if (id) {
-                // Atualiza o produto existente
                 const res = await dbClient.from('products').update(payload).eq('id', id);
                 error = res.error;
             } else {
-                // Insere novo produto
                 const res = await dbClient.from('products').insert([payload]);
                 error = res.error;
             }
@@ -382,9 +392,8 @@ async function deleteProduct(id, name) {
     }
 }
 
-// --- EXPORTAR CARDÁPIO ATUALIZADO EM PDF (APENAS ITENS ATIVOS) ---
+// --- EXPORTAR CARDÁPIO PROFISSIONAL EM PDF (SEM CABEÇALHO/RODAPÉ DO NAVEGADOR) ---
 async function exportMenuToPDF() {
-    // 1. Abre a janela imediatamente no clique para o navegador NÃO bloquear como pop-up
     const pdfWindow = window.open('', '_blank');
     if (!pdfWindow) {
         if (typeof showToast === 'function') showToast('Permita pop-ups no navegador para abrir o PDF', 'error');
@@ -392,13 +401,12 @@ async function exportMenuToPDF() {
         return;
     }
 
-    // Tela temporária de carregamento
     pdfWindow.document.write(`
         <html>
             <head><title>Gerando Cardápio PDF...</title></head>
-            <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #0F172A; color: #F1F5F9;">
-                <h2>⏳ Gerando seu Cardápio em PDF...</h2>
-                <p style="color: #94A3B8;">Aguarde um instante.</p>
+            <body style="font-family: system-ui, sans-serif; text-align: center; padding: 50px; background: #0F172A; color: #F1F5F9;">
+                <h2>⌛ Gerando seu Cardápio...</h2>
+                <p style="color: #94A3B8;">Formatando layout e imagens.</p>
             </body>
         </html>
     `);
@@ -409,7 +417,6 @@ async function exportMenuToPDF() {
             return typeof showToast === 'function' ? showToast('Sem conexão com o banco', 'error') : alert('Sem conexão');
         }
 
-        // 2. Busca APENAS os produtos ativos (is_active = true)
         const { data: products, error } = await dbClient
             .from('products')
             .select('*')
@@ -428,10 +435,12 @@ async function exportMenuToPDF() {
         }
 
         const settings = (typeof DB !== 'undefined' && DB.load) 
-            ? DB.load('dly_settings', { storeName: 'Nosso Delivery' }) 
-            : { storeName: 'Nosso Delivery' };
+            ? DB.load('dly_settings', { storeName: 'Nosso Delivery', logoUrl: '', phone: '', primaryColor: '#FF6B35' }) 
+            : { storeName: 'Nosso Delivery', logoUrl: '', phone: '', primaryColor: '#FF6B35' };
 
-        // 3. Agrupa os produtos ativos por Categoria
+        const primaryColor = settings.primaryColor || '#FF6B35';
+
+        // Agrupa por Categoria
         const grouped = {};
         products.forEach(p => {
             const cat = p.category || 'Geral';
@@ -442,8 +451,11 @@ async function exportMenuToPDF() {
         let categoriesHtml = '';
         for (const [catName, items] of Object.entries(grouped)) {
             categoriesHtml += `
-                <div style="margin-top: 20px; border-bottom: 2px solid #FF6B35; padding-bottom: 4px;">
-                    <h3 style="margin: 0; color: #FF6B35; font-size: 15px; text-transform: uppercase;">📌 ${catName}</h3>
+                <div style="margin-top: 22px; margin-bottom: 10px; page-break-inside: avoid;">
+                    <div style="display: flex; align-items: center; gap: 8px; border-bottom: 2px solid ${primaryColor}; padding-bottom: 4px;">
+                        <span style="font-size: 15px;">📌</span>
+                        <h3 style="margin: 0; color: #0F172A; font-size: 15px; font-weight: 800; text-transform: uppercase;">${catName}</h3>
+                    </div>
                 </div>
             `;
 
@@ -452,22 +464,32 @@ async function exportMenuToPDF() {
                 const originalPrice = Number(p.price);
                 const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
 
+                const itemImg = p.image_url ? `<img src="${p.image_url}" style="width: 50px; height: 50px; border-radius: 8px; object-fit: cover; flex-shrink: 0; border: 1px solid #E2E8F0;">` : '';
+
                 categoriesHtml += `
-                    <div style="display: flex; justify-content: space-between; border-bottom: 1px dotted #ccc; padding: 8px 0; align-items: flex-start;">
-                        <div style="max-width: 75%;">
-                            <strong style="font-size: 14px; color: #111;">${p.name}</strong>
-                            ${p.description ? `<br><span style="font-size: 11px; color: #666; line-height: 1.3;">${p.description}</span>` : ''}
-                        </div>
-                        <div style="text-align: right; min-width: 80px;">
-                            <strong style="font-size: 14px; color: #D97706;">R$ ${finalPrice.toFixed(2)}</strong>
-                            ${discount > 0 ? `<br><s style="color: #999; font-size: 11px;">R$ ${originalPrice.toFixed(2)}</s>` : ''}
+                    <div style="display: flex; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px dashed #CBD5E1; page-break-inside: avoid;">
+                        ${itemImg}
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                                <strong style="font-size: 14px; color: #0F172A; font-weight: 700;">${p.name}</strong>
+                                <div style="text-align: right; margin-left: 10px; flex-shrink: 0;">
+                                    <span style="font-size: 15px; font-weight: 800; color: ${primaryColor};">R$ ${finalPrice.toFixed(2)}</span>
+                                    ${discount > 0 ? `<br><s style="color: #94A3B8; font-size: 11px;">R$ ${originalPrice.toFixed(2)}</s>` : ''}
+                                </div>
+                            </div>
+                            ${p.description ? `<p style="margin: 2px 0 0 0; font-size: 11px; color: #64748B; line-height: 1.3;">${p.description}</p>` : ''}
                         </div>
                     </div>
                 `;
             });
         }
 
-        // 4. Escreve a página final pronta para impressão/salvar em PDF
+        const logoHtml = settings.logoUrl 
+            ? `<img src="${settings.logoUrl}" style="max-height: 80px; max-width: 180px; object-fit: contain; margin-bottom: 8px;">` 
+            : '';
+
+        const phoneFormatted = settings.phone ? `📱 WhatsApp: (${settings.phone.substring(0,2)}) ${settings.phone.substring(2)}` : '';
+
         pdfWindow.document.open();
         pdfWindow.document.write(`
             <!DOCTYPE html>
@@ -476,28 +498,68 @@ async function exportMenuToPDF() {
                 <meta charset="UTF-8">
                 <title>Cardápio - ${settings.storeName}</title>
                 <style>
-                    @media print {
-                        body { padding: 10px; }
+                    @page {
+                        size: A4;
+                        margin: 0; /* LIMPA O CABEÇALHO E RODAPÉ DO NAVEGADOR */
+                    }
+                    * { box-sizing: border-box; }
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                        margin: 0;
+                        padding: 15mm 18mm;
+                        color: #1E293B;
+                        background: #FFFFFF;
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                    }
+                    .menu-header {
+                        text-align: center;
+                        padding-bottom: 14px;
+                        border-bottom: 3px double #CBD5E1;
+                        margin-bottom: 8px;
+                    }
+                    .menu-header h1 {
+                        margin: 4px 0 2px 0;
+                        font-size: 24px;
+                        font-weight: 900;
+                        color: #0F172A;
+                        letter-spacing: 0.5px;
+                    }
+                    .menu-header p {
+                        margin: 0;
+                        color: #64748B;
+                        font-size: 12px;
+                        font-weight: 600;
+                    }
+                    .menu-footer {
+                        text-align: center;
+                        margin-top: 24px;
+                        padding-top: 12px;
+                        border-top: 2px solid #E2E8F0;
+                        font-size: 12px;
+                        color: #64748B;
+                        font-weight: 700;
                     }
                 </style>
             </head>
-            <body style="font-family: Arial, sans-serif; padding: 25px; max-width: 600px; margin: 0 auto; color: #222; background: #fff;">
-                <div style="text-align: center; border-bottom: 2px solid #222; padding-bottom: 12px; margin-bottom: 10px;">
-                    <h1 style="margin: 0; font-size: 22px; text-transform: uppercase; color: #111;">${settings.storeName.toUpperCase() || 'NOSSO DELIVERY'}</h1>
-                    <p style="margin: 4px 0 0 0; color: #666; font-size: 12px;">Cardápio Oficial de Produtos Disponíveis</p>
+            <body>
+                <div class="menu-header">
+                    ${logoHtml}
+                    <h1>${settings.storeName.toUpperCase() || 'NOSSO DELIVERY'}</h1>
+                    <p>Cardápio Oficial de Pedidos ${phoneFormatted ? '• ' + phoneFormatted : ''}</p>
                 </div>
 
                 ${categoriesHtml}
 
-                <div style="text-align: center; margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee; font-size: 11px; color: #777;">
-                    Faça seu pedido diretamente pelo nosso WhatsApp!
+                <div class="menu-footer">
+                    🛵 Faça seu pedido diretamente pelo nosso WhatsApp!
                 </div>
 
                 <script>
                     window.onload = function() {
                         setTimeout(function() {
                             window.print();
-                        }, 300);
+                        }, 400);
                     }
                 </script>
             </body>
