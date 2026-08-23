@@ -6,16 +6,54 @@
     <title>Cardápio Digital</title>
     <link rel="stylesheet" href="css/styles.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛵</text></svg>">
+    <style>
+        /* Barra de Categorias Deslizante (Estilo iFood) */
+        .category-scroll-bar {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding: 8px 0 14px 0;
+            margin-bottom: 12px;
+            scrollbar-width: none;
+            position: sticky;
+            top: 0;
+            background: #0F172A;
+            z-index: 40;
+        }
+        .category-scroll-bar::-webkit-scrollbar { display: none; }
+        .category-chip {
+            background: #1E293B;
+            color: #94A3B8;
+            border: 1px solid #334155;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 700;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .category-chip.active {
+            background: var(--primary-color, #FF6B35);
+            color: #FFFFFF;
+            border-color: var(--primary-color, #FF6B35);
+        }
+    </style>
 </head>
 <body>
 
 <div class="menu-container no-print">
-    <div style="text-align: center; margin-bottom: 20px;">
+    <div style="text-align: center; margin-bottom: 16px;">
         <h2 style="color: var(--primary-color, #FF6B35); font-size: 24px;" id="store-title">Cardápio Digital</h2>
         <p style="color: #94A3B8; font-size: 13px;">Monte seu pedido abaixo com facilidade</p>
     </div>
 
-    <!-- CARREGAMENTO DINÂMICO DOS PRATOS -->
+    <!-- BARRA DESLIZANTE DE CATEGORIAS -->
+    <div id="category-bar" class="category-scroll-bar">
+        <button class="category-chip active" onclick="MenuApp.filterCategory('all')">Todos</button>
+    </div>
+
+    <!-- CARREGAMENTO DINÂMICO DOS PRATOS AGRUPADOS -->
     <div id="products-container">
         <div style="text-align:center; color:#94A3B8; padding:30px;">⌛ Carregando cardápio...</div>
     </div>
@@ -40,7 +78,7 @@
             <button onclick="MenuApp.closeCheckoutModal()" style="background: transparent; border: none; color: #94A3B8; font-size: 22px; cursor: pointer; font-weight: bold;">✕</button>
         </div>
 
-        <!-- ÁREA DE CROSS-SELLING (OFERTAS COMPLEMENTARES) -->
+        <!-- ÁREA DE CROSS-SELLING -->
         <div id="cross-sell-section" class="cross-sell-box" style="display: none;">
             <div class="cross-sell-title">🥤 Que tal acompanhar com...</div>
             <div class="cross-sell-items" id="cross-sell-items-list"></div>
