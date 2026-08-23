@@ -6,31 +6,6 @@
     <title>Cardápio Digital - Delivery</title>
     <link rel="stylesheet" href="css/styles.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛵</text></svg>">
-    <style>
-        .menu-container { max-width: 600px; margin: 0 auto; padding: 16px; padding-bottom: 110px; }
-        .product-card { background: #1E293B; border: 1px solid #334155; border-radius: 14px; padding: 14px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
-        .product-info h4 { font-size: 16px; color: #F1F5F9; margin-bottom: 4px; }
-        .product-info p { font-size: 12px; color: #94A3B8; margin-bottom: 6px; }
-        .product-price { font-size: 15px; font-weight: 700; color: #FF6B35; }
-        .qty-controls { display: flex; align-items: center; gap: 8px; background: #0F172A; padding: 4px 8px; border-radius: 8px; border: 1px solid #334155; }
-        .qty-btn { background: #334155; color: #FFF; border: none; width: 28px; height: 28px; border-radius: 6px; font-weight: bold; cursor: pointer; }
-        .qty-value { font-weight: 700; min-width: 18px; text-align: center; }
-        
-        /* Barra Flutuante Discreta no Rodapé */
-        .cart-bar-floating { position: fixed; bottom: 0; left: 0; right: 0; background: #1E293B; border-top: 1px solid #334155; padding: 12px 16px; border-top-left-radius: 20px; border-top-right-radius: 20px; box-shadow: 0 -4px 20px rgba(0,0,0,0.5); z-index: 90; display: none; align-items: center; justify-content: space-between; max-width: 600px; margin: 0 auto; }
-
-        /* Modal de Finalização do Pedido */
-        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); display: none; align-items: flex-end; justify-content: center; z-index: 200; }
-        .modal-body { background: #1E293B; border-top-left-radius: 24px; border-top-right-radius: 24px; padding: 20px; width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; border-top: 1px solid #334155; box-shadow: 0 -10px 30px rgba(0,0,0,0.8); }
-
-        /* Estilo exclusivo para IMPRESSÃO do Comprovante/PDF */
-        @media print {
-            body * { visibility: hidden; }
-            #printable-receipt, #printable-receipt * { visibility: visible; }
-            #printable-receipt { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; color: #000; background: #fff; font-family: monospace; }
-            .no-print { display: none !important; }
-        }
-    </style>
 </head>
 <body>
 
@@ -49,9 +24,9 @@
             <div class="product-price">R$ 20,00</div>
         </div>
         <div class="qty-controls">
-            <button class="qty-btn" onclick="updateQty('marmita', -1)">-</button>
+            <button class="qty-btn" onclick="MenuApp.updateQty('marmita', -1)">-</button>
             <span class="qty-value" id="qty-marmita">0</span>
-            <button class="qty-btn" onclick="updateQty('marmita', 1)">+</button>
+            <button class="qty-btn" onclick="MenuApp.updateQty('marmita', 1)">+</button>
         </div>
     </div>
 
@@ -62,9 +37,9 @@
             <div class="product-price">R$ 25,00</div>
         </div>
         <div class="qty-controls">
-            <button class="qty-btn" onclick="updateQty('batata', -1)">-</button>
+            <button class="qty-btn" onclick="MenuApp.updateQty('batata', -1)">-</button>
             <span class="qty-value" id="qty-batata">0</span>
-            <button class="qty-btn" onclick="updateQty('batata', 1)">+</button>
+            <button class="qty-btn" onclick="MenuApp.updateQty('batata', 1)">+</button>
         </div>
     </div>
 
@@ -75,9 +50,9 @@
             <div class="product-price">R$ 12,00</div>
         </div>
         <div class="qty-controls">
-            <button class="qty-btn" onclick="updateQty('pastel', -1)">-</button>
+            <button class="qty-btn" onclick="MenuApp.updateQty('pastel', -1)">-</button>
             <span class="qty-value" id="qty-pastel">0</span>
-            <button class="qty-btn" onclick="updateQty('pastel', 1)">+</button>
+            <button class="qty-btn" onclick="MenuApp.updateQty('pastel', 1)">+</button>
         </div>
     </div>
 
@@ -90,9 +65,9 @@
             <div class="product-price">R$ 10,00</div>
         </div>
         <div class="qty-controls">
-            <button class="qty-btn" onclick="updateQty('suco', -1)">-</button>
+            <button class="qty-btn" onclick="MenuApp.updateQty('suco', -1)">-</button>
             <span class="qty-value" id="qty-suco">0</span>
-            <button class="qty-btn" onclick="updateQty('suco', 1)">+</button>
+            <button class="qty-btn" onclick="MenuApp.updateQty('suco', 1)">+</button>
         </div>
     </div>
 </div>
@@ -103,7 +78,7 @@
         <div style="font-size: 11px; color: #94A3B8;" id="float-qty-label">0 itens selecionados</div>
         <div style="font-size: 18px; font-weight: 800; color: #FF6B35;" id="float-total-val">R$ 0,00</div>
     </div>
-    <button class="btn btn-sm" onclick="openCheckoutModal()" style="background: #10B981; font-weight: 700; padding: 10px 18px; font-size: 14px;">
+    <button class="btn btn-sm" onclick="MenuApp.openCheckoutModal()" style="background: #10B981; font-weight: 700; padding: 10px 18px; font-size: 14px;">
         Ver Pedido ➔
     </button>
 </div>
@@ -113,31 +88,41 @@
     <div class="modal-body">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
             <h3 style="color: #F1F5F9; font-size: 18px;">🛒 Finalizar Pedido</h3>
-            <button onclick="closeCheckoutModal()" style="background: transparent; border: none; color: #94A3B8; font-size: 22px; cursor: pointer; font-weight: bold;">✕</button>
+            <button onclick="MenuApp.closeCheckoutModal()" style="background: transparent; border: none; color: #94A3B8; font-size: 22px; cursor: pointer; font-weight: bold;">✕</button>
         </div>
 
         <div class="form-group" style="margin-bottom: 12px;">
             <label style="font-size: 12px; color: #94A3B8; margin-bottom: 6px; display: block;">Tipo de Entrega</label>
             <div class="toggle-group group-2" id="orderTypeToggle">
-                <button class="active" onclick="setOrderType('delivery')">🛵 Entrega</button>
-                <button onclick="setOrderType('pickup')">🏪 Retirada no Balcão</button>
+                <button class="active" onclick="MenuApp.setOrderType('delivery')">🛵 Entrega</button>
+                <button onclick="MenuApp.setOrderType('pickup')">🏪 Retirada no Balcão</button>
             </div>
         </div>
 
         <div class="form-group" style="margin-bottom: 10px;">
-            <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Seu Nome</label>
+            <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Seu Nome *</label>
             <input type="text" id="cli-name" placeholder="Digite seu nome" style="padding: 10px 12px; font-size: 13px; width: 100%;">
         </div>
 
-        <!-- BOTÃO E CAMPO DE GPS -->
         <div id="delivery-address-group">
-            <button type="button" id="btn-gps" class="btn btn-sm" onclick="getGPSLocation()" style="margin-bottom: 10px; width: 100%; background: #3B82F6; color: #fff; font-size: 12px; font-weight: 600; padding: 10px;">
+            <button type="button" id="btn-gps" class="btn btn-sm" onclick="MenuApp.getGPSLocation()" style="margin-bottom: 10px; width: 100%; background: #3B82F6; color: #fff; font-size: 12px; font-weight: 600; padding: 10px;">
                 📍 Usar Minha Localização Atual (GPS)
             </button>
 
-            <div class="form-group" style="margin-bottom: 14px;">
-                <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Endereço de Entrega</label>
-                <input type="text" id="cli-address" placeholder="Rua, número e bairro" style="padding: 10px 12px; font-size: 13px; width: 100%;">
+            <div class="form-group" style="margin-bottom: 10px;">
+                <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Endereço / Bairro (via GPS ou manual) *</label>
+                <input type="text" id="cli-address" placeholder="Rua e Bairro" style="padding: 10px 12px; font-size: 13px; width: 100%;">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px;">
+                <div class="form-group">
+                    <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Número *</label>
+                    <input type="text" id="cli-number" placeholder="Ex: 123" style="padding: 10px 12px; font-size: 13px; width: 100%;">
+                </div>
+                <div class="form-group">
+                    <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Ref. (Opcional)</label>
+                    <input type="text" id="cli-reference" placeholder="Ex: Próximo à praça" style="padding: 10px 12px; font-size: 13px; width: 100%;">
+                </div>
             </div>
         </div>
 
@@ -157,8 +142,8 @@
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <button class="btn btn-secondary btn-sm" onclick="printReceipt()" style="padding: 12px;">🖨️ Imprimir PDF</button>
-            <button class="btn btn-sm" style="background: #25D366; font-weight: bold; padding: 12px;" onclick="sendWhatsApp()">📲 Pedir no Whats</button>
+            <button class="btn btn-secondary btn-sm" onclick="MenuApp.printReceipt()" style="padding: 12px;">🖨️ Imprimir PDF</button>
+            <button class="btn btn-sm" style="background: #25D366; font-weight: bold; padding: 12px;" onclick="MenuApp.sendWhatsApp()">📲 Pedir no Whats</button>
         </div>
     </div>
 </div>
@@ -170,6 +155,8 @@
     <p><strong>Data:</strong> <span id="rec-date"></span></p>
     <p><strong>Cliente:</strong> <span id="rec-name"></span></p>
     <p><strong>Endereço:</strong> <span id="rec-address"></span></p>
+    <p><strong>Número:</strong> <span id="rec-number"></span></p>
+    <p><strong>Referência:</strong> <span id="rec-reference"></span></p>
     <p>--------------------------------</p>
     <p><strong>ITENS DO PEDIDO:</strong></p>
     <div id="rec-items"></div>
@@ -179,321 +166,9 @@
     <p style="text-align: center; margin-top: 15px;">Obrigado pela preferência!</p>
 </div>
 
-<script>
-    let orderType = 'delivery';
-    let currentDeliveryFee = 0; // Armazena o valor do frete calculado via GPS
-
-    const settings = JSON.parse(localStorage.getItem('dly_settings')) || {};
-    const STORE_LAT = settings.storeLat ? parseFloat(settings.storeLat) : -17.8575; 
-    const STORE_LON = settings.storeLon ? parseFloat(settings.storeLon) : -41.5053; 
-
-    const BASE_FEE = 4.00;      
-    const PRICE_PER_KM = 1.50;  
-
-    const products = {
-        marmita: { name: 'Marmita Executiva', price: 20.00, qty: 0 },
-        batata: { name: 'Batata Recheada', price: 25.00, qty: 0 },
-        pastel: { name: 'Pastel Especial', price: 12.00, qty: 0 },
-        suco: { name: 'Suco de Morango (Puro)', price: 10.00, qty: 0 }
-    };
-
-    function updateQty(id, delta) {
-        if (products[id].qty + delta >= 0) {
-            products[id].qty += delta;
-            document.getElementById(`qty-${id}`).textContent = products[id].qty;
-            calculateTotals();
-        }
-    }
-
-    function getTotalItemsCount() {
-        return Object.values(products).reduce((acc, p) => acc + p.qty, 0);
-    }
-
-    function getSubtotal() {
-        return Object.values(products).reduce((acc, p) => acc + (p.price * p.qty), 0);
-    }
-
-    function calculateTotals() {
-        const count = getTotalItemsCount();
-        const subtotal = getSubtotal();
-        const freight = orderType === 'delivery' ? currentDeliveryFee : 0;
-        const totalFinal = subtotal + freight;
-
-        const subtotalFormatted = subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        const freightFormatted = freight.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        const totalFormatted = totalFinal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
-        const bar = document.getElementById('cart-floating-bar');
-        
-        if (count > 0) {
-            bar.style.display = 'flex';
-            document.getElementById('float-qty-label').textContent = `${count} ${count === 1 ? 'item selecionado' : 'itens selecionados'}`;
-            document.getElementById('float-total-val').textContent = subtotalFormatted;
-            
-            // Atualiza o resumo no Modal
-            document.getElementById('modal-subtotal-val').textContent = subtotalFormatted;
-            document.getElementById('modal-freight-val').textContent = freightFormatted;
-            document.getElementById('modal-total-val').textContent = totalFormatted;
-
-            const freightRow = document.getElementById('modal-freight-row');
-            if (freightRow) {
-                freightRow.style.display = orderType === 'delivery' ? 'flex' : 'none';
-            }
-        } else {
-            bar.style.display = 'none';
-            closeCheckoutModal();
-        }
-    }
-
-    function openCheckoutModal() {
-        if (getSubtotal() === 0) return;
-        document.getElementById('checkout-modal').style.display = 'flex';
-    }
-
-    function closeCheckoutModal() {
-        document.getElementById('checkout-modal').style.display = 'none';
-    }
-
-    function setOrderType(type) {
-        orderType = type;
-        const buttons = document.querySelectorAll('#orderTypeToggle button');
-        buttons[0].classList.toggle('active', type === 'delivery');
-        buttons[1].classList.toggle('active', type === 'pickup');
-
-        const deliveryGroup = document.getElementById('delivery-address-group');
-
-        if (type === 'pickup') {
-            deliveryGroup.style.display = 'none';
-            currentDeliveryFee = 0;
-        } else {
-            deliveryGroup.style.display = 'block';
-        }
-        calculateTotals();
-    }
-
-    // --- GPS E CÁLCULO DE FRETE ---
-    function getGPSLocation() {
-        if (!navigator.geolocation) {
-            alert("Seu navegador não suporta GPS. Digite o endereço manualmente.");
-            return;
-        }
-
-        const btn = document.getElementById('btn-gps');
-        btn.textContent = "⌛ Obtendo localização do GPS...";
-        btn.disabled = true;
-
-        navigator.geolocation.getCurrentPosition(
-            async (position) => {
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
-
-                const km = calculateDistanceKm(STORE_LAT, STORE_LON, lat, lon);
-                
-                let fee = BASE_FEE;
-                if (km > 0.3) {
-                    fee = Math.ceil(BASE_FEE + (km * PRICE_PER_KM));
-                }
-
-                currentDeliveryFee = fee; // Atualiza a variável global do frete
-
-                try {
-                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
-                    const data = await res.json();
-                    const street = data.address.road || data.address.suburb || "Endereço via GPS";
-                    
-                    document.getElementById('cli-address').value = `${street} (📍 GPS: ~${km.toFixed(1)} km - Frete: R$ ${fee.toFixed(2)})`;
-                    btn.textContent = "✅ Localização Capturada!";
-                } catch (e) {
-                    document.getElementById('cli-address').value = `📍 GPS (~${km.toFixed(1)} km - Frete est.: R$ ${fee.toFixed(2)})`;
-                    btn.textContent = "✅ Localização Capturada!";
-                }
-                btn.disabled = false;
-                calculateTotals();
-            },
-            (error) => {
-                btn.disabled = false;
-                btn.textContent = "📍 Usar Minha Localização Atual (GPS)";
-
-                if (error.code === error.PERMISSION_DENIED) {
-                    showGPSDenyHelp();
-                } else {
-                    alert("Sinal de GPS fraco ou indisponível. Tente novamente ou digite o endereço.");
-                }
-            },
-            { enableHighAccuracy: true, timeout: 10000 }
-        );
-    }
-
-    function showGPSDenyHelp() {
-        let modal = document.getElementById('gps-help-modal');
-        if (!modal) {
-            modal = document.createElement('div');
-            modal.id = 'gps-help-modal';
-            modal.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; z-index:300; padding:20px;';
-            document.body.appendChild(modal);
-        }
-
-        modal.innerHTML = `
-            <div style="background:#1E293B; border-radius:16px; border:1px solid #334155; padding:20px; max-width:400px; width:100%; text-align:center;">
-                <div style="font-size:40px; margin-bottom:10px;">📍⚠️</div>
-                <h3 style="color:#F1F5F9; font-size:17px; margin-bottom:8px;">Precisamos do seu GPS</h3>
-                <p style="color:#94A3B8; font-size:13px; line-height:1.5; margin-bottom:14px;">
-                    Parece que o acesso à localização foi bloqueado. Para calcular o frete exato sem erros, ative a permissão:
-                </p>
-                <div style="background:#0F172A; border:1px solid #334155; border-radius:10px; padding:12px; text-align:left; font-size:12px; color:#CBD5E1; margin-bottom:16px; line-height:1.6;">
-                    <strong>🔒 No Android (Chrome):</strong> Toque no ícone de cadeado ao lado do endereço ➔ Permissões ➔ Ative "Localização".<br><br>
-                    <strong>📱 No iPhone (Safari):</strong> Toque no ícone "aA" ou cadeado ➔ Ajustes do Site ➔ Localização ➔ Permitir.
-                </div>
-                <div style="display:flex; gap:8px;">
-                    <button onclick="document.getElementById('gps-help-modal').style.display='none'" style="flex:1; background:#334155; color:#fff; border:none; padding:10px; border-radius:8px; font-size:12px; font-weight:bold; cursor:pointer;">Digitar Manualmente</button>
-                    <button onclick="document.getElementById('gps-help-modal').style.display='none'; getGPSLocation();" style="flex:1; background:#3B82F6; color:#fff; border:none; padding:10px; border-radius:8px; font-size:12px; font-weight:bold; cursor:pointer;">🔄 Tentar Novamente</button>
-                </div>
-            </div>
-        `;
-        modal.style.display = 'flex';
-    }
-
-    function calculateDistanceKm(lat1, lon1, lat2, lon2) {
-        const R = 6371;
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-                  Math.sin(dLon/2) * Math.sin(dLon/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        return (R * c) * 1.3;
-    }
-
-    async function sendWhatsApp() {
-        const name = document.getElementById('cli-name').value.trim() || 'Não informado';
-        const address = document.getElementById('cli-address').value.trim() || 'A combinar';
-        const subtotal = getSubtotal();
-
-        if (subtotal === 0) {
-            alert('Adicione pelo menos 1 item ao pedido!');
-            return;
-        }
-
-        const itemsList = Object.keys(products)
-            .filter(id => products[id].qty > 0)
-            .map(id => ({
-                id,
-                name: products[id].name,
-                qty: products[id].qty
-            }));
-
-        try {
-            const response = await fetch('/api/validate-order', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    clientName: name,
-                    address: address,
-                    orderType: orderType,
-                    items: itemsList
-                })
-            });
-
-            const data = await response.json();
-
-            if (!data.success) {
-                alert(`Atenção: ${data.error}`);
-                return;
-            }
-
-            const currentSettings = JSON.parse(localStorage.getItem('dly_settings')) || {};
-            let storePhone = currentSettings.phone ? currentSettings.phone.replace(/\D/g, '') : '';
-
-            if (storePhone && !storePhone.startsWith('55')) {
-                storePhone = '55' + storePhone;
-            }
-            if (!storePhone) {
-                storePhone = '5533999999999';
-            }
-
-            const storeName = currentSettings.storeName || 'MADY';
-
-            const order = data.order;
-            let itemsFormatted = '';
-            order.items.forEach(i => {
-                itemsFormatted += `• *${i.qty}x ${i.name}* — R$ ${i.totalPrice.toFixed(2)}\n`;
-            });
-
-            const typeLabel = order.orderType === 'delivery' ? '🛵 *Entrega*' : '🏪 *Retirada no Balcão*';
-            const totalFinal = order.subtotal + (order.orderType === 'delivery' ? currentDeliveryFee : 0);
-
-            let totalsSection = '';
-            if (order.orderType === 'delivery') {
-                const freteTxt = currentDeliveryFee > 0 ? `R$ ${currentDeliveryFee.toFixed(2)}` : 'A combinar';
-                totalsSection = `💵 *SUBTOTAL:* R$ ${order.subtotal.toFixed(2)}\n` +
-                                `🛵 *FRETE:* ${freteTxt}\n` +
-                                `💰 *TOTAL FINAL:* R$ ${totalFinal.toFixed(2)}`;
-            } else {
-                totalsSection = `💵 *SUBTOTAL:* R$ ${order.subtotal.toFixed(2)}\n` +
-                                `🏪 *FRETE:* R$ 0.00 (Retirada)\n` +
-                                `💰 *TOTAL FINAL:* R$ ${order.subtotal.toFixed(2)}`;
-            }
-
-            const msg = `🛍️ *NOVO PEDIDO - ${storeName.toUpperCase()}*\n` +
-                        `═══════════════════════\n\n` +
-                        `📍 *TIPO:* ${typeLabel}\n` +
-                        `👤 *CLIENTE:* ${order.clientName}\n` +
-                        `🏠 *ENDEREÇO:* ${order.address}\n\n` +
-                        `📋 *ITENS DO PEDIDO:*\n${itemsFormatted}\n` +
-                        `═══════════════════════\n` +
-                        `${totalsSection}\n\n` +
-                        `✨ _Obrigado pela preferência! Aguardo a confirmação._`;
-
-            window.open(`https://api.whatsapp.com/send?phone=${storePhone}&text=${encodeURIComponent(msg)}`, '_blank');
-
-        } catch (err) {
-            alert('Ocorreu um erro ao validar o pedido. Tente novamente.');
-        }
-    }
-
-    function printReceipt() {
-        const subtotal = getSubtotal();
-        if (subtotal === 0) {
-            alert('Selecione itens antes de imprimir!');
-            return;
-        }
-
-        const currentSettings = JSON.parse(localStorage.getItem('dly_settings')) || {};
-        document.getElementById('rec-store-name').textContent = (currentSettings.storeName || 'DELIVERY CONTROL').toUpperCase();
-        document.getElementById('rec-date').textContent = new Date().toLocaleString('pt-BR');
-        document.getElementById('rec-name').textContent = document.getElementById('cli-name').value || 'Não informado';
-        document.getElementById('rec-address').textContent = orderType === 'delivery' ? (document.getElementById('cli-address').value || 'A combinar') : 'Retirada no Balcão';
-
-        let itemsHtml = '';
-        Object.values(products).forEach(p => {
-            if (p.qty > 0) {
-                itemsHtml += `<p>${p.qty}x ${p.name} - R$ ${(p.price * p.qty).toFixed(2)}</p>`;
-            }
-        });
-        document.getElementById('rec-items').innerHTML = itemsHtml;
-
-        const freightArea = document.getElementById('rec-freight-area');
-        const totalFinal = subtotal + (orderType === 'delivery' ? currentDeliveryFee : 0);
-
-        if (orderType === 'pickup') {
-            freightArea.innerHTML = `
-                <p><strong>Frete:</strong> R$ 0,00 (Retirada)</p>
-                <p style="font-size: 16px; margin-top: 8px;"><strong>TOTAL: R$ ${subtotal.toFixed(2)}</strong></p>
-            `;
-        } else {
-            freightArea.innerHTML = `
-                <p><strong>Subtotal:</strong> R$ ${subtotal.toFixed(2)}</p>
-                <p><strong>Frete (GPS):</strong> R$ ${currentDeliveryFee.toFixed(2)}</p>
-                <p style="font-size: 16px; margin-top: 8px;"><strong>TOTAL: R$ ${totalFinal.toFixed(2)}</strong></p>
-            `;
-        }
-
-        const receiptEl = document.getElementById('printable-receipt');
-        receiptEl.style.display = 'block';
-        window.print();
-        receiptEl.style.display = 'none';
-    }
-</script>
+<!-- CARREGAMENTO DOS MÓDULOS DE JAVASCRIPT -->
+<script src="js/geo.js"></script>
+<script src="js/menu.js"></script>
 
 </body>
 </html>
