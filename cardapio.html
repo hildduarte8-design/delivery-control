@@ -108,6 +108,12 @@
     <div class="form-group" style="margin-bottom: 8px;">
         <input type="text" id="cli-name" placeholder="Seu nome" style="padding: 8px 12px; min-height: 40px; font-size: 13px;">
     </div>
+
+    <!-- BOTÃO DE GPS -->
+    <button type="button" id="btn-gps" class="btn btn-sm" onclick="getGPSLocation()" style="margin-bottom: 8px; width: 100%; background: #3B82F6; color: #fff; font-size: 12px; font-weight: 600; padding: 8px;">
+        📍 Usar Minha Localização Atual (GPS)
+    </button>
+
     <div class="form-group" style="margin-bottom: 12px;">
         <input type="text" id="cli-address" placeholder="Endereço de entrega" style="padding: 8px 12px; min-height: 40px; font-size: 13px;">
     </div>
@@ -140,7 +146,13 @@
 </div>
 
 <script>
-    let orderType = 'delivery'; // 'delivery' ou 'pickup'
+    let orderType = 'delivery';
+
+    // Coordenadas fixas e taxa de entrega (Teófilo Otoni - MG)
+    const STORE_LAT = -17.8575; 
+    const STORE_LON = -41.5053; 
+    const BASE_FEE = 4.00;      
+    const PRICE_PER_KM = 1.50;  
 
     const products = {
         marmita: { name: 'Marmita Executiva', price: 20.00, qty: 0 },
@@ -156,13 +168,16 @@
         buttons[1].classList.toggle('active', type === 'pickup');
 
         const addressInput = document.getElementById('cli-address');
+        const gpsBtn = document.getElementById('btn-gps');
         const summaryLabel = document.getElementById('summary-label');
 
         if (type === 'pickup') {
             addressInput.style.display = 'none';
+            if (gpsBtn) gpsBtn.style.display = 'none';
             summaryLabel.textContent = 'Total do Pedido:';
         } else {
             addressInput.style.display = 'block';
+            if (gpsBtn) gpsBtn.style.display = 'block';
             summaryLabel.textContent = 'Subtotal (sem frete):';
         }
     }
@@ -182,6 +197,92 @@
     function calculateSubtotal() {
         const subtotal = getSubtotal();
         document.getElementById('cart-subtotal').textContent = subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    // --- FUNÇÕES DE GPS E CÁLCULO DE FRETE ---
+    function getGPSLocation() {
+        if (!navigator.geolocation) {
+            alert("Seu navegador não suporta GPS. Digite o endereço manualmente.");
+            return;
+        }
+
+        const btn = document.getElementById('btn-gps');
+        btn.textContent = "⌛ Obtendo localização do GPS...";
+        btn.disabled = true;
+
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+
+                const km = calculateDistanceKm(STORE_LAT, STORE_LON, lat, lon);
+                const fee = Math.ceil(BASE_FEE + (km * PRICE_PER_KM));
+
+                try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+                    const data = await res.json();
+                    const street = data.address.road || data.address.suburb || "Endereço via GPS";
+                    
+                    document.getElementById('cli-address').value = `${street} (📍 GPS: ~${km.toFixed(1)} km - Frete: R$ ${fee.toFixed(2)})`;
+                    btn.textContent = "✅ Localização Capturada!";
+                } catch (e) {
+                    document.getElementById('cli-address').value = `📍 GPS (~${km.toFixed(1)} km - Frete est.: R$ ${fee.toFixed(2)})`;
+                    btn.textContent = "✅ Localização Capturada!";
+                }
+                btn.disabled = false;
+            },
+            (error) => {
+                btn.disabled = false;
+                btn.textContent = "📍 Usar Minha Localização Atual (GPS)";
+
+                if (error.code === error.PERMISSION_DENIED) {
+                    showGPSDenyHelp();
+                } else {
+                    alert("Sinal de GPS fraco ou indisponível. Tente novamente ou digite o endereço.");
+                }
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+    }
+
+    function showGPSDenyHelp() {
+        let modal = document.getElementById('gps-help-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'gps-help-modal';
+            modal.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; z-index:999; padding:20px;';
+            document.body.appendChild(modal);
+        }
+
+        modal.innerHTML = `
+            <div style="background:#1E293B; border-radius:16px; border:1px solid #334155; padding:20px; max-width:400px; width:100%; text-align:center;">
+                <div style="font-size:40px; margin-bottom:10px;">📍⚠️</div>
+                <h3 style="color:#F1F5F9; font-size:17px; margin-bottom:8px;">Precisamos do seu GPS</h3>
+                <p style="color:#94A3B8; font-size:13px; line-height:1.5; margin-bottom:14px;">
+                    Parece que o acesso à localização foi bloqueado. Para calcular o frete exato sem erros, ative a permissão:
+                </p>
+                <div style="background:#0F172A; border:1px solid #334155; border-radius:10px; padding:12px; text-align:left; font-size:12px; color:#CBD5E1; margin-bottom:16px; line-height:1.6;">
+                    <strong>🔒 No Android (Chrome):</strong> Toque no ícone de cadeado ao lado do endereço ➔ Permissões ➔ Ative "Localização".<br><br>
+                    <strong>📱 No iPhone (Safari):</strong> Toque no ícone "aA" ou cadeado ➔ Ajustes do Site ➔ Localização ➔ Permitir.
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button onclick="document.getElementById('gps-help-modal').style.display='none'" style="flex:1; background:#334155; color:#fff; border:none; padding:10px; border-radius:8px; font-size:12px; font-weight:bold; cursor:pointer;">Digitar Manualmente</button>
+                    <button onclick="document.getElementById('gps-help-modal').style.display='none'; getGPSLocation();" style="flex:1; background:#3B82F6; color:#fff; border:none; padding:10px; border-radius:8px; font-size:12px; font-weight:bold; cursor:pointer;">🔄 Tentar Novamente</button>
+                </div>
+            </div>
+        `;
+        modal.style.display = 'flex';
+    }
+
+    function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return (R * c) * 1.3;
     }
 
     async function sendWhatsApp() {
@@ -233,7 +334,7 @@
 
             const typeLabel = order.orderType === 'delivery' ? '🛵 Entrega' : '🏪 Retirada no Balcão';
             const totalLine = order.orderType === 'delivery' 
-                ? `*Subtotal:* R$ ${order.subtotal.toFixed(2)}\n_(Aguardando cálculo da taxa de entrega)_`
+                ? `*Subtotal:* R$ ${order.subtotal.toFixed(2)}\n_(Aguardando confirmação do frete via GPS)_`
                 : `*TOTAL FINAL:* R$ ${order.subtotal.toFixed(2)} (Sem frete)`;
 
             const msg = `*NOVO PEDIDO - ${storeName.toUpperCase()}*\n\n` +
