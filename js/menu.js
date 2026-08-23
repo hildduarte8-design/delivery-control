@@ -1,4 +1,4 @@
-// js/menu.js - Lógica Dinâmica com Categorias, Descontos, Cross-Sell e GPS
+// js/menu.js - Lógica Dinâmica com Categorias, Descontos, Cross-Sell, Lupa/Lightbox e GPS
 
 const MenuApp = {
     orderType: 'delivery',
@@ -53,7 +53,6 @@ const MenuApp = {
 
             this.rawProductsList = items;
             
-            // Mantém a quantidade selecionada anteriormente
             items.forEach(p => {
                 const discount = Number(p.discount_pct || 0);
                 const originalPrice = Number(p.price);
@@ -109,7 +108,6 @@ const MenuApp = {
             return;
         }
 
-        // Agrupa por categoria para exibir títulos de seção se estiver mostrando 'Todos'
         const grouped = {};
         filteredItems.forEach(p => {
             const cat = p.category || 'Geral';
@@ -138,10 +136,17 @@ const MenuApp = {
                     `;
                 }
 
+                const imgHtml = p.image_url ? `
+                    <div class="img-zoom-wrapper" onclick="MenuApp.openLightbox('${p.image_url}', '${p.name.replace(/'/g, "\\'")}')" title="Toque para ampliar">
+                        <img src="${p.image_url}" style="width:60px; height:60px; border-radius:10px; object-fit:cover;">
+                        <span class="img-zoom-badge">🔍</span>
+                    </div>
+                ` : '<span style="font-size:32px;">🍽️</span>';
+
                 html += `
                     <div class="product-card">
                         <div style="display:flex; align-items:center; gap:12px; flex:1;">
-                            ${p.image_url ? `<img src="${p.image_url}" style="width:60px; height:60px; border-radius:10px; object-fit:cover;">` : '<span style="font-size:32px;">🍽️</span>'}
+                            ${imgHtml}
                             <div class="product-info">
                                 <h4>${p.name}</h4>
                                 <p>${p.description || ''}</p>
@@ -159,6 +164,24 @@ const MenuApp = {
         }
 
         container.innerHTML = html;
+    },
+
+    openLightbox(imageUrl, title) {
+        if (!imageUrl) return;
+        const modal = document.getElementById('image-lightbox');
+        const img = document.getElementById('lightbox-img');
+        const caption = document.getElementById('lightbox-caption');
+
+        if (modal && img) {
+            img.src = imageUrl;
+            if (caption) caption.textContent = title || '';
+            modal.style.display = 'flex';
+        }
+    },
+
+    closeLightbox() {
+        const modal = document.getElementById('image-lightbox');
+        if (modal) modal.style.display = 'none';
     },
 
     getStoreCoordinates() {
