@@ -231,6 +231,15 @@ function openProductModal(productId = null) {
         }
     }
 
+    // Pega as categorias padrão e junta dinamicamente com as novas que você já criou
+    const defaultCategories = ["Especialidades", "Marmitas", "Batatas Recheadas", "Pastéis", "Bebidas", "Sobremesas"];
+    const customCategories = window.currentAdminProducts 
+        ? window.currentAdminProducts.map(item => item.category).filter(Boolean)
+        : [];
+    
+    const uniqueCategories = [...new Set([...defaultCategories, ...customCategories])];
+    const categoryOptionsHtml = uniqueCategories.map(cat => `<option value="${cat}">`).join('');
+
     openModal(isEdit ? '✏️ Editar Prato' : '🍔 Novo Prato', `
         <input type="hidden" id="prd_id" value="${productId || ''}">
         <div class="form-group">
@@ -241,12 +250,7 @@ function openProductModal(productId = null) {
             <label>Categoria *</label>
             <input type="text" id="prd_category" value="${p.category || 'Geral'}" placeholder="Ex: Marmitas, Bebidas..." list="cat_list">
             <datalist id="cat_list">
-                <option value="Especialidades">
-                <option value="Marmitas">
-                <option value="Batatas Recheadas">
-                <option value="Pastéis">
-                <option value="Bebidas">
-                <option value="Sobremesas">
+                ${categoryOptionsHtml}
             </datalist>
         </div>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
