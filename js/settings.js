@@ -6,9 +6,9 @@ function applyDynamicTheme(color) {
 }
 
 function loadSettingsUI() {
-    const settings = DB.load('dly_settings', { 
-        storeName: '', phone: '', password: '', storeLat: '', storeLon: '', logoUrl: '', primaryColor: '#FF6B35'
-    });
+    const settings = (typeof DB !== 'undefined' && DB.load) 
+        ? DB.load('dly_settings', { storeName: '', phone: '', password: '', storeLat: '', storeLon: '', logoUrl: '', primaryColor: '#FF6B35' })
+        : { storeName: '', phone: '', password: '', storeLat: '', storeLon: '', logoUrl: '', primaryColor: '#FF6B35' };
     
     const nameEl = document.getElementById('cfg_store_name');
     const phoneEl = document.getElementById('cfg_phone');
@@ -46,30 +46,34 @@ function loadSettingsUI() {
 }
 
 function getStoreGPS() {
-    if (!navigator.geolocation) return showToast('Seu navegador não suporta GPS', 'error');
+    if (!navigator.geolocation) {
+        if (typeof showToast === 'function') showToast('Seu navegador não suporta GPS', 'error');
+        return;
+    }
     const btn = document.getElementById('btn_store_gps');
     if (btn) btn.textContent = '⌛ Capturando posição da loja...';
 
     navigator.geolocation.getCurrentPosition(
         (pos) => {
-            if (document.getElementById('cfg_store_lat')) document.getElementById('cfg_store_lat').value = pos.coords.latitude;
-            if (document.getElementById('cfg_store_lon')) document.getElementById('cfg_store_lon').value = pos.coords.longitude;
+            const latEl = document.getElementById('cfg_store_lat');
+            const lonEl = document.getElementById('cfg_store_lon');
+            if (latEl) latEl.value = pos.coords.latitude;
+            if (lonEl) lonEl.value = pos.coords.longitude;
 
             if (btn) {
                 btn.textContent = '✅ Localização da Loja Capturada!';
                 btn.style.background = '#10B981';
             }
-            showToast('GPS da loja capturado! Lembre-se de clicar em Salvar.');
+            if (typeof showToast === 'function') showToast('GPS da loja capturado! Lembre-se de clicar em Salvar.');
         },
         () => {
             if (btn) btn.textContent = '📍 Capturar GPS Atual da Loja';
-            showToast('Erro ao obter sinal do GPS. Verifique a permissão.', 'error');
+            if (typeof showToast === 'function') showToast('Erro ao obter sinal do GPS. Verifique a permissão.', 'error');
         },
         { enableHighAccuracy: true }
     );
 }
 
-// --- UPLOAD DE IMAGEM / LOGO ---
 async function uploadProductImage(file) {
     try {
         if (typeof dbClient === 'undefined') return null;
@@ -92,11 +96,11 @@ async function uploadProductImage(file) {
 
         return publicUrlData.publicUrl;
     } catch (e) {
+        console.error('Erro ao processar upload:', e);
         return null;
     }
 }
 
-// --- SALVAR CONFIGURAÇÕES DA LOJA E LOGO ---
 async function saveSettings() {
     const storeName = document.getElementById('cfg_store_name')?.value.trim() || '';
     let rawPhone = document.getElementById('cfg_phone')?.value.replace(/\D/g, '') || '';
@@ -108,21 +112,27 @@ async function saveSettings() {
     const primaryColor = document.getElementById('cfg_primary_color')?.value || '#FF6B35';
 
     if (rawPhone.startsWith('55') && rawPhone.length > 11) rawPhone = rawPhone.slice(2);
-    if (!storeName) return showToast('Informe o nome da loja', 'error');
-    if (rawPhone.length < 10 || rawPhone.length > 11) return showToast('Informe um WhatsApp válido com DDD', 'error');
+    if (!storeName) {
+        if (typeof showToast === 'function') showToast('Informe o nome da loja', 'error');
+        return;
+    }
+    if (rawPhone.length < 10 || rawPhone.length > 11) {
+        if (typeof showToast === 'function') showToast('Informe um WhatsApp válido com DDD', 'error');
+        return;
+    }
 
-    // Se houver arquivo de logo selecionado, envia pro Supabase
-    if (logoFileInput && logoFileInput.files.length > 0) {
-        showToast('⌛ Enviando logo da loja...');
+    if (logoFileInput && logoFileInput.files && logoFileInput.files.length > 0) {
+        if (typeof showToast === 'function') showToast('⌛ Enviando logo da loja...');
         const uploadedLogo = await uploadProductImage(logoFileInput.files[0]);
         if (uploadedLogo) {
             logoUrl = uploadedLogo;
-            if (document.getElementById('cfg_logo_url')) document.getElementById('cfg_logo_url').value = logoUrl;
+            const logoUrlInput = document.getElementById('cfg_logo_url');
+            if (logoUrlInput) logoUrlInput.value = logoUrl;
         }
     }
 
     const updated = { storeName, phone: rawPhone, password, storeLat, storeLon, logoUrl, primaryColor };
-    DB.save('dly_settings', updated);
+    if (typeof DB !== 'undefined' && DB.save) DB.save('dly_settings', updated);
     if (typeof state !== 'undefined') state.settings = updated;
 
     try {
@@ -141,10 +151,9 @@ async function saveSettings() {
         console.error('Erro ao salvar no Supabase:', e);
     }
 
-    showToast('Configurações e marca salvas!');
+    if (typeof showToast === 'function') showToast('Configurações e marca salvas!');
 }
 
-// --- RENDERIZAÇÃO DA LISTA DE PRATOS NO GESTOR ---
 async function renderAdminProductsList() {
     const container = document.getElementById('admin-products-list');
     if (!container) return;
@@ -196,7 +205,7 @@ async function renderAdminProductsList() {
                     
                     <div style="display:flex; gap:6px; border-top:1px solid #334155; padding-top:8px; margin-top:2px;">
                         <button class="btn btn-sm btn-secondary" onclick="openProductModal('${p.id}')" style="flex:1; font-size:11px; padding:6px;">✏️ Editar</button>
-                        <button class="btn btn-sm" onclick="deleteProduct('${p.id}', '${p.name}')" style="background:#EF4444; color:#fff; font-size:11px; padding:6px; width:auto;">🗑️ Excluir</button>
+                        <button class="btn btn-sm" onclick="deleteProduct('${p.id}', '${p.name.replace(/'/g, "\\'")}')" style="background:#EF4444; color:#fff; font-size:11px; padding:6px; width:auto;">🗑️ Excluir</button>
                     </div>
                 </div>
             `;
@@ -214,7 +223,7 @@ async function moveProductOrder(id, currentOrder, direction) {
             renderAdminProductsList();
         }
     } catch (e) {
-        showToast('Erro ao reordenar prato', 'error');
+        if (typeof showToast === 'function') showToast('Erro ao reordenar prato', 'error');
     }
 }
 
@@ -222,15 +231,14 @@ async function toggleProductActive(id, newStatus) {
     try {
         if (typeof dbClient !== 'undefined') {
             await dbClient.from('products').update({ is_active: newStatus }).eq('id', id);
-            showToast(newStatus ? 'Prato ativado!' : 'Prato pausado!');
+            if (typeof showToast === 'function') showToast(newStatus ? 'Prato ativado!' : 'Prato pausado!');
             renderAdminProductsList();
         }
     } catch (e) {
-        showToast('Erro ao alterar status do prato', 'error');
+        if (typeof showToast === 'function') showToast('Erro ao alterar status do prato', 'error');
     }
 }
 
-// --- ABRIR MODAL PARA NOVO PRATO OU EDIÇÃO ---
 function openProductModal(productId = null) {
     if (typeof openModal !== 'function') return;
 
@@ -302,7 +310,6 @@ function openNewProductModal() {
     openProductModal(null);
 }
 
-// --- SALVAR (INSERIR OU ATUALIZAR) ---
 async function saveProduct() {
     const id = document.getElementById('prd_id')?.value || null;
     const name = document.getElementById('prd_name')?.value.trim();
@@ -315,12 +322,15 @@ async function saveProduct() {
     const fileInput = document.getElementById('prd_file');
     const saveBtn = document.getElementById('btn_save_prd');
 
-    if (!name || price <= 0) return showToast('Preencha o nome e um preço válido!', 'error');
+    if (!name || price <= 0) {
+        if (typeof showToast === 'function') showToast('Preencha o nome e um preço válido!', 'error');
+        return;
+    }
 
     try {
         let imageUrl = urlInput;
 
-        if (fileInput && fileInput.files.length > 0) {
+        if (fileInput && fileInput.files && fileInput.files.length > 0) {
             if (saveBtn) {
                 saveBtn.disabled = true;
                 saveBtn.textContent = '⌛ Enviando foto...';
@@ -330,7 +340,7 @@ async function saveProduct() {
             if (uploadedUrl) {
                 imageUrl = uploadedUrl;
             } else {
-                showToast('Erro ao enviar foto. Tente novamente.', 'error');
+                if (typeof showToast === 'function') showToast('Erro ao enviar foto. Tente novamente.', 'error');
                 if (saveBtn) {
                     saveBtn.disabled = false;
                     saveBtn.textContent = 'Salvar no Cardápio';
@@ -354,7 +364,7 @@ async function saveProduct() {
             }
 
             if (error) {
-                showToast('Erro ao salvar no banco', 'error');
+                if (typeof showToast === 'function') showToast('Erro ao salvar no banco', 'error');
                 if (saveBtn) {
                     saveBtn.disabled = false;
                     saveBtn.textContent = 'Salvar no Cardápio';
@@ -363,11 +373,11 @@ async function saveProduct() {
             }
 
             if (typeof closeModal === 'function') closeModal();
-            showToast(id ? 'Prato atualizado!' : 'Prato adicionado!');
+            if (typeof showToast === 'function') showToast(id ? 'Prato atualizado!' : 'Prato adicionado!');
             renderAdminProductsList();
         }
     } catch (e) {
-        showToast('Erro inesperado ao salvar', 'error');
+        if (typeof showToast === 'function') showToast('Erro inesperado ao salvar', 'error');
         if (saveBtn) {
             saveBtn.disabled = false;
             saveBtn.textContent = 'Salvar no Cardápio';
@@ -375,24 +385,25 @@ async function saveProduct() {
     }
 }
 
-// --- EXCLUIR PRATO ---
 async function deleteProduct(id, name) {
     if (!confirm(`Tem certeza que deseja excluir "${name}" do cardápio?`)) return;
 
     try {
         if (typeof dbClient !== 'undefined') {
             const { error } = await dbClient.from('products').delete().eq('id', id);
-            if (error) return showToast('Erro ao excluir prato', 'error');
+            if (error) {
+                if (typeof showToast === 'function') showToast('Erro ao excluir prato', 'error');
+                return;
+            }
 
-            showToast('Prato excluído!');
+            if (typeof showToast === 'function') showToast('Prato excluído!');
             renderAdminProductsList();
         }
     } catch (e) {
-        showToast('Erro ao excluir prato', 'error');
+        if (typeof showToast === 'function') showToast('Erro ao excluir prato', 'error');
     }
 }
 
-// --- EXPORTAR CARDÁPIO PROFISSIONAL EM PDF (SEM CABEÇALHO/RODAPÉ DO NAVEGADOR) ---
 async function exportMenuToPDF() {
     const pdfWindow = window.open('', '_blank');
     if (!pdfWindow) {
@@ -440,7 +451,6 @@ async function exportMenuToPDF() {
 
         const primaryColor = settings.primaryColor || '#FF6B35';
 
-        // Agrupa por Categoria
         const grouped = {};
         products.forEach(p => {
             const cat = p.category || 'Geral';
@@ -500,7 +510,7 @@ async function exportMenuToPDF() {
                 <style>
                     @page {
                         size: A4;
-                        margin: 0; /* LIMPA O CABEÇALHO E RODAPÉ DO NAVEGADOR */
+                        margin: 0;
                     }
                     * { box-sizing: border-box; }
                     body {
@@ -573,6 +583,6 @@ async function exportMenuToPDF() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    loadSettingsUI();
+    if (typeof loadSettingsUI === 'function') loadSettingsUI();
     document.querySelector('.bottom-nav button[data-tab="settings"]')?.addEventListener('click', loadSettingsUI);
 });
