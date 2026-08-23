@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cardápio Digital - Delivery</title>
+    <title>Cardápio Digital</title>
     <link rel="stylesheet" href="css/styles.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛵</text></svg>">
 </head>
@@ -11,68 +11,17 @@
 
 <div class="menu-container no-print">
     <div style="text-align: center; margin-bottom: 20px;">
-        <h2 style="color: #FF6B35; font-size: 24px;">Cardápio Digital</h2>
-        <p style="color: #94A3B8; font-size: 13px;">Monte seu pedido abaixo</p>
+        <h2 style="color: var(--primary-color, #FF6B35); font-size: 24px;" id="store-title">Cardápio Digital</h2>
+        <p style="color: #94A3B8; font-size: 13px;">Monte seu pedido abaixo com facilidade</p>
     </div>
 
-    <div class="section-title">😋 Especialidades</div>
-    
-    <div class="product-card">
-        <div class="product-info">
-            <h4>Marmita Executiva</h4>
-            <p>Arroz, feijão, farofa e opção de carne</p>
-            <div class="product-price">R$ 20,00</div>
-        </div>
-        <div class="qty-controls">
-            <button class="qty-btn" onclick="MenuApp.updateQty('marmita', -1)">-</button>
-            <span class="qty-value" id="qty-marmita">0</span>
-            <button class="qty-btn" onclick="MenuApp.updateQty('marmita', 1)">+</button>
-        </div>
-    </div>
-
-    <div class="product-card">
-        <div class="product-info">
-            <h4>Batata Recheada</h4>
-            <p>Batata grande, queijo, presunto e catupiry</p>
-            <div class="product-price">R$ 25,00</div>
-        </div>
-        <div class="qty-controls">
-            <button class="qty-btn" onclick="MenuApp.updateQty('batata', -1)">-</button>
-            <span class="qty-value" id="qty-batata">0</span>
-            <button class="qty-btn" onclick="MenuApp.updateQty('batata', 1)">+</button>
-        </div>
-    </div>
-
-    <div class="product-card">
-        <div class="product-info">
-            <h4>Pastel Especial</h4>
-            <p>Massa caseira bem recheada</p>
-            <div class="product-price">R$ 12,00</div>
-        </div>
-        <div class="qty-controls">
-            <button class="qty-btn" onclick="MenuApp.updateQty('pastel', -1)">-</button>
-            <span class="qty-value" id="qty-pastel">0</span>
-            <button class="qty-btn" onclick="MenuApp.updateQty('pastel', 1)">+</button>
-        </div>
-    </div>
-
-    <div class="section-title">🥤 Bebidas</div>
-
-    <div class="product-card">
-        <div class="product-info">
-            <h4>Suco de Morango (Puro)</h4>
-            <p>100% fruta natural 500ml</p>
-            <div class="product-price">R$ 10,00</div>
-        </div>
-        <div class="qty-controls">
-            <button class="qty-btn" onclick="MenuApp.updateQty('suco', -1)">-</button>
-            <span class="qty-value" id="qty-suco">0</span>
-            <button class="qty-btn" onclick="MenuApp.updateQty('suco', 1)">+</button>
-        </div>
+    <!-- CARREGAMENTO DINÂMICO DOS PRATOS -->
+    <div id="products-container">
+        <div style="text-align:center; color:#94A3B8; padding:30px;">⌛ Carregando cardápio...</div>
     </div>
 </div>
 
-<!-- BARRA FLUTUANTE DISCRETA NO RODAPÉ -->
+<!-- BARRA FLUTUANTE DE CARRINHO -->
 <div id="cart-floating-bar" class="cart-bar-floating no-print">
     <div>
         <div style="font-size: 11px; color: #94A3B8;" id="float-qty-label">0 itens selecionados</div>
@@ -83,12 +32,18 @@
     </button>
 </div>
 
-<!-- MODAL / JANELA DE FINALIZAÇÃO DO PEDIDO -->
+<!-- MODAL DE CHECKOUT COM CROSS-SELLING -->
 <div id="checkout-modal" class="modal-overlay no-print">
     <div class="modal-body">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
             <h3 style="color: #F1F5F9; font-size: 18px;">🛒 Finalizar Pedido</h3>
             <button onclick="MenuApp.closeCheckoutModal()" style="background: transparent; border: none; color: #94A3B8; font-size: 22px; cursor: pointer; font-weight: bold;">✕</button>
+        </div>
+
+        <!-- ÁREA DE CROSS-SELLING (OFERTAS COMPLEMENTARES) -->
+        <div id="cross-sell-section" class="cross-sell-box" style="display: none;">
+            <div class="cross-sell-title">🥤 Que tal acompanhar com...</div>
+            <div class="cross-sell-items" id="cross-sell-items-list"></div>
         </div>
 
         <div class="form-group" style="margin-bottom: 12px;">
@@ -142,13 +97,13 @@
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <button class="btn btn-secondary btn-sm" onclick="MenuApp.printReceipt()" style="padding: 12px;">🖨️ Imprimir PDF</button>
-            <button class="btn btn-sm" style="background: #25D366; font-weight: bold; padding: 12px;" onclick="MenuApp.sendWhatsApp()">📲 Pedir no Whats</button>
+            <button class="btn btn-secondary btn-sm" onclick="MenuApp.printReceipt()" style="padding: 12px;">🖨️ Imprimir Pedido</button>
+            <button class="btn btn-sm" style="background: #25D366; font-weight: bold; padding: 12px;" onclick="MenuApp.sendWhatsApp()">📲 Enviar WhatsApp</button>
         </div>
     </div>
 </div>
 
-<!-- ÁREA OCULTA APENAS PARA IMPRESSÃO DO COMPROVANTE -->
+<!-- COMPROVANTE OCULTO PARA IMPRESSÃO -->
 <div id="printable-receipt" style="display: none;">
     <h2 style="text-align: center; margin-bottom: 10px;" id="rec-store-name">DELIVERY CONTROL</h2>
     <p>--------------------------------</p>
@@ -166,7 +121,9 @@
     <p style="text-align: center; margin-top: 15px;">Obrigado pela preferência!</p>
 </div>
 
-<!-- CARREGAMENTO DOS MÓDULOS DE JAVASCRIPT -->
+<!-- SCRIPTS SDK SUPABASE E MÓDULOS -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/storage.js"></script>
 <script src="js/geo.js"></script>
 <script src="js/menu.js"></script>
 
