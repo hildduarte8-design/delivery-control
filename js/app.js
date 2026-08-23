@@ -1,11 +1,17 @@
+// js/app.js - Inicialização, Autenticação, Relógio e Gestos de Navegação
+
 function updateHeader() {
     const d = new Date();
     const hh = d.getHours();
     let g = 'Bom dia';
     if (hh >= 12 && hh < 18) g = 'Boa tarde';
     else if (hh >= 18 || hh < 5) g = 'Boa noite';
-    document.getElementById('greetingText').textContent = g;
-    document.getElementById('currentDate').textContent = d.toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' });
+    
+    const greetingEl = document.getElementById('greetingText');
+    const dateEl = document.getElementById('currentDate');
+    
+    if (greetingEl) greetingEl.textContent = g;
+    if (dateEl) dateEl.textContent = d.toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' });
 }
 
 function showWelcome() {
@@ -22,17 +28,18 @@ function showWelcome() {
                 <strong style="color:#FF6B35;">🏠 Dashboard:</strong> saldo em tempo real
             </div>
         </div>
-        <button class="btn btn-large" onclick="localStorage.setItem('dly_welcomed','1'); closeModal(); weeklyNotificationBanner();">
+        <button class="btn btn-large" onclick="localStorage.setItem('dly_welcomed','1'); closeModal(); if(typeof weeklyNotificationBanner === 'function') weeklyNotificationBanner();">
             🚀 Começar a usar
         </button>
     `);
 }
 
 function checkAdminAuth() {
+    if (typeof DB === 'undefined') return;
     const settings = DB.load('dly_settings', {});
     const savedPassword = settings.password;
 
-    // Se nenhuma senha foi definida ainda, libera o acesso livremente
+    // Se nenhuma senha foi definida ainda, libera o acesso
     if (!savedPassword) return;
 
     // Se já foi autenticado nesta sessão do navegador, libera
@@ -50,7 +57,7 @@ function checkAdminAuth() {
 
 function validatePassword() {
     const input = document.getElementById('admin_pass_input')?.value;
-    const settings = DB.load('dly_settings', {});
+    const settings = typeof DB !== 'undefined' ? DB.load('dly_settings', {}) : {};
 
     if (input && input === settings.password) {
         sessionStorage.setItem('dly_auth', 'true');
@@ -61,17 +68,85 @@ function validatePassword() {
     }
 }
 
+// --- NAVEGAÇÃO POR GESTOS (ARRASTAR TELA NO MOBILE) ---
+function initGestureNavigation() {
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchEndX = 0;
+    let touchEndY = 0;
+
+    const tabsOrder = ['dashboard', 'stock', 'sales', 'expenses', 'settings'];
+    const mainContainer = document.querySelector('main');
+
+    if (!mainContainer) return;
+
+    mainContainer.addEventListener('touchstart', (e) => {
+        // Ignora toques em modais, inputs, seletores ou listas horizontais
+        if (e.target.closest('.cross-sell-items, .subtabs, .modal-overlay, input, textarea, select')) {
+            touchStartX = 0;
+            touchStartY = 0;
+            return;
+        }
+        touchStartX = e.changedTouches[0].screenX;
+        touchStartY = e.changedTouches[0].screenY;
+    }, { passive: true });
+
+    mainContainer.addEventListener('touchend', (e) => {
+        if (touchStartX === 0) return;
+
+        touchEndX = e.changedTouches[0].screenX;
+        touchEndY = e.changedTouches[0].screenY;
+        handleSwipeGesture();
+    }, { passive: true });
+
+    function handleSwipeGesture() {
+        const deltaX = touchEndX - touchStartX;
+        const deltaY = touchEndY - touchStartY;
+
+        // Movimento horizontal significativo (maior que 60px)
+        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 60) {
+            const activeNavBtn = document.querySelector('.bottom-nav button.active');
+            const currentTab = activeNavBtn ? activeNavBtn.dataset.tab : 'dashboard';
+            const currentIndex = tabsOrder.indexOf(currentTab);
+
+            if (currentIndex === -1) return;
+
+            if (deltaX < 0) {
+                // Arrastou para a esquerda ➔ Avança a aba
+                if (currentIndex < tabsOrder.length - 1) {
+                    const nextTab = tabsOrder[currentIndex + 1];
+                    if (typeof switchTab === 'function') switchTab(nextTab);
+                }
+            } else {
+                // Arrastou para a direita ➔ Volta a aba
+                if (currentIndex > 0) {
+                    const prevTab = tabsOrder[currentIndex - 1];
+                    if (typeof switchTab === 'function') switchTab(prevTab);
+                }
+            }
+        }
+        
+        touchStartX = 0;
+        touchStartY = 0;
+    }
+}
+
 function init() {
-    setupManifest();
-    setupServiceWorker();
-    loadAll();
+    if (typeof setupManifest === 'function') setupManifest();
+    if (typeof setupServiceWorker === 'function') setupServiceWorker();
+    if (typeof loadAll === 'function') loadAll();
+    
     updateHeader();
     checkAdminAuth();
-    switchTab('dashboard');
-    renderDashboard();
-    updateNotificationBadge();
+    
+    if (typeof switchTab === 'function') switchTab('dashboard');
+    if (typeof renderDashboard === 'function') renderDashboard();
+    if (typeof updateNotificationBadge === 'function') updateNotificationBadge();
+    
+    initGestureNavigation();
+    
     setInterval(updateHeader, 60000);
-    checkWeeklyNotification();
+    if (typeof checkWeeklyNotification === 'function') checkWeeklyNotification();
 }
 
 if (document.readyState === 'loading') {
