@@ -250,6 +250,18 @@ function openNewProductModal() {
             <label>Nome do Prato *</label>
             <input type="text" id="prd_name" placeholder="Ex: Marmita Executiva">
         </div>
+        <div class="form-group">
+            <label>Categoria *</label>
+            <input type="text" id="prd_category" placeholder="Ex: Marmitas, Batatas, Bebidas, Sobremesas" list="cat_list">
+            <datalist id="cat_list">
+                <option value="Especialidades">
+                <option value="Marmitas">
+                <option value="Batatas Recheadas">
+                <option value="Pastéis">
+                <option value="Bebidas">
+                <option value="Sobremesas">
+            </datalist>
+        </div>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
             <div class="form-group">
                 <label>Preço (R$) *</label>
@@ -282,6 +294,7 @@ function openNewProductModal() {
 
 async function saveNewProduct() {
     const name = document.getElementById('prd_name')?.value.trim();
+    const category = document.getElementById('prd_category')?.value.trim() || 'Geral';
     const price = Number(document.getElementById('prd_price')?.value || 0);
     const discount_pct = Number(document.getElementById('prd_discount')?.value || 0);
     const description = document.getElementById('prd_desc')?.value.trim() || '';
@@ -298,7 +311,6 @@ async function saveNewProduct() {
     try {
         let imageUrl = urlInput;
 
-        // Se selecionou arquivo do dispositivo, faz upload para o Supabase
         if (fileInput && fileInput.files.length > 0) {
             if (saveBtn) {
                 saveBtn.disabled = true;
@@ -317,6 +329,40 @@ async function saveNewProduct() {
                 return;
             }
         }
+
+        if (typeof dbClient !== 'undefined') {
+            const { error } = await dbClient.from('products').insert([{ 
+                name, 
+                category,
+                price, 
+                discount_pct, 
+                description, 
+                image_url: imageUrl, 
+                is_cross_sell, 
+                is_active: true 
+            }]);
+
+            if (error) {
+                showToast('Erro ao salvar produto no banco', 'error');
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Salvar no Cardápio';
+                }
+                return;
+            }
+
+            if (typeof closeModal === 'function') closeModal();
+            showToast('Prato adicionado com sucesso!');
+            renderAdminProductsList();
+        }
+    } catch (e) {
+        showToast('Erro inesperado ao salvar produto', 'error');
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Salvar no Cardápio';
+        }
+    }
+}
 
         if (typeof dbClient !== 'undefined') {
             const { error } = await dbClient.from('products').insert([{ 
