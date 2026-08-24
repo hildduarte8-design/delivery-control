@@ -217,7 +217,21 @@ async function renderSalesList() {
             return;
         }
 
-        container.innerHTML = orders.map(o => {
+        // FILTRA APENAS VENDAS REAIS (COM VALOR OU ITENS)
+        const realSales = orders.filter(o => {
+            let items = o.items;
+            if (typeof items === 'string') {
+                try { items = JSON.parse(items); } catch(e) { items = []; }
+            }
+            return (Array.isArray(items) && items.length > 0) || Number(o.total || 0) > 0;
+        });
+
+        if (realSales.length === 0) {
+            container.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:20px; font-size:13px;">Nenhuma venda registrada ainda.</div>';
+            return;
+        }
+
+        container.innerHTML = realSales.map(o => {
             const dateFormatted = new Date(o.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
             return `
                 <div class="card" style="margin-bottom:8px; padding:12px; display:flex; justify-content:space-between; align-items:center;">
