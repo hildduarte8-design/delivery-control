@@ -8,6 +8,7 @@ const MenuApp = {
     products: {},
     rawProductsList: [],
     selectedCategory: 'all',
+    storeData: {}, // Armazena os dados vindos do banco (WhatsApp, Nome, GPS)
 
     async init() {
         await this.loadStoreSettings();
@@ -19,6 +20,8 @@ const MenuApp = {
             if (typeof dbClient === 'undefined') return;
             const { data } = await dbClient.from('store_settings').select('*').single();
             if (data) {
+                this.storeData = data; // Salva todas as configurações em memória
+
                 if (data.primary_color) {
                     document.documentElement.style.setProperty('--primary-color', data.primary_color);
                 }
@@ -26,6 +29,16 @@ const MenuApp = {
                 if (titleEl && data.store_name) {
                     titleEl.textContent = data.store_name;
                 }
+
+                // Atualiza o cache do navegador
+                const settings = {
+                    storeName: data.store_name,
+                    phone: data.phone,
+                    storeLat: data.store_lat,
+                    storeLon: data.store_lon,
+                    primaryColor: data.primary_color
+                };
+                localStorage.setItem('dly_settings', JSON.stringify(settings));
             }
         } catch (e) {
             console.error('Erro ao carregar loja:', e);
@@ -185,12 +198,17 @@ const MenuApp = {
     },
 
     getStoreCoordinates() {
-        const settings = JSON.parse(localStorage.getItem('dly_settings')) || {};
+        const localSettings = JSON.parse(localStorage.getItem('dly_settings') || '{}');
+        const phoneVal = this.storeData.phone || localSettings.phone || '';
+        const nameVal = this.storeData.store_name || localSettings.storeName || 'Pastel e Batata Imperial';
+        const latVal = this.storeData.store_lat || localSettings.storeLat;
+        const lonVal = this.storeData.store_lon || localSettings.storeLon;
+
         return {
-            lat: settings.storeLat ? parseFloat(settings.storeLat) : -17.8575,
-            lon: settings.storeLon ? parseFloat(settings.storeLon) : -41.5053,
-            phone: settings.phone ? settings.phone.replace(/\D/g, '') : '',
-            storeName: settings.storeName || 'Delivery'
+            lat: latVal ? parseFloat(latVal) : -17.8575,
+            lon: lonVal ? parseFloat(lonVal) : -41.5053,
+            phone: phoneVal.toString().replace(/\D/g, ''),
+            storeName: nameVal
         };
     },
 
@@ -224,18 +242,23 @@ const MenuApp = {
         const bar = document.getElementById('cart-floating-bar');
         
         if (count > 0) {
-            bar.style.display = 'flex';
-            document.getElementById('float-qty-label').textContent = `${count} ${count === 1 ? 'item selecionado' : 'itens selecionados'}`;
-            document.getElementById('float-total-val').textContent = subtotalFormatted;
+            if (bar) bar.style.display = 'flex';
+            const qtyLbl = document.getElementById('float-qty-label');
+            const totalLbl = document.getElementById('float-total-val');
+            if (qtyLbl) qtyLbl.textContent = `${count} ${count === 1 ? 'item selecionado' : 'itens selecionados'}`;
+            if (totalLbl) totalLbl.textContent = subtotalFormatted;
             
-            document.getElementById('modal-subtotal-val').textContent = subtotalFormatted;
-            document.getElementById('modal-freight-val').textContent = freightFormatted;
-            document.getElementById('modal-total-val').textContent = totalFormatted;
+            const subModal = document.getElementById('modal-subtotal-val');
+            const freModal = document.getElementById('modal-freight-val');
+            const totModal = document.getElementById('modal-total-val');
+            if (subModal) subModal.textContent = subtotalFormatted;
+            if (freModal) freModal.textContent = freightFormatted;
+            if (totModal) totModal.textContent = totalFormatted;
 
             const freightRow = document.getElementById('modal-freight-row');
             if (freightRow) freightRow.style.display = this.orderType === 'delivery' ? 'flex' : 'none';
         } else {
-            bar.style.display = 'none';
+            if (bar) bar.style.display = 'none';
             this.closeCheckoutModal();
         }
     },
@@ -271,25 +294,29 @@ const MenuApp = {
     openCheckoutModal() {
         if (this.getSubtotal() === 0) return;
         this.renderCrossSellOffers();
-        document.getElementById('checkout-modal').style.display = 'flex';
+        const modal = document.getElementById('checkout-modal');
+        if (modal) modal.style.display = 'flex';
     },
 
     closeCheckoutModal() {
-        document.getElementById('checkout-modal').style.display = 'none';
+        const modal = document.getElementById('checkout-modal');
+        if (modal) modal.style.display = 'none';
     },
 
     setOrderType(type) {
         this.orderType = type;
         const buttons = document.querySelectorAll('#orderTypeToggle button');
-        buttons[0].classList.toggle('active', type === 'delivery');
-        buttons[1].classList.toggle('active', type === 'pickup');
+        if (buttons.length >= 2) {
+            buttons[0].classList.toggle('active', type === 'delivery');
+            buttons[1].classList.toggle('active', type === 'pickup');
+        }
 
         const deliveryGroup = document.getElementById('delivery-address-group');
         if (type === 'pickup') {
-            deliveryGroup.style.display = 'none';
+            if (deliveryGroup) deliveryGroup.style.display = 'none';
             this.currentDeliveryFee = 0;
         } else {
-            deliveryGroup.style.display = 'block';
+            if (deliveryGroup) deliveryGroup.style.display = 'block';
         }
         this.calculateTotals();
     },
@@ -301,8 +328,10 @@ const MenuApp = {
         }
 
         const btn = document.getElementById('btn-gps');
-        btn.textContent = "⌛ Obtendo localização do GPS...";
-        btn.disabled = true;
+        if (btn) {
+            btn.textContent = "⌛ Obtendo localização do GPS...";
+            btn.disabled = true;
+        }
 
         const storeCoords = this.getStoreCoordinates();
 
@@ -322,157 +351,181 @@ const MenuApp = {
                     const data = await res.json();
                     const street = data.address.road || data.address.suburb || "Endereço via GPS";
                     
-                    document.getElementById('cli-address').value = `${street} (📍 ~${km.toFixed(1)} km - Frete: R$ ${fee.toFixed(2)})`;
-                    btn.textContent = "✅ Localização Capturada!";
+                    const addrInput = document.getElementById('cli-address');
+                    if (addrInput) addrInput.value = `${street} (📍 ~${km.toFixed(1)} km - Frete: R$ ${fee.toFixed(2)})`;
+                    if (btn) btn.textContent = "✅ Localização Capturada!";
                 } catch (e) {
-                    document.getElementById('cli-address').value = `📍 GPS (~${km.toFixed(1)} km - Frete: R$ ${fee.toFixed(2)})`;
-                    btn.textContent = "✅ Localização Capturada!";
+                    const addrInput = document.getElementById('cli-address');
+                    if (addrInput) addrInput.value = `📍 GPS (~${km.toFixed(1)} km - Frete: R$ ${fee.toFixed(2)})`;
+                    if (btn) btn.textContent = "✅ Localização Capturada!";
                 }
-                btn.disabled = false;
+                if (btn) btn.disabled = false;
                 this.calculateTotals();
             },
             (error) => {
-                btn.disabled = false;
-                btn.textContent = "📍 Usar Minha Localização Atual (GPS)";
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = "📍 Usar Minha Localização Atual (GPS)";
 
-                if (error.code === error.PERMISSION_DENIED) {
-                    GeoService.showGPSDenyHelp(() => this.getGPSLocation());
-                } else {
-                    alert("Sinal de GPS fraco ou indisponível. Tente novamente ou digite o endereço.");
+                    if (error.code === error.PERMISSION_DENIED) {
+                        GeoService.showGPSDenyHelp(() => this.getGPSLocation());
+                    } else {
+                        alert("Sinal de GPS fraco ou indisponível. Tente novamente ou digite o endereço.");
+                    }
                 }
             },
             { enableHighAccuracy: true, timeout: 10000 }
         );
     },
 
-async sendWhatsApp() {
-    const name = document.getElementById('cli-name').value.trim() || 'Não informado';
-    const address = document.getElementById('cli-address').value.trim() || 'A combinar';
-    const number = document.getElementById('cli-number')?.value.trim() || '';
-    const reference = document.getElementById('cli-reference')?.value.trim() || '';
-    const subtotal = this.getSubtotal();
+    async sendWhatsApp() {
+        const nameEl = document.getElementById('cli-name');
+        const addrEl = document.getElementById('cli-address');
+        const numEl = document.getElementById('cli-number');
+        const refEl = document.getElementById('cli-reference');
 
-    if (subtotal === 0) return alert('Adicione pelo menos 1 item ao pedido!');
+        const name = nameEl?.value.trim() || 'Não informado';
+        const address = addrEl?.value.trim() || 'A combinar';
+        const number = numEl?.value.trim() || '';
+        const reference = refEl?.value.trim() || '';
+        const subtotal = this.getSubtotal();
 
-    if (this.orderType === 'delivery') {
-        if (!address || address === 'A combinar') return alert('Por favor, informe seu endereço ou use o GPS!');
-        if (!number) return alert('Por favor, digite o NÚMERO da sua casa!');
-    }
+        if (subtotal === 0) return alert('Adicione pelo menos 1 item ao pedido!');
 
-    const storeCoords = this.getStoreCoordinates();
-    let storePhone = storeCoords.phone;
-    if (storePhone && !storePhone.startsWith('55')) storePhone = '55' + storePhone;
-    if (!storePhone) storePhone = '5533999999999';
-
-    // Organiza os itens em formato de array para o banco de dados
-    const orderItems = [];
-    let itemsFormatted = '';
-
-    Object.keys(this.products).forEach(id => {
-        const p = this.products[id];
-        if (p.qty > 0) {
-            orderItems.push({ id, name: p.name, qty: p.qty, unit_price: p.price, total: p.price * p.qty });
-            itemsFormatted += `• *${p.qty}x ${p.name}* — R$ ${(p.price * p.qty).toFixed(2)}\n`;
+        if (this.orderType === 'delivery') {
+            if (!address || address === 'A combinar') return alert('Por favor, informe seu endereço ou use o GPS!');
+            if (!number) return alert('Por favor, digite o NÚMERO da sua casa!');
         }
-    });
 
-    const freight = this.orderType === 'delivery' ? this.currentDeliveryFee : 0;
-    const totalFinal = subtotal + freight;
+        const storeCoords = this.getStoreCoordinates();
+        let storePhone = storeCoords.phone;
 
-    // GRAVA O PEDIDO NO SUPABASE EM TEMPO REAL
-    try {
-        if (typeof dbClient !== 'undefined') {
-            await dbClient.from('orders').insert([{
-                client_name: name,
-                order_type: this.orderType,
-                address: address,
-                number: number,
-                reference: reference,
-                items: orderItems,
-                subtotal: subtotal,
-                delivery_fee: freight,
-                total: totalFinal,
-                status: 'pending'
-            }]);
+        if (!storePhone) {
+            return alert('Atenção: O WhatsApp da loja ainda não foi configurado no painel.');
         }
-    } catch (e) {
-        console.error('Erro ao salvar pedido no banco:', e);
-    }
 
-    const typeLabel = this.orderType === 'delivery' ? '🛵 *Entrega*' : '🏪 *Retirada no Balcão*';
-    
-    let totalsSection = '';
-    if (this.orderType === 'delivery') {
-        const freteTxt = this.currentDeliveryFee > 0 ? `R$ ${this.currentDeliveryFee.toFixed(2)}` : 'A combinar';
-        totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
-                        `🛵 *FRETE:* ${freteTxt}\n` +
-                        `💰 *TOTAL FINAL:* R$ ${totalFinal.toFixed(2)}`;
-    } else {
-        totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
-                        `🏪 *FRETE:* R$ 0.00 (Retirada)\n` +
-                        `💰 *TOTAL FINAL:* R$ ${subtotal.toFixed(2)}`;
-    }
+        if (!storePhone.startsWith('55')) storePhone = '55' + storePhone;
 
-    const msg = `🛍️ *NOVO PEDIDO - ${storeCoords.storeName.toUpperCase()}*\n` +
-                `═══════════════════════\n\n` +
-                `📍 *TIPO:* ${typeLabel}\n` +
-                `👤 *CLIENTE:* ${name}\n` +
-                `🏠 *ENDEREÇO:* ${address}\n` +
-                `🔢 *NÚMERO:* ${number || 'S/N'}\n` +
-                `🎯 *REFERÊNCIA:* ${reference || 'Não informada'}\n\n` +
-                `📋 *ITENS DO PEDIDO:*\n${itemsFormatted}\n` +
-                `═══════════════════════\n` +
-                `${totalsSection}\n\n` +
-                `✨ _Obrigado pela preferência! Aguardo a confirmação._`;
+        const orderItems = [];
+        let itemsFormatted = '';
 
-    window.open(`https://api.whatsapp.com/send?phone=${storePhone}&text=${encodeURIComponent(msg)}`, '_blank');
-},
+        Object.keys(this.products).forEach(id => {
+            const p = this.products[id];
+            if (p.qty > 0) {
+                orderItems.push({ id, name: p.name, qty: p.qty, unit_price: p.price, total: p.price * p.qty });
+                itemsFormatted += `• *${p.qty}x ${p.name}* — R$ ${(p.price * p.qty).toFixed(2)}\n`;
+            }
+        });
+
+        const freight = this.orderType === 'delivery' ? this.currentDeliveryFee : 0;
+        const totalFinal = subtotal + freight;
+
+        // Gravando no banco
+        try {
+            if (typeof dbClient !== 'undefined') {
+                await dbClient.from('orders').insert([{
+                    client_name: name,
+                    order_type: this.orderType,
+                    address: address,
+                    number: number,
+                    reference: reference,
+                    items: orderItems,
+                    subtotal: subtotal,
+                    delivery_fee: freight,
+                    total: totalFinal,
+                    status: 'pending'
+                }]);
+            }
+        } catch (e) {
+            console.error('Erro ao salvar pedido no banco:', e);
+        }
+
+        const typeLabel = this.orderType === 'delivery' ? '🛵 *Entrega*' : '🏪 *Retirada no Balcão*';
+        
+        let totalsSection = '';
+        if (this.orderType === 'delivery') {
+            const freteTxt = this.currentDeliveryFee > 0 ? `R$ ${this.currentDeliveryFee.toFixed(2)}` : 'A combinar';
+            totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
+                            `🛵 *FRETE:* ${freteTxt}\n` +
+                            `💰 *TOTAL FINAL:* R$ ${totalFinal.toFixed(2)}`;
+        } else {
+            totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
+                            `🏪 *FRETE:* R$ 0.00 (Retirada)\n` +
+                            `💰 *TOTAL FINAL:* R$ ${subtotal.toFixed(2)}`;
+        }
+
+        const msg = `🛍️ *NOVO PEDIDO - ${storeCoords.storeName.toUpperCase()}*\n` +
+                    `═══════════════════════\n\n` +
+                    `📍 *TIPO:* ${typeLabel}\n` +
+                    `👤 *CLIENTE:* ${name}\n` +
+                    `🏠 *ENDEREÇO:* ${address}\n` +
+                    `🔢 *NÚMERO:* ${number || 'S/N'}\n` +
+                    `🎯 *REFERÊNCIA:* ${reference || 'Não informada'}\n\n` +
+                    `📋 *ITENS DO PEDIDO:*\n${itemsFormatted}\n` +
+                    `═══════════════════════\n` +
+                    `${totalsSection}\n\n` +
+                    `✨ _Obrigado pela preferência! Aguardo a confirmação._`;
+
+        window.open(`https://api.whatsapp.com/send?phone=${storePhone}&text=${encodeURIComponent(msg)}`, '_blank');
+    },
 
     printReceipt() {
         const subtotal = this.getSubtotal();
         if (subtotal === 0) return alert('Selecione itens antes de imprimir!');
 
         const storeCoords = this.getStoreCoordinates();
-        document.getElementById('rec-store-name').textContent = storeCoords.storeName.toUpperCase();
-        document.getElementById('rec-date').textContent = new Date().toLocaleString('pt-BR');
-        document.getElementById('rec-name').textContent = document.getElementById('cli-name').value || 'Não informado';
+        const storeNameEl = document.getElementById('rec-store-name');
+        const dateEl = document.getElementById('rec-date');
+        const nameEl = document.getElementById('rec-name');
+        const addrEl = document.getElementById('rec-address');
+        const numEl = document.getElementById('rec-number');
+        const refEl = document.getElementById('rec-reference');
+
+        if (storeNameEl) storeNameEl.textContent = storeCoords.storeName.toUpperCase();
+        if (dateEl) dateEl.textContent = new Date().toLocaleString('pt-BR');
+        if (nameEl) nameEl.textContent = document.getElementById('cli-name')?.value || 'Não informado';
         
         if (this.orderType === 'delivery') {
-            document.getElementById('rec-address').textContent = document.getElementById('cli-address').value || 'A combinar';
-            document.getElementById('rec-number').textContent = document.getElementById('cli-number').value || 'S/N';
-            document.getElementById('rec-reference').textContent = document.getElementById('cli-reference').value || 'Não informada';
+            if (addrEl) addrEl.textContent = document.getElementById('cli-address')?.value || 'A combinar';
+            if (numEl) numEl.textContent = document.getElementById('cli-number')?.value || 'S/N';
+            if (refEl) refEl.textContent = document.getElementById('cli-reference')?.value || 'Não informada';
         } else {
-            document.getElementById('rec-address').textContent = 'Retirada no Balcão';
-            document.getElementById('rec-number').textContent = '-';
-            document.getElementById('rec-reference').textContent = '-';
+            if (addrEl) addrEl.textContent = 'Retirada no Balcão';
+            if (numEl) numEl.textContent = '-';
+            if (refEl) refEl.textContent = '-';
         }
 
         let itemsHtml = '';
         Object.values(this.products).forEach(p => {
             if (p.qty > 0) itemsHtml += `<p>${p.qty}x ${p.name} - R$ ${(p.price * p.qty).toFixed(2)}</p>`;
         });
-        document.getElementById('rec-items').innerHTML = itemsHtml;
+        const recItems = document.getElementById('rec-items');
+        if (recItems) recItems.innerHTML = itemsHtml;
 
         const freightArea = document.getElementById('rec-freight-area');
         const totalFinal = subtotal + (this.orderType === 'delivery' ? this.currentDeliveryFee : 0);
 
-        if (this.orderType === 'pickup') {
-            freightArea.innerHTML = `
-                <p><strong>Frete:</strong> R$ 0,00 (Retirada)</p>
-                <p style="font-size: 16px; margin-top: 8px;"><strong>TOTAL: R$ ${subtotal.toFixed(2)}</strong></p>
-            `;
-        } else {
-            freightArea.innerHTML = `
-                <p><strong>Subtotal:</strong> R$ ${subtotal.toFixed(2)}</p>
-                <p><strong>Frete (GPS):</strong> R$ ${this.currentDeliveryFee.toFixed(2)}</p>
-                <p style="font-size: 16px; margin-top: 8px;"><strong>TOTAL: R$ ${totalFinal.toFixed(2)}</strong></p>
-            `;
+        if (freightArea) {
+            if (this.orderType === 'pickup') {
+                freightArea.innerHTML = `
+                    <p><strong>Frete:</strong> R$ 0,00 (Retirada)</p>
+                    <p style="font-size: 16px; margin-top: 8px;"><strong>TOTAL: R$ ${subtotal.toFixed(2)}</strong></p>
+                `;
+            } else {
+                freightArea.innerHTML = `
+                    <p><strong>Subtotal:</strong> R$ ${subtotal.toFixed(2)}</p>
+                    <p><strong>Frete (GPS):</strong> R$ ${this.currentDeliveryFee.toFixed(2)}</p>
+                    <p style="font-size: 16px; margin-top: 8px;"><strong>TOTAL: R$ ${totalFinal.toFixed(2)}</strong></p>
+                `;
+            }
         }
 
         const receiptEl = document.getElementById('printable-receipt');
-        receiptEl.style.display = 'block';
-        window.print();
-        receiptEl.style.display = 'none';
+        if (receiptEl) {
+            receiptEl.style.display = 'block';
+            window.print();
+            receiptEl.style.display = 'none';
+        }
     }
 };
 
