@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="css/styles.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛵</text></svg>">
     <style>
-        /* Barra de Categorias Deslizante (Estilo iFood) */
+        /* Barra de Categorias Deslizante */
         .category-scroll-bar {
             display: flex;
             gap: 8px;
@@ -97,6 +97,12 @@
             <input type="text" id="cli-name" placeholder="Digite seu nome" style="padding: 10px 12px; font-size: 13px; width: 100%;">
         </div>
 
+        <!-- CAMPO OBRIGATÓRIO DE WHATSAPP -->
+        <div class="form-group" style="margin-bottom: 10px;">
+            <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Seu WhatsApp (com DDD) *</label>
+            <input type="tel" id="cli-phone" placeholder="Ex: 33999999999" style="padding: 10px 12px; font-size: 13px; width: 100%;" required>
+        </div>
+
         <div id="delivery-address-group">
             <button type="button" id="btn-gps" class="btn btn-sm" onclick="MenuApp.getGPSLocation()" style="margin-bottom: 10px; width: 100%; background: #3B82F6; color: #fff; font-size: 12px; font-weight: 600; padding: 10px;">
                 📍 Usar Minha Localização Atual (GPS)
@@ -134,10 +140,10 @@
             </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <button class="btn btn-secondary btn-sm" onclick="MenuApp.printReceipt()" style="padding: 12px;">🖨️ Imprimir Pedido</button>
-            <button class="btn btn-sm" style="background: #25D366; font-weight: bold; padding: 12px;" onclick="MenuApp.sendWhatsApp()">📲 Enviar WhatsApp</button>
-        </div>
+        <!-- BOTÃO ÚNICO E LIMPO DE FINALIZAÇÃO -->
+        <button class="btn btn-sm" style="background: #25D366; color: #FFFFFF; font-weight: bold; padding: 14px; width: 100%; font-size: 15px;" onclick="MenuApp.sendWhatsApp()">
+            🚀 Finalizar Pedido
+        </button>
     </div>
 </div>
 
