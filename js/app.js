@@ -77,7 +77,7 @@ function initGestureNavigation() {
     let isDragging = false;
 
     // Incluído 'orders' no fluxo de telas
-    const tabsOrder = ['dashboard', 'orders', 'stock', 'sales', 'expenses', 'settings'];
+    const tabsOrder = ['dashboard', 'orders', 'stock', 'expenses', 'settings'];
     const mainContainer = document.querySelector('main');
 
     if (!mainContainer) return;
