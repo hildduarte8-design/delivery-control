@@ -1,4 +1,4 @@
-// js/menu.js - Lógica Dinâmica com Categorias, Descontos, Cross-Sell, Lupa/Lightbox e GPS
+// js/menu.js - Lógica do Cardápio Digital
 
 const MenuApp = {
     orderType: 'delivery',
@@ -8,7 +8,7 @@ const MenuApp = {
     products: {},
     rawProductsList: [],
     selectedCategory: 'all',
-    storeData: {}, // Armazena os dados vindos do banco (WhatsApp, Nome, GPS)
+    storeData: {},
 
     async init() {
         await this.loadStoreSettings();
@@ -20,7 +20,7 @@ const MenuApp = {
             if (typeof dbClient === 'undefined') return;
             const { data } = await dbClient.from('store_settings').select('*').single();
             if (data) {
-                this.storeData = data; // Salva todas as configurações em memória
+                this.storeData = data;
 
                 if (data.primary_color) {
                     document.documentElement.style.setProperty('--primary-color', data.primary_color);
@@ -30,7 +30,6 @@ const MenuApp = {
                     titleEl.textContent = data.store_name;
                 }
 
-                // Atualiza o cache do navegador
                 const settings = {
                     storeName: data.store_name,
                     phone: data.phone,
@@ -41,63 +40,61 @@ const MenuApp = {
                 localStorage.setItem('dly_settings', JSON.stringify(settings));
             }
         } catch (e) {
-            console.error('Erro ao carregar loja:', e);
+            console.error('Erro ao carregar configurações:', e);
         }
     },
 
     async loadProductsFromDatabase() {
-    const container = document.getElementById('products-container');
-    if (!container) return;
+        const container = document.getElementById('products-container');
+        if (!container) return;
 
-    try {
-        if (typeof dbClient === 'undefined') {
-            container.innerHTML = '<div style="text-align:center; color:#EF4444; padding:30px;">⚠️ Erro de conexão: A variável <b>dbClient</b> não foi encontrada no storage.js.</div>';
-            return;
+        try {
+            if (typeof dbClient === 'undefined') {
+                container.innerHTML = '<div style="text-align:center; color:#EF4444; padding:30px;">⚠️ Erro: Conexão dbClient não encontrada.</div>';
+                return;
+            }
+
+            const { data: items, error } = await dbClient
+                .from('products')
+                .select('*')
+                .eq('is_active', true)
+                .order('display_order', { ascending: true })
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                container.innerHTML = `<div style="text-align:center; color:#EF4444; padding:30px;">⚠️ Erro ao buscar produtos: ${error.message}</div>`;
+                return;
+            }
+
+            if (!items || items.length === 0) {
+                container.innerHTML = '<div style="text-align:center; color:#94A3B8; padding:30px;">Nenhum produto disponível no momento.</div>';
+                return;
+            }
+
+            this.rawProductsList = items;
+            
+            items.forEach(p => {
+                const discount = Number(p.discount_pct || 0);
+                const originalPrice = Number(p.price);
+                const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
+                const prevQty = this.products[p.id]?.qty || 0;
+
+                this.products[p.id] = { 
+                    name: p.name, 
+                    price: finalPrice, 
+                    isCrossSell: p.is_cross_sell,
+                    category: p.category || 'Geral',
+                    qty: prevQty 
+                };
+            });
+
+            this.renderCategoriesBar();
+            this.renderProductsList();
+
+        } catch (e) {
+            container.innerHTML = `<div style="text-align:center; color:#EF4444; padding:30px;">⚠️ Falha ao carregar cardápio: ${e.message}</div>`;
         }
-
-        const { data: items, error } = await dbClient
-            .from('products')
-            .select('*')
-            .eq('is_active', true)
-            .order('display_order', { ascending: true })
-            .order('created_at', { ascending: false });
-
-        if (error) {
-            console.error('Erro Supabase:', error);
-            container.innerHTML = `<div style="text-align:center; color:#EF4444; padding:30px;">⚠️ Erro ao consultar produtos: ${error.message}</div>`;
-            return;
-        }
-
-        if (!items || items.length === 0) {
-            container.innerHTML = '<div style="text-align:center; color:#94A3B8; padding:30px;">Nenhum produto cadastrado ou ativo no cardápio.</div>';
-            return;
-        }
-
-        this.rawProductsList = items;
-        
-        items.forEach(p => {
-            const discount = Number(p.discount_pct || 0);
-            const originalPrice = Number(p.price);
-            const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
-            const prevQty = this.products[p.id]?.qty || 0;
-
-            this.products[p.id] = { 
-                name: p.name, 
-                price: finalPrice, 
-                isCrossSell: p.is_cross_sell,
-                category: p.category || 'Geral',
-                qty: prevQty 
-            };
-        });
-
-        this.renderCategoriesBar();
-        this.renderProductsList();
-
-    } catch (e) {
-        console.error('Erro de execução:', e);
-        container.innerHTML = `<div style="text-align:center; color:#EF4444; padding:30px;">⚠️ Falha ao carregar cardápio: ${e.message}</div>`;
-    }
-},
+    },
 
     renderCategoriesBar() {
         const categoryBar = document.getElementById('category-bar');
@@ -210,13 +207,11 @@ const MenuApp = {
     getStoreCoordinates() {
         const localSettings = JSON.parse(localStorage.getItem('dly_settings') || '{}');
         const phoneVal = this.storeData.phone || localSettings.phone || '';
-        const nameVal = this.storeData.store_name || localSettings.storeName || 'Pastel e Batata Imperial';
-        const latVal = this.storeData.store_lat || localSettings.storeLat;
-        const lonVal = this.storeData.store_lon || localSettings.storeLon;
+        const nameVal = this.storeData.store_name || localSettings.storeName || 'Nosso Delivery';
 
         return {
-            lat: latVal ? parseFloat(latVal) : -17.8575,
-            lon: lonVal ? parseFloat(lonVal) : -41.5053,
+            lat: this.storeData.store_lat || localSettings.storeLat || -17.8575,
+            lon: this.storeData.store_lon || localSettings.storeLon || -41.5053,
             phone: phoneVal.toString().replace(/\D/g, ''),
             storeName: nameVal
         };
@@ -376,114 +371,108 @@ const MenuApp = {
                 if (btn) {
                     btn.disabled = false;
                     btn.textContent = "📍 Usar Minha Localização Atual (GPS)";
-
-                    if (error.code === error.PERMISSION_DENIED) {
-                        GeoService.showGPSDenyHelp(() => this.getGPSLocation());
-                    } else {
-                        alert("Sinal de GPS fraco ou indisponível. Tente novamente ou digite o endereço.");
-                    }
                 }
+                alert("Sinal de GPS indisponível. Digite seu endereço de entrega.");
             },
             { enableHighAccuracy: true, timeout: 10000 }
         );
     },
 
-  async sendWhatsApp() {
-    const nameEl = document.getElementById('cli-name');
-    const phoneEl = document.getElementById('cli-phone');
-    const addrEl = document.getElementById('cli-address');
-    const numEl = document.getElementById('cli-number');
-    const refEl = document.getElementById('cli-reference');
+    async sendWhatsApp() {
+        const nameEl = document.getElementById('cli-name');
+        const phoneEl = document.getElementById('cli-phone');
+        const addrEl = document.getElementById('cli-address');
+        const numEl = document.getElementById('cli-number');
+        const refEl = document.getElementById('cli-reference');
 
-    const name = nameEl?.value.trim() || 'Não informado';
-    const phone = phoneEl?.value.trim() || '';
-    const address = addrEl?.value.trim() || 'A combinar';
-    const number = numEl?.value.trim() || '';
-    const reference = refEl?.value.trim() || '';
-    const subtotal = this.getSubtotal();
+        const name = nameEl?.value.trim() || 'Não informado';
+        const phone = phoneEl?.value.trim() || '';
+        const address = addrEl?.value.trim() || 'A combinar';
+        const number = numEl?.value.trim() || '';
+        const reference = refEl?.value.trim() || '';
+        const subtotal = this.getSubtotal();
 
-    if (subtotal === 0) return alert('Adicione pelo menos 1 item ao pedido!');
+        if (subtotal === 0) return alert('Adicione pelo menos 1 item ao pedido!');
 
-    if (!phone) return alert('Por favor, informe seu número de WhatsApp com DDD!');
+        if (!phone) return alert('Por favor, informe seu número de WhatsApp com DDD!');
 
-    if (this.orderType === 'delivery') {
-        if (!address || address === 'A combinar') return alert('Por favor, informe seu endereço ou use o GPS!');
-        if (!number) return alert('Por favor, digite o NÚMERO da sua casa!');
-    }
-
-    const storeCoords = this.getStoreCoordinates();
-    let storePhone = storeCoords.phone;
-
-    if (!storePhone) {
-        return alert('Atenção: O WhatsApp da loja ainda não foi configurado no painel.');
-    }
-
-    if (!storePhone.startsWith('55')) storePhone = '55' + storePhone;
-
-    const orderItems = [];
-    let itemsFormatted = '';
-
-    Object.keys(this.products).forEach(id => {
-        const p = this.products[id];
-        if (p.qty > 0) {
-            orderItems.push({ id, name: p.name, qty: p.qty, unit_price: p.price, total: p.price * p.qty });
-            itemsFormatted += `• *${p.qty}x ${p.name}* — R$ ${(p.price * p.qty).toFixed(2)}\n`;
+        if (this.orderType === 'delivery') {
+            if (!address || address === 'A combinar') return alert('Por favor, informe seu endereço ou use o GPS!');
+            if (!number) return alert('Por favor, digite o NÚMERO da sua casa!');
         }
-    });
 
-    const freight = this.orderType === 'delivery' ? this.currentDeliveryFee : 0;
-    const totalFinal = subtotal + freight;
+        const storeCoords = this.getStoreCoordinates();
+        let storePhone = storeCoords.phone;
 
-    // GRAVA O TELEFONE DO CLIENTE NO BANCO DE DADOS
-    try {
-        if (typeof dbClient !== 'undefined') {
-            await dbClient.from('orders').insert([{
-                client_name: name,
-                phone: phone, // <--- SALVA O TELEFONE DO CLIENTE
-                order_type: this.orderType,
-                address: address,
-                number: number,
-                reference: reference,
-                items: orderItems,
-                subtotal: subtotal,
-                delivery_fee: freight,
-                total: totalFinal,
-                status: 'pending'
-            }]);
+        if (!storePhone) {
+            return alert('Atenção: O WhatsApp da loja ainda não foi configurado no painel.');
         }
-    } catch (e) {
-        console.error('Erro ao salvar pedido no banco:', e);
-    }
 
-    const typeLabel = this.orderType === 'delivery' ? '🛵 *Entrega*' : '🏪 *Retirada no Balcão*';
-    
-    let totalsSection = '';
-    if (this.orderType === 'delivery') {
-        const freteTxt = this.currentDeliveryFee > 0 ? `R$ ${this.currentDeliveryFee.toFixed(2)}` : 'A combinar';
-        totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
-                        `🛵 *FRETE:* ${freteTxt}\n` +
-                        `💰 *TOTAL FINAL:* R$ ${totalFinal.toFixed(2)}`;
-    } else {
-        totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
-                        `🏪 *FRETE:* R$ 0.00 (Retirada)\n` +
-                        `💰 *TOTAL FINAL:* R$ ${subtotal.toFixed(2)}`;
-    }
+        if (!storePhone.startsWith('55')) storePhone = '55' + storePhone;
 
-    const msg = `🛍️ *NOVO PEDIDO - ${storeCoords.storeName.toUpperCase()}*\n` +
-                `═══════════════════════\n\n` +
-                `📍 *TIPO:* ${typeLabel}\n` +
-                `👤 *CLIENTE:* ${name}\n` +
-                `📱 *WHATSAPP:* ${phone}\n` +
-                `🏠 *ENDEREÇO:* ${address}\n` +
-                `🔢 *NÚMERO:* ${number || 'S/N'}\n` +
-                `🎯 *REFERÊNCIA:* ${reference || 'Não informada'}\n\n` +
-                `📋 *ITENS DO PEDIDO:*\n${itemsFormatted}\n` +
-                `═══════════════════════\n` +
-                `${totalsSection}\n\n` +
-                `✨ _Obrigado pela preferência! Aguardo a confirmação._`;
+        const orderItems = [];
+        let itemsFormatted = '';
 
-    window.open(`https://api.whatsapp.com/send?phone=${storePhone}&text=${encodeURIComponent(msg)}`, '_blank');
-}
+        Object.keys(this.products).forEach(id => {
+            const p = this.products[id];
+            if (p.qty > 0) {
+                orderItems.push({ id, name: p.name, qty: p.qty, unit_price: p.price, total: p.price * p.qty });
+                itemsFormatted += `• *${p.qty}x ${p.name}* — R$ ${(p.price * p.qty).toFixed(2)}\n`;
+            }
+        });
+
+        const freight = this.orderType === 'delivery' ? this.currentDeliveryFee : 0;
+        const totalFinal = subtotal + freight;
+
+        try {
+            if (typeof dbClient !== 'undefined') {
+                await dbClient.from('orders').insert([{
+                    client_name: name,
+                    phone: phone,
+                    order_type: this.orderType,
+                    address: address,
+                    number: number,
+                    reference: reference,
+                    items: orderItems,
+                    subtotal: subtotal,
+                    delivery_fee: freight,
+                    total: totalFinal,
+                    status: 'pending'
+                }]);
+            }
+        } catch (e) {
+            console.error('Erro ao salvar pedido no banco:', e);
+        }
+
+        const typeLabel = this.orderType === 'delivery' ? '🛵 *Entrega*' : '🏪 *Retirada no Balcão*';
+        
+        let totalsSection = '';
+        if (this.orderType === 'delivery') {
+            const freteTxt = this.currentDeliveryFee > 0 ? `R$ ${this.currentDeliveryFee.toFixed(2)}` : 'A combinar';
+            totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
+                            `🛵 *FRETE:* ${freteTxt}\n` +
+                            `💰 *TOTAL FINAL:* R$ ${totalFinal.toFixed(2)}`;
+        } else {
+            totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
+                            `🏪 *FRETE:* R$ 0.00 (Retirada)\n` +
+                            `💰 *TOTAL FINAL:* R$ ${subtotal.toFixed(2)}`;
+        }
+
+        const msg = `🛍️ *NOVO PEDIDO - ${storeCoords.storeName.toUpperCase()}*\n` +
+                    `═══════════════════════\n\n` +
+                    `📍 *TIPO:* ${typeLabel}\n` +
+                    `👤 *CLIENTE:* ${name}\n` +
+                    `📱 *WHATSAPP:* ${phone}\n` +
+                    `🏠 *ENDEREÇO:* ${address}\n` +
+                    `🔢 *NÚMERO:* ${number || 'S/N'}\n` +
+                    `🎯 *REFERÊNCIA:* ${reference || 'Não informada'}\n\n` +
+                    `📋 *ITENS DO PEDIDO:*\n${itemsFormatted}\n` +
+                    `═══════════════════════\n` +
+                    `${totalsSection}\n\n` +
+                    `✨ _Obrigado pela preferência! Aguardo a confirmação._`;
+
+        window.open(`https://api.whatsapp.com/send?phone=${storePhone}&text=${encodeURIComponent(msg)}`, '_blank');
+    },
 
     printReceipt() {
         const subtotal = this.getSubtotal();
