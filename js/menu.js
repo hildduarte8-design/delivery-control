@@ -345,62 +345,88 @@ const MenuApp = {
         );
     },
 
-    async sendWhatsApp() {
-        const name = document.getElementById('cli-name').value.trim() || 'Não informado';
-        const address = document.getElementById('cli-address').value.trim() || 'A combinar';
-        const number = document.getElementById('cli-number')?.value.trim() || '';
-        const reference = document.getElementById('cli-reference')?.value.trim() || '';
-        const subtotal = this.getSubtotal();
+async sendWhatsApp() {
+    const name = document.getElementById('cli-name').value.trim() || 'Não informado';
+    const address = document.getElementById('cli-address').value.trim() || 'A combinar';
+    const number = document.getElementById('cli-number')?.value.trim() || '';
+    const reference = document.getElementById('cli-reference')?.value.trim() || '';
+    const subtotal = this.getSubtotal();
 
-        if (subtotal === 0) return alert('Adicione pelo menos 1 item ao pedido!');
+    if (subtotal === 0) return alert('Adicione pelo menos 1 item ao pedido!');
 
-        if (this.orderType === 'delivery') {
-            if (!address || address === 'A combinar') return alert('Por favor, informe seu endereço ou use o GPS!');
-            if (!number) return alert('Por favor, digite o NÚMERO da sua casa!');
+    if (this.orderType === 'delivery') {
+        if (!address || address === 'A combinar') return alert('Por favor, informe seu endereço ou use o GPS!');
+        if (!number) return alert('Por favor, digite o NÚMERO da sua casa!');
+    }
+
+    const storeCoords = this.getStoreCoordinates();
+    let storePhone = storeCoords.phone;
+    if (storePhone && !storePhone.startsWith('55')) storePhone = '55' + storePhone;
+    if (!storePhone) storePhone = '5533999999999';
+
+    // Organiza os itens em formato de array para o banco de dados
+    const orderItems = [];
+    let itemsFormatted = '';
+
+    Object.keys(this.products).forEach(id => {
+        const p = this.products[id];
+        if (p.qty > 0) {
+            orderItems.push({ id, name: p.name, qty: p.qty, unit_price: p.price, total: p.price * p.qty });
+            itemsFormatted += `• *${p.qty}x ${p.name}* — R$ ${(p.price * p.qty).toFixed(2)}\n`;
         }
+    });
 
-        const storeCoords = this.getStoreCoordinates();
-        let storePhone = storeCoords.phone;
-        if (storePhone && !storePhone.startsWith('55')) storePhone = '55' + storePhone;
-        if (!storePhone) storePhone = '5533999999999';
+    const freight = this.orderType === 'delivery' ? this.currentDeliveryFee : 0;
+    const totalFinal = subtotal + freight;
 
-        let itemsFormatted = '';
-        Object.keys(this.products).forEach(id => {
-            const p = this.products[id];
-            if (p.qty > 0) {
-                itemsFormatted += `• *${p.qty}x ${p.name}* — R$ ${(p.price * p.qty).toFixed(2)}\n`;
-            }
-        });
-
-        const typeLabel = this.orderType === 'delivery' ? '🛵 *Entrega*' : '🏪 *Retirada no Balcão*';
-        const totalFinal = subtotal + (this.orderType === 'delivery' ? this.currentDeliveryFee : 0);
-
-        let totalsSection = '';
-        if (this.orderType === 'delivery') {
-            const freteTxt = this.currentDeliveryFee > 0 ? `R$ ${this.currentDeliveryFee.toFixed(2)}` : 'A combinar';
-            totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
-                            `🛵 *FRETE:* ${freteTxt}\n` +
-                            `💰 *TOTAL FINAL:* R$ ${totalFinal.toFixed(2)}`;
-        } else {
-            totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
-                            `🏪 *FRETE:* R$ 0.00 (Retirada)\n` +
-                            `💰 *TOTAL FINAL:* R$ ${subtotal.toFixed(2)}`;
+    // GRAVA O PEDIDO NO SUPABASE EM TEMPO REAL
+    try {
+        if (typeof dbClient !== 'undefined') {
+            await dbClient.from('orders').insert([{
+                client_name: name,
+                order_type: this.orderType,
+                address: address,
+                number: number,
+                reference: reference,
+                items: orderItems,
+                subtotal: subtotal,
+                delivery_fee: freight,
+                total: totalFinal,
+                status: 'pending'
+            }]);
         }
+    } catch (e) {
+        console.error('Erro ao salvar pedido no banco:', e);
+    }
 
-        const msg = `🛍️ *NOVO PEDIDO - ${storeCoords.storeName.toUpperCase()}*\n` +
-                    `═══════════════════════\n\n` +
-                    `📍 *TIPO:* ${typeLabel}\n` +
-                    `👤 *CLIENTE:* ${name}\n` +
-                    `🏠 *ENDEREÇO:* ${address}\n` +
-                    `🔢 *NÚMERO:* ${number || 'S/N'}\n` +
-                    `🎯 *REFERÊNCIA:* ${reference || 'Não informada'}\n\n` +
-                    `📋 *ITENS DO PEDIDO:*\n${itemsFormatted}\n` +
-                    `═══════════════════════\n` +
-                    `${totalsSection}\n\n` +
-                    `✨ _Obrigado pela preferência! Aguardo a confirmação._`;
+    const typeLabel = this.orderType === 'delivery' ? '🛵 *Entrega*' : '🏪 *Retirada no Balcão*';
+    
+    let totalsSection = '';
+    if (this.orderType === 'delivery') {
+        const freteTxt = this.currentDeliveryFee > 0 ? `R$ ${this.currentDeliveryFee.toFixed(2)}` : 'A combinar';
+        totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
+                        `🛵 *FRETE:* ${freteTxt}\n` +
+                        `💰 *TOTAL FINAL:* R$ ${totalFinal.toFixed(2)}`;
+    } else {
+        totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
+                        `🏪 *FRETE:* R$ 0.00 (Retirada)\n` +
+                        `💰 *TOTAL FINAL:* R$ ${subtotal.toFixed(2)}`;
+    }
 
-        window.open(`https://api.whatsapp.com/send?phone=${storePhone}&text=${encodeURIComponent(msg)}`, '_blank');
-    },
+    const msg = `🛍️ *NOVO PEDIDO - ${storeCoords.storeName.toUpperCase()}*\n` +
+                `═══════════════════════\n\n` +
+                `📍 *TIPO:* ${typeLabel}\n` +
+                `👤 *CLIENTE:* ${name}\n` +
+                `🏠 *ENDEREÇO:* ${address}\n` +
+                `🔢 *NÚMERO:* ${number || 'S/N'}\n` +
+                `🎯 *REFERÊNCIA:* ${reference || 'Não informada'}\n\n` +
+                `📋 *ITENS DO PEDIDO:*\n${itemsFormatted}\n` +
+                `═══════════════════════\n` +
+                `${totalsSection}\n\n` +
+                `✨ _Obrigado pela preferência! Aguardo a confirmação._`;
+
+    window.open(`https://api.whatsapp.com/send?phone=${storePhone}&text=${encodeURIComponent(msg)}`, '_blank');
+},
 
     printReceipt() {
         const subtotal = this.getSubtotal();
