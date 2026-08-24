@@ -108,13 +108,55 @@
         </div>
     </div>
 
-    <div class="section-title">Últimas Movimentações <button class="btn btn-sm btn-secondary" onclick="switchTab('sales')" style="width:auto;">Ver todas</button></div>
+    <div class="section-title">Últimas Movimentações <button class="btn btn-sm btn-secondary" onclick="switchTab('orders')" style="width:auto;">Ver todas</button></div>
     <div class="card">
         <div class="mov-list" id="movList"></div>
     </div>
 </section>
 
-<!-- ABA 2: ESTOQUE -->
+<!-- ABA 2: PEDIDOS, VENDAS & CLIENTES (UNIFICADA) -->
+<section id="tab-orders" class="tab-content">
+    <div class="subtabs" id="ordersSubtabs">
+        <button class="active" data-sub="live-orders">🛍️ Pedidos ao Vivo</button>
+        <button data-sub="manual-sales">💰 Vendas Manuais</button>
+        <button data-sub="customers">👥 Clientes</button>
+    </div>
+
+    <!-- Sub-painel 1: Pedidos em Tempo Real do Cardápio -->
+    <div class="sub-panel active" data-panel="live-orders">
+        <div class="section-title">
+            <span>🛍️ Pedidos em Tempo Real</span>
+            <small>Atualização automática</small>
+        </div>
+        <div id="live-orders-container">
+            <div style="color:#94A3B8; text-align:center; padding:30px; font-size:13px;">Carregando pedidos...</div>
+        </div>
+    </div>
+
+    <!-- Sub-painel 2: Lançamento Manual e Histórico -->
+    <div class="sub-panel" data-panel="manual-sales">
+        <div class="section-title">Vendas & Serviços no Balcão</div>
+        <button class="btn btn-large" onclick="openSaleModal()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            + Nova Venda Manual
+        </button>
+        <div style="height:14px"></div>
+        <div id="salesList"></div>
+    </div>
+
+    <!-- Sub-painel 3: Lista de Clientes & CRM -->
+    <div class="sub-panel" data-panel="customers">
+        <div class="section-title">
+            <span>👥 Histórico de Clientes</span>
+            <small id="customersCount">0 clientes</small>
+        </div>
+        <div id="customersList">
+            <div style="color:#94A3B8; text-align:center; padding:30px; font-size:13px;">Carregando histórico de clientes...</div>
+        </div>
+    </div>
+</section>
+
+<!-- ABA 3: ESTOQUE -->
 <section id="tab-stock" class="tab-content">
     <div class="subtabs" id="stockSubtabs">
         <button class="active" data-sub="insumos">📦 Insumos</button>
@@ -165,17 +207,6 @@
     </div>
 </section>
 
-<!-- ABA 3: ENTRADAS -->
-<section id="tab-sales" class="tab-content">
-    <div class="section-title">Vendas & Serviços</div>
-    <button class="btn btn-large" onclick="openSaleModal()">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Nova Entrada
-    </button>
-    <div style="height:14px"></div>
-    <div id="salesList"></div>
-</section>
-
 <!-- ABA 4: GASTOS -->
 <section id="tab-expenses" class="tab-content">
     <div class="subtabs" id="expSubtabs">
@@ -216,17 +247,6 @@
         </div>
 
         <div id="logisticsList"></div>
-    </div>
-</section>
-
-    <!-- TAB: PEDIDOS EM TEMPO REAL -->
-<section id="tab-orders" class="tab-content">
-    <div class="section-title">
-        <span>🛍️ Pedidos em Tempo Real</span>
-        <small>Atualização automática</small>
-    </div>
-    <div id="live-orders-container">
-        <div style="color:#94A3B8; text-align:center; padding:30px; font-size:13px;">Carregando pedidos...</div>
     </div>
 </section>
 
@@ -308,24 +328,20 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 0 0 1 1h3m10-11l2 2m-2-2v10a1 1 0 0 1-1 1h-3m0 0a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1"/></svg>
         Dashboard
     </button>
+    <button data-tab="orders">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M16 11V7a4 4 0 0 0-8 0v4M5 9h14l1 12H4L5 9z"/>
+        </svg>
+        <span>Pedidos</span>
+    </button>
     <button data-tab="stock">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
         Estoque
-    </button>
-    <button data-tab="sales">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-        Entradas
     </button>
     <button data-tab="expenses">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
         Gastos
     </button>
-    <button data-tab="orders" onclick="switchTab('orders')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M16 11V7a4 4 0 0 0-8 0v4M5 9h14l1 12H4L5 9z"/>
-    </svg>
-    <span>Pedidos</span>
-</button>
     <button data-tab="settings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         Config
@@ -346,7 +362,6 @@
 </div>
 
 <!-- SCRIPTS MODULARES -->
-<!-- SUPABASE SDK -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>    
 <script src="js/storage.js"></script>
 <script src="js/calculations.js"></script>
@@ -360,5 +375,6 @@
 <script src="js/app.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/orders.js"></script>
+<script src="js/customers.js"></script>
 </body>
 </html>
