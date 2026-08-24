@@ -1,4 +1,4 @@
-// js/orders.js - Pedidos ao Vivo com Alerta Sonoro e Notificação de Preparo via WhatsApp
+// js/orders.js - Pedidos ao Vivo com Notificação de Preparo e Conclusão via WhatsApp
 
 const OrdersManager = {
     knownOrdersCount: 0,
@@ -83,7 +83,7 @@ const OrdersManager = {
         if (o.status === 'preparing') {
             statusBadge = '👨‍🍳 Em Preparo';
             actionButtons = `
-                <button class="btn btn-sm btn-success" onclick="OrdersManager.updateStatus('${o.id}', 'completed')">
+                <button class="btn btn-sm btn-success" onclick="OrdersManager.updateStatus('${o.id}', 'completed', '${(o.client_name || '').replace(/'/g, "\\'")}', '${o.phone || ''}')">
                     ✅ Concluir Pedido
                 </button>
             `;
@@ -94,8 +94,6 @@ const OrdersManager = {
             statusBadge = '❌ Cancelado';
             actionButtons = '';
         }
-
-        const safePhone = o.phone ? o.phone.replace(/\D/g, '') : '';
 
         return `
             <div class="card" style="margin-bottom:12px; padding:14px; border-left:4px solid ${o.status === 'pending' ? '#F59E0B' : o.status === 'preparing' ? '#3B82F6' : '#10B981'};">
@@ -128,12 +126,24 @@ const OrdersManager = {
                 await dbClient.from('orders').update({ status: newStatus }).eq('id', orderId);
             }
 
+            // Notificação ao colocar em Preparo
             if (newStatus === 'preparing' && phone) {
                 let cleanPhone = phone.replace(/\D/g, '');
                 if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
 
                 const firstName = clientName ? clientName.split(' ')[0] : 'Cliente';
                 const msg = `Olá, ${firstName}! 👨‍🍳\n\nSeu pedido no *Pastel e Batata Imperial* já entrou em preparo com muito carinho! Em breve estará a caminho. 🛵💨`;
+
+                window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank');
+            }
+
+            // Notificação ao Concluir o Pedido
+            if (newStatus === 'completed' && phone) {
+                let cleanPhone = phone.replace(/\D/g, '');
+                if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
+
+                const firstName = clientName ? clientName.split(' ')[0] : 'Cliente';
+                const msg = `Olá, ${firstName}! 👑\n\nSeu pedido no *Pastel e Batata Imperial* foi finalizado e já está pronto / a caminho! 🛵😋\n\nAgradecemos imensamente a preferência e desejamos um excelente apetite!`;
 
                 window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank');
             }
