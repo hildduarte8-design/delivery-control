@@ -46,48 +46,58 @@ const MenuApp = {
     },
 
     async loadProductsFromDatabase() {
-        const container = document.getElementById('products-container');
-        if (!container) return;
+    const container = document.getElementById('products-container');
+    if (!container) return;
 
-        try {
-            if (typeof dbClient === 'undefined') return;
-
-            const { data: items, error } = await dbClient
-                .from('products')
-                .select('*')
-                .eq('is_active', true)
-                .order('display_order', { ascending: true })
-                .order('created_at', { ascending: false });
-
-            if (error || !items || items.length === 0) {
-                container.innerHTML = '<div style="text-align:center; color:#94A3B8; padding:30px;">Nenhum item disponível no momento.</div>';
-                return;
-            }
-
-            this.rawProductsList = items;
-            
-            items.forEach(p => {
-                const discount = Number(p.discount_pct || 0);
-                const originalPrice = Number(p.price);
-                const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
-                const prevQty = this.products[p.id]?.qty || 0;
-
-                this.products[p.id] = { 
-                    name: p.name, 
-                    price: finalPrice, 
-                    isCrossSell: p.is_cross_sell,
-                    category: p.category || 'Geral',
-                    qty: prevQty 
-                };
-            });
-
-            this.renderCategoriesBar();
-            this.renderProductsList();
-
-        } catch (e) {
-            container.innerHTML = '<div style="text-align:center; color:#EF4444; padding:30px;">Erro ao carregar cardápio.</div>';
+    try {
+        if (typeof dbClient === 'undefined') {
+            container.innerHTML = '<div style="text-align:center; color:#EF4444; padding:30px;">⚠️ Erro de conexão: A variável <b>dbClient</b> não foi encontrada no storage.js.</div>';
+            return;
         }
-    },
+
+        const { data: items, error } = await dbClient
+            .from('products')
+            .select('*')
+            .eq('is_active', true)
+            .order('display_order', { ascending: true })
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Erro Supabase:', error);
+            container.innerHTML = `<div style="text-align:center; color:#EF4444; padding:30px;">⚠️ Erro ao consultar produtos: ${error.message}</div>`;
+            return;
+        }
+
+        if (!items || items.length === 0) {
+            container.innerHTML = '<div style="text-align:center; color:#94A3B8; padding:30px;">Nenhum produto cadastrado ou ativo no cardápio.</div>';
+            return;
+        }
+
+        this.rawProductsList = items;
+        
+        items.forEach(p => {
+            const discount = Number(p.discount_pct || 0);
+            const originalPrice = Number(p.price);
+            const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
+            const prevQty = this.products[p.id]?.qty || 0;
+
+            this.products[p.id] = { 
+                name: p.name, 
+                price: finalPrice, 
+                isCrossSell: p.is_cross_sell,
+                category: p.category || 'Geral',
+                qty: prevQty 
+            };
+        });
+
+        this.renderCategoriesBar();
+        this.renderProductsList();
+
+    } catch (e) {
+        console.error('Erro de execução:', e);
+        container.innerHTML = `<div style="text-align:center; color:#EF4444; padding:30px;">⚠️ Falha ao carregar cardápio: ${e.message}</div>`;
+    }
+},
 
     renderCategoriesBar() {
         const categoryBar = document.getElementById('category-bar');
