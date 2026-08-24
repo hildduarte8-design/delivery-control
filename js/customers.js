@@ -14,7 +14,6 @@ const CustomersManager = {
                 .select('*')
                 .order('created_at', { ascending: false });
 
-            // Botão para cadastro avulso de novo cliente no topo
             let topBarHtml = `
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
                     <button class="btn btn-sm btn-success" onclick="CustomersManager.openNewCustomerModal()" style="width:100%; padding:10px; font-size:13px;">
@@ -29,7 +28,6 @@ const CustomersManager = {
                 return;
             }
 
-            // Agrupa histórico por cliente
             const customersMap = {};
 
             orders.forEach(o => {
@@ -42,7 +40,7 @@ const CustomersManager = {
                         phone: o.phone || '',
                         totalSpent: 0,
                         ordersCount: 0,
-                        lastOrderDate: o.created_at,
+                        lastOrderDate: null,
                         itemsFrequency: {}
                     };
                 }
@@ -55,19 +53,22 @@ const CustomersManager = {
                     try { items = JSON.parse(items); } catch(e) { items = []; }
                 }
 
-                if (Array.isArray(items) && items.length > 0) {
+                // CONTABILIZA APENAS SE HOUVER ITENS OU VALOR REAL
+                if ((Array.isArray(items) && items.length > 0) || Number(o.total || 0) > 0) {
                     cust.ordersCount += 1;
                     cust.totalSpent += Number(o.total || 0);
 
-                    items.forEach(item => {
-                        const itemName = item.name || 'Item';
-                        const qty = Number(item.qty || 1);
-                        cust.itemsFrequency[itemName] = (cust.itemsFrequency[itemName] || 0) + qty;
-                    });
-                }
+                    if (Array.isArray(items)) {
+                        items.forEach(item => {
+                            const itemName = item.name || 'Item';
+                            const qty = Number(item.qty || 1);
+                            cust.itemsFrequency[itemName] = (cust.itemsFrequency[itemName] || 0) + qty;
+                        });
+                    }
 
-                if (new Date(o.created_at) > new Date(cust.lastOrderDate)) {
-                    cust.lastOrderDate = o.created_at;
+                    if (!cust.lastOrderDate || new Date(o.created_at) > new Date(cust.lastOrderDate)) {
+                        cust.lastOrderDate = o.created_at;
+                    }
                 }
             });
 
@@ -84,11 +85,10 @@ const CustomersManager = {
     },
 
     renderCustomerCard(c) {
-        const lastDate = new Date(c.lastOrderDate).toLocaleDateString('pt-BR', {
-            day: '2-digit', month: '2-digit', year: '2-digit'
-        });
+        const lastDateText = (c.ordersCount > 0 && c.lastOrderDate)
+            ? new Date(c.lastOrderDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+            : 'Nenhum pedido realizado';
 
-        // Seleciona os 3 pratos mais pedidos pelo cliente
         const sortedItems = Object.entries(c.itemsFrequency)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 3);
@@ -113,7 +113,7 @@ const CustomersManager = {
                 </div>
 
                 <div style="font-size:11px; color:#94A3B8; margin-bottom:8px;">
-                    ⏰ <strong>Último pedido:</strong> ${lastDate}
+                    ⏰ <strong>Último pedido:</strong> ${lastDateText}
                 </div>
 
                 <div style="border-top:1px dashed #334155; padding-top:8px; margin-top:6px; display:flex; justify-content:space-between; align-items:flex-end;">
@@ -169,7 +169,6 @@ const CustomersManager = {
 
         try {
             if (typeof dbClient !== 'undefined') {
-                // Registra uma entrada de cadastro zerada para salvar o cliente no banco
                 const { error } = await dbClient.from('orders').insert([{
                     client_name: name,
                     phone: phone,
