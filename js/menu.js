@@ -378,96 +378,102 @@ const MenuApp = {
         );
     },
 
-    async sendWhatsApp() {
-        const nameEl = document.getElementById('cli-name');
-        const addrEl = document.getElementById('cli-address');
-        const numEl = document.getElementById('cli-number');
-        const refEl = document.getElementById('cli-reference');
+  async sendWhatsApp() {
+    const nameEl = document.getElementById('cli-name');
+    const phoneEl = document.getElementById('cli-phone');
+    const addrEl = document.getElementById('cli-address');
+    const numEl = document.getElementById('cli-number');
+    const refEl = document.getElementById('cli-reference');
 
-        const name = nameEl?.value.trim() || 'Não informado';
-        const address = addrEl?.value.trim() || 'A combinar';
-        const number = numEl?.value.trim() || '';
-        const reference = refEl?.value.trim() || '';
-        const subtotal = this.getSubtotal();
+    const name = nameEl?.value.trim() || 'Não informado';
+    const phone = phoneEl?.value.trim() || '';
+    const address = addrEl?.value.trim() || 'A combinar';
+    const number = numEl?.value.trim() || '';
+    const reference = refEl?.value.trim() || '';
+    const subtotal = this.getSubtotal();
 
-        if (subtotal === 0) return alert('Adicione pelo menos 1 item ao pedido!');
+    if (subtotal === 0) return alert('Adicione pelo menos 1 item ao pedido!');
 
-        if (this.orderType === 'delivery') {
-            if (!address || address === 'A combinar') return alert('Por favor, informe seu endereço ou use o GPS!');
-            if (!number) return alert('Por favor, digite o NÚMERO da sua casa!');
+    if (!phone) return alert('Por favor, informe seu número de WhatsApp com DDD!');
+
+    if (this.orderType === 'delivery') {
+        if (!address || address === 'A combinar') return alert('Por favor, informe seu endereço ou use o GPS!');
+        if (!number) return alert('Por favor, digite o NÚMERO da sua casa!');
+    }
+
+    const storeCoords = this.getStoreCoordinates();
+    let storePhone = storeCoords.phone;
+
+    if (!storePhone) {
+        return alert('Atenção: O WhatsApp da loja ainda não foi configurado no painel.');
+    }
+
+    if (!storePhone.startsWith('55')) storePhone = '55' + storePhone;
+
+    const orderItems = [];
+    let itemsFormatted = '';
+
+    Object.keys(this.products).forEach(id => {
+        const p = this.products[id];
+        if (p.qty > 0) {
+            orderItems.push({ id, name: p.name, qty: p.qty, unit_price: p.price, total: p.price * p.qty });
+            itemsFormatted += `• *${p.qty}x ${p.name}* — R$ ${(p.price * p.qty).toFixed(2)}\n`;
         }
+    });
 
-        const storeCoords = this.getStoreCoordinates();
-        let storePhone = storeCoords.phone;
+    const freight = this.orderType === 'delivery' ? this.currentDeliveryFee : 0;
+    const totalFinal = subtotal + freight;
 
-        if (!storePhone) {
-            return alert('Atenção: O WhatsApp da loja ainda não foi configurado no painel.');
+    // GRAVA O TELEFONE DO CLIENTE NO BANCO DE DADOS
+    try {
+        if (typeof dbClient !== 'undefined') {
+            await dbClient.from('orders').insert([{
+                client_name: name,
+                phone: phone, // <--- SALVA O TELEFONE DO CLIENTE
+                order_type: this.orderType,
+                address: address,
+                number: number,
+                reference: reference,
+                items: orderItems,
+                subtotal: subtotal,
+                delivery_fee: freight,
+                total: totalFinal,
+                status: 'pending'
+            }]);
         }
+    } catch (e) {
+        console.error('Erro ao salvar pedido no banco:', e);
+    }
 
-        if (!storePhone.startsWith('55')) storePhone = '55' + storePhone;
+    const typeLabel = this.orderType === 'delivery' ? '🛵 *Entrega*' : '🏪 *Retirada no Balcão*';
+    
+    let totalsSection = '';
+    if (this.orderType === 'delivery') {
+        const freteTxt = this.currentDeliveryFee > 0 ? `R$ ${this.currentDeliveryFee.toFixed(2)}` : 'A combinar';
+        totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
+                        `🛵 *FRETE:* ${freteTxt}\n` +
+                        `💰 *TOTAL FINAL:* R$ ${totalFinal.toFixed(2)}`;
+    } else {
+        totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
+                        `🏪 *FRETE:* R$ 0.00 (Retirada)\n` +
+                        `💰 *TOTAL FINAL:* R$ ${subtotal.toFixed(2)}`;
+    }
 
-        const orderItems = [];
-        let itemsFormatted = '';
+    const msg = `🛍️ *NOVO PEDIDO - ${storeCoords.storeName.toUpperCase()}*\n` +
+                `═══════════════════════\n\n` +
+                `📍 *TIPO:* ${typeLabel}\n` +
+                `👤 *CLIENTE:* ${name}\n` +
+                `📱 *WHATSAPP:* ${phone}\n` +
+                `🏠 *ENDEREÇO:* ${address}\n` +
+                `🔢 *NÚMERO:* ${number || 'S/N'}\n` +
+                `🎯 *REFERÊNCIA:* ${reference || 'Não informada'}\n\n` +
+                `📋 *ITENS DO PEDIDO:*\n${itemsFormatted}\n` +
+                `═══════════════════════\n` +
+                `${totalsSection}\n\n` +
+                `✨ _Obrigado pela preferência! Aguardo a confirmação._`;
 
-        Object.keys(this.products).forEach(id => {
-            const p = this.products[id];
-            if (p.qty > 0) {
-                orderItems.push({ id, name: p.name, qty: p.qty, unit_price: p.price, total: p.price * p.qty });
-                itemsFormatted += `• *${p.qty}x ${p.name}* — R$ ${(p.price * p.qty).toFixed(2)}\n`;
-            }
-        });
-
-        const freight = this.orderType === 'delivery' ? this.currentDeliveryFee : 0;
-        const totalFinal = subtotal + freight;
-
-        // Gravando no banco
-        try {
-            if (typeof dbClient !== 'undefined') {
-                await dbClient.from('orders').insert([{
-                    client_name: name,
-                    order_type: this.orderType,
-                    address: address,
-                    number: number,
-                    reference: reference,
-                    items: orderItems,
-                    subtotal: subtotal,
-                    delivery_fee: freight,
-                    total: totalFinal,
-                    status: 'pending'
-                }]);
-            }
-        } catch (e) {
-            console.error('Erro ao salvar pedido no banco:', e);
-        }
-
-        const typeLabel = this.orderType === 'delivery' ? '🛵 *Entrega*' : '🏪 *Retirada no Balcão*';
-        
-        let totalsSection = '';
-        if (this.orderType === 'delivery') {
-            const freteTxt = this.currentDeliveryFee > 0 ? `R$ ${this.currentDeliveryFee.toFixed(2)}` : 'A combinar';
-            totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
-                            `🛵 *FRETE:* ${freteTxt}\n` +
-                            `💰 *TOTAL FINAL:* R$ ${totalFinal.toFixed(2)}`;
-        } else {
-            totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
-                            `🏪 *FRETE:* R$ 0.00 (Retirada)\n` +
-                            `💰 *TOTAL FINAL:* R$ ${subtotal.toFixed(2)}`;
-        }
-
-        const msg = `🛍️ *NOVO PEDIDO - ${storeCoords.storeName.toUpperCase()}*\n` +
-                    `═══════════════════════\n\n` +
-                    `📍 *TIPO:* ${typeLabel}\n` +
-                    `👤 *CLIENTE:* ${name}\n` +
-                    `🏠 *ENDEREÇO:* ${address}\n` +
-                    `🔢 *NÚMERO:* ${number || 'S/N'}\n` +
-                    `🎯 *REFERÊNCIA:* ${reference || 'Não informada'}\n\n` +
-                    `📋 *ITENS DO PEDIDO:*\n${itemsFormatted}\n` +
-                    `═══════════════════════\n` +
-                    `${totalsSection}\n\n` +
-                    `✨ _Obrigado pela preferência! Aguardo a confirmação._`;
-
-        window.open(`https://api.whatsapp.com/send?phone=${storePhone}&text=${encodeURIComponent(msg)}`, '_blank');
-    },
+    window.open(`https://api.whatsapp.com/send?phone=${storePhone}&text=${encodeURIComponent(msg)}`, '_blank');
+}
 
     printReceipt() {
         const subtotal = this.getSubtotal();
