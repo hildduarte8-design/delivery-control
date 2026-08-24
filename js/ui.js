@@ -1,3 +1,5 @@
+// js/ui.js - Interface, Modais, Toasts, Navegação e Sub-abas
+
 function switchTab(tabId) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.bottom-nav button').forEach(el => el.classList.remove('active'));
@@ -9,6 +11,7 @@ function switchTab(tabId) {
     if (btn) btn.classList.add('active');
     
     if (tabId === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
+    if (tabId === 'orders' && typeof OrdersManager !== 'undefined') OrdersManager.fetchOrders();
 }
 
 function openModal(title, bodyHtml) {
@@ -29,7 +32,15 @@ function showToast(msg, type = 'success') {
     setTimeout(() => toast.className = 'toast', 3000);
 }
 
-// Configuração do Botão Flutuante (FAB)
+function quickAction(action) {
+    document.getElementById('fabMenu')?.classList.remove('active');
+    if (action === 'sale' && typeof openSaleModal === 'function') openSaleModal();
+    if (action === 'stock' && typeof openStockModal === 'function') openStockModal();
+    if (action === 'logistics' && typeof openLogisticsModal === 'function') openLogisticsModal();
+    if (action === 'fixed' && typeof openFixedExpenseModal === 'function') openFixedExpenseModal();
+}
+
+// Configuração de Eventos Globais de Interface
 document.addEventListener('DOMContentLoaded', () => {
     const fabBtn = document.getElementById('fabBtn');
     const fabMenu = document.getElementById('fabMenu');
@@ -47,10 +58,38 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-function quickAction(action) {
-    document.getElementById('fabMenu')?.classList.remove('active');
-    if (action === 'sale' && typeof openSaleModal === 'function') openSaleModal();
-    if (action === 'stock' && typeof openStockModal === 'function') openStockModal();
-    if (action === 'logistics' && typeof openLogisticsModal === 'function') openLogisticsModal();
-    if (action === 'fixed' && typeof openFixedExpenseModal === 'function') openFixedExpenseModal();
-}
+// --- GERENCIADOR GLOBAL DE SUB-ABAS (SUBTABS) ---
+document.addEventListener('click', (e) => {
+    const subBtn = e.target.closest('.subtabs button');
+    if (!subBtn) return;
+
+    const subtabsContainer = subBtn.closest('.subtabs');
+    const parentSection = subBtn.closest('.tab-content');
+    if (!subtabsContainer || !parentSection) return;
+
+    const targetSub = subBtn.dataset.sub;
+
+    // 1. Troca a cor do botão ativo
+    subtabsContainer.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    subBtn.classList.add('active');
+
+    // 2. Alterna a visibilidade dos painéis internos
+    parentSection.querySelectorAll('.sub-panel').forEach(panel => {
+        if (panel.dataset.panel === targetSub) {
+            panel.classList.add('active');
+        } else {
+            panel.classList.remove('active');
+        }
+    });
+
+    // 3. Executa a busca de dados correspondente à sub-aba aberta
+    if (targetSub === 'live-orders' && typeof OrdersManager !== 'undefined') {
+        OrdersManager.fetchOrders();
+    }
+    if (targetSub === 'manual-sales' && typeof renderSalesList === 'function') {
+        renderSalesList();
+    }
+    if (targetSub === 'customers' && typeof CustomersManager !== 'undefined') {
+        CustomersManager.fetchCustomers();
+    }
+});
