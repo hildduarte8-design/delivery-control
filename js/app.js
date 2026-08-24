@@ -22,6 +22,7 @@ function showWelcome() {
         </p>
         <div style="background:#0F172A; border-radius:12px; padding:14px; margin-bottom:14px; border:1px solid #334155;">
             <div style="font-size:13px; color:#94A3B8; line-height:1.7;">
+                <strong style="color:#FF6B35;">🛍️ Pedidos:</strong> acompanhamento ao vivo<br>
                 <strong style="color:#FF6B35;">📦 Estoque:</strong> insumos + calculadora de custo<br>
                 <strong style="color:#FF6B35;">💰 Entradas:</strong> vendas e serviços com canal<br>
                 <strong style="color:#FF6B35;">📊 Gastos:</strong> contas fixas e logística<br>
@@ -68,14 +69,15 @@ function validatePassword() {
     }
 }
 
-// --- NAVEGAÇÃO POR GESTOS (ACOMPANHAMENTO EM TEMPO REAL, RESISTÊNCIA E SNAP-BACK) ---
+// --- NAVEGAÇÃO POR GESTOS (INCLUINDO A ABA PEDIDOS) ---
 function initGestureNavigation() {
     let startX = 0;
     let startY = 0;
     let currentX = 0;
     let isDragging = false;
 
-    const tabsOrder = ['dashboard', 'stock', 'sales', 'expenses', 'settings'];
+    // Incluído 'orders' no fluxo de telas
+    const tabsOrder = ['dashboard', 'orders', 'stock', 'sales', 'expenses', 'settings'];
     const mainContainer = document.querySelector('main');
 
     if (!mainContainer) return;
@@ -94,7 +96,6 @@ function initGestureNavigation() {
         currentX = startX;
         isDragging = true;
         
-        // Remove animações CSS durante o movimento para o container seguir o dedo instantaneamente
         mainContainer.style.transition = 'none';
     }, { passive: true });
 
@@ -105,7 +106,6 @@ function initGestureNavigation() {
         const deltaX = currentX - startX;
         const deltaY = e.touches[0].clientY - startY;
 
-        // Se o usuário estiver fazendo scroll vertical da página, ignora o swipe lateral
         if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaX) < 15) {
             isDragging = false;
             mainContainer.style.transform = 'translateX(0px)';
@@ -121,13 +121,9 @@ function initGestureNavigation() {
         const isLastTab = currentIndex === tabsOrder.length - 1 && deltaX < 0;
 
         if (isFirstTab || isLastTab) {
-            // Resistência de borracha se tentar arrastar além do início/fim
             mainContainer.style.transform = `translateX(${deltaX / 3}px)`;
         } else {
-            // Deslocamento real acompanhando o dedo
             mainContainer.style.transform = `translateX(${deltaX}px)`;
-            
-            // Leve feedback de opacidade para antecipar a troca de tela
             const progress = Math.min(Math.abs(deltaX) / (window.innerWidth * 0.4), 1);
             mainContainer.style.opacity = `${1 - (progress * 0.2)}`;
         }
@@ -138,28 +134,23 @@ function initGestureNavigation() {
         isDragging = false;
 
         const deltaX = currentX - startX;
-        const threshold = window.innerWidth * 0.30; // Mínimo de 30% da largura da tela para confirmar troca
+        const threshold = window.innerWidth * 0.30;
         const activeNavBtn = document.querySelector('.bottom-nav button.active');
         const currentTab = activeNavBtn ? activeNavBtn.dataset.tab : 'dashboard';
         const currentIndex = tabsOrder.indexOf(currentTab);
 
-        // Devolve a transição CSS para o efeito elástico de encaixe suave
         mainContainer.style.transition = 'transform 0.25s ease-out, opacity 0.25s ease-out';
         mainContainer.style.opacity = '1';
 
         if (Math.abs(deltaX) >= threshold && currentIndex !== -1) {
             if (deltaX < 0 && currentIndex < tabsOrder.length - 1) {
-                // Arrastou para a esquerda (>=30%) -> Avança
                 if (typeof switchTab === 'function') switchTab(tabsOrder[currentIndex + 1]);
             } else if (deltaX > 0 && currentIndex > 0) {
-                // Arrastou para a direita (>=30%) -> Volta
                 if (typeof switchTab === 'function') switchTab(tabsOrder[currentIndex - 1]);
             }
         }
 
-        // Snap-Back: Volta a posição física do container para a origem
         mainContainer.style.transform = 'translateX(0px)';
-
         startX = 0;
         currentX = 0;
     }, { passive: true });
@@ -176,6 +167,11 @@ function init() {
     if (typeof switchTab === 'function') switchTab('dashboard');
     if (typeof renderDashboard === 'function') renderDashboard();
     if (typeof updateNotificationBadge === 'function') updateNotificationBadge();
+    
+    // Inicializa a escuta de pedidos em tempo real
+    if (typeof OrdersManager !== 'undefined' && OrdersManager.init) {
+        OrdersManager.init();
+    }
     
     initGestureNavigation();
     
