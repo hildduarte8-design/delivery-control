@@ -60,65 +60,66 @@ const OrdersManager = {
         }
     },
 
-    renderOrderCard(o) {
-        const dateFormatted = new Date(o.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        
-        let items = o.items;
-        if (typeof items === 'string') {
-            try { items = JSON.parse(items); } catch(e) { items = []; }
-        }
+  renderOrderCard(o) {
+    const dateFormatted = new Date(o.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    
+    let items = o.items;
+    if (typeof items === 'string') {
+        try { items = JSON.parse(items); } catch(e) { items = []; }
+    }
 
-        const itemsHtml = Array.isArray(items) && items.length > 0
-            ? items.map(i => `<li><strong>${i.qty}x</strong> ${i.name} — R$ ${Number(i.total || 0).toFixed(2)}</li>`).join('')
-            : '<li>Nenhum item listado</li>';
+    const itemsHtml = Array.isArray(items) && items.length > 0
+        ? items.map(i => `<li><strong>${i.qty}x</strong> ${i.name} — R$ ${Number(i.total || 0).toFixed(2)}</li>`).join('')
+        : '<li>Nenhum item listado</li>';
 
-        let statusBadge = '🟢 Novo Pedido';
-        let actionButtons = `
-            <button class="btn btn-sm" style="background:#3B82F6; color:#fff;" onclick="OrdersManager.updateStatus('${o.id}', 'preparing', '${(o.client_name || '').replace(/'/g, "\\'")}', '${o.phone || ''}')">
-                👨‍🍳 Preparar
+    let statusBadge = '🟢 Novo Pedido';
+    let actionButtons = `
+        <button class="btn btn-sm" style="background:#3B82F6; color:#fff;" onclick="OrdersManager.updateStatus('${o.id}', 'preparing', '${(o.client_name || '').replace(/'/g, "\\'")}', '${o.phone || ''}')">
+            👨‍🍳 Preparar
+        </button>
+        <button class="btn btn-sm btn-danger" onclick="OrdersManager.updateStatus('${o.id}', 'cancelled')">X</button>
+    `;
+
+    if (o.status === 'preparing') {
+        statusBadge = '👨‍🍳 Em Preparo';
+        actionButtons = `
+            <button class="btn btn-sm btn-success" onclick="OrdersManager.updateStatus('${o.id}', 'completed', '${(o.client_name || '').replace(/'/g, "\\'")}', '${o.phone || ''}')">
+                ✅ Concluir Pedido
             </button>
-            <button class="btn btn-sm btn-danger" onclick="OrdersManager.updateStatus('${o.id}', 'cancelled')">X</button>
         `;
+    } else if (o.status === 'completed') {
+        statusBadge = '✅ Concluído';
+        actionButtons = '';
+    } else if (o.status === 'cancelled') {
+        statusBadge = '❌ Cancelado';
+        actionButtons = '';
+    }
 
-        if (o.status === 'preparing') {
-            statusBadge = '👨‍🍳 Em Preparo';
-            actionButtons = `
-                <button class="btn btn-sm btn-success" onclick="OrdersManager.updateStatus('${o.id}', 'completed', '${(o.client_name || '').replace(/'/g, "\\'")}', '${o.phone || ''}')">
-                    ✅ Concluir Pedido
-                </button>
-            `;
-        } else if (o.status === 'completed') {
-            statusBadge = '✅ Concluído';
-            actionButtons = '';
-        } else if (o.status === 'cancelled') {
-            statusBadge = '❌ Cancelado';
-            actionButtons = '';
-        }
-
-        return `
-            <div class="card" style="margin-bottom:12px; padding:14px; border-left:4px solid ${o.status === 'pending' ? '#F59E0B' : o.status === 'preparing' ? '#3B82F6' : '#10B981'};">
-                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                    <div>
-                        <strong style="color:#F1F5F9; font-size:15px;">👤 ${o.client_name || 'Cliente'}</strong>
-                        ${o.phone ? `<div style="font-size:11px; color:#94A3B8;">📱 ${o.phone}</div>` : ''}
-                        <div style="font-size:11px; color:#94A3B8;">⏰ ${dateFormatted} • ${o.order_type === 'delivery' ? '🛵 Entrega' : '🏪 Retirada'}</div>
-                    </div>
-                    <span class="badge" style="background:#0F172A; border:1px solid #334155;">${statusBadge}</span>
+    return `
+        <div class="card" style="margin-bottom:12px; padding:14px; border-left:4px solid ${o.status === 'pending' ? '#F59E0B' : o.status === 'preparing' ? '#3B82F6' : '#10B981'};">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                <div>
+                    <strong style="color:#F1F5F9; font-size:15px;">👤 ${o.client_name || 'Cliente'}</strong>
+                    ${o.phone ? `<div style="font-size:11px; color:#94A3B8;">📱 ${o.phone}</div>` : ''}
+                    <div style="font-size:11px; color:#94A3B8;">⏰ ${dateFormatted} • ${o.order_type === 'delivery' ? '🛵 Entrega' : '🏪 Retirada'}</div>
+                    <div style="font-size:11px; color:#10B981; margin-top:2px; font-weight:600;">💳 ${o.reference || 'Forma de pagamento não informada'}</div>
                 </div>
+                <span class="badge" style="background:#0F172A; border:1px solid #334155;">${statusBadge}</span>
+            </div>
 
-                <ul style="margin:10px 0; padding-left:18px; font-size:13px; color:#E2E8F0;">
-                    ${itemsHtml}
-                </ul>
+            <ul style="margin:10px 0; padding-left:18px; font-size:13px; color:#E2E8F0;">
+                ${itemsHtml}
+            </ul>
 
-                <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px dashed #334155; padding-top:8px;">
-                    <strong style="color:#FF6B35; font-size:16px;">Total: R$ ${Number(o.total || 0).toFixed(2)}</strong>
-                    <div style="display:flex; gap:6px;">
-                        ${actionButtons}
-                    </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px dashed #334155; padding-top:8px;">
+                <strong style="color:#FF6B35; font-size:16px;">Total: R$ ${Number(o.total || 0).toFixed(2)}</strong>
+                <div style="display:flex; gap:6px;">
+                    ${actionButtons}
                 </div>
             </div>
-        `;
-    },
+        </div>
+    `;
+},
 
     async updateStatus(orderId, newStatus, clientName = '', phone = '') {
         try {
