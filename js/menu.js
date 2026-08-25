@@ -1,4 +1,4 @@
-// js/menu.js - Lógica do Cardápio Digital com Suporte a Formas de Pagamento e Troco
+// js/menu.js - Lógica Completa do Cardápio Digital com Suporte a Pagamentos, Troco, Pix e Impressão de Comprovante
 
 const MenuApp = {
     orderType: 'delivery',
@@ -35,7 +35,8 @@ const MenuApp = {
                     phone: data.phone,
                     storeLat: data.store_lat,
                     storeLon: data.store_lon,
-                    primaryColor: data.primary_color
+                    primaryColor: data.primary_color,
+                    pixKey: data.pix_key || ''
                 };
                 localStorage.setItem('dly_settings', JSON.stringify(settings));
             }
@@ -299,6 +300,17 @@ const MenuApp = {
     openCheckoutModal() {
         if (this.getSubtotal() === 0) return;
         this.renderCrossSellOffers();
+
+        // Carrega a Chave Pix no campo do modal
+        const localSettings = JSON.parse(localStorage.getItem('dly_settings') || '{}');
+        const pixVal = this.storeData.pix_key || localSettings.pixKey || '';
+        const pixInput = document.getElementById('store-pix-key');
+        if (pixInput) pixInput.value = pixVal || 'Consulte a chave no WhatsApp';
+
+        // Dispara a exibição condicional inicial (Dinheiro/Pix)
+        const paymentEl = document.getElementById('cli-payment');
+        if (paymentEl) this.toggleChangeInput(paymentEl.value);
+
         const modal = document.getElementById('checkout-modal');
         if (modal) modal.style.display = 'flex';
     },
@@ -310,8 +322,17 @@ const MenuApp = {
 
     toggleChangeInput(val) {
         const changeGroup = document.getElementById('change-group');
-        if (changeGroup) {
-            changeGroup.style.display = val === 'Dinheiro' ? 'block' : 'none';
+        const pixGroup = document.getElementById('pix-info-group');
+
+        if (changeGroup) changeGroup.style.display = val === 'Dinheiro' ? 'block' : 'none';
+        if (pixGroup) pixGroup.style.display = val === 'Pix' ? 'block' : 'none';
+    },
+
+    copyPixKey() {
+        const keyInput = document.getElementById('store-pix-key');
+        if (keyInput && keyInput.value) {
+            navigator.clipboard.writeText(keyInput.value);
+            alert('⚡ Chave Pix copiada com sucesso!');
         }
     },
 
@@ -472,7 +493,7 @@ const MenuApp = {
         } else {
             totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
                             `🏪 *FRETE:* R$ 0.00 (Retirada)\n` +
-                            `💰 *TOTAL FINAL:* R$ ${totalFinal.toFixed(2)}`;
+                            `💰 *TOTAL FINAL:* R$ ${subtotal.toFixed(2)}`;
         }
 
         const msg = `🛍️ *NOVO PEDIDO - ${storeCoords.storeName.toUpperCase()}*\n` +
