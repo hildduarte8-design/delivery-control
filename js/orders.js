@@ -1,10 +1,11 @@
-// js/orders.js - Pedidos ao Vivo com Cronômetro Inteligente de SLA e Notificações
+// js/orders.js - Gestão Completa de Pedidos ao Vivo com Detalhes e Chat WhatsApp
 
 const OrdersManager = {
     knownOrdersCount: 0,
     timerInterval: null,
+    allOrders: [], // Guarda os pedidos para cálculo de histórico e abertura de detalhes
 
-    // Emite som de campainha de novo pedido usando Web Audio API
+    // Emite som de campainha de novo pedido
     playAlertSound() {
         try {
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -43,8 +44,11 @@ const OrdersManager = {
             if (error || !orders || orders.length === 0) {
                 container.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:30px; font-size:13px;">Nenhum pedido ao vivo no momento.</div>';
                 this.knownOrdersCount = 0;
+                this.allOrders = [];
                 return;
             }
+
+            this.allOrders = orders;
 
             if (this.knownOrdersCount > 0 && orders.length > this.knownOrdersCount) {
                 this.playAlertSound();
@@ -54,7 +58,7 @@ const OrdersManager = {
 
             container.innerHTML = orders.map(o => this.renderOrderCard(o)).join('');
 
-            // Inicia o relógio dinâmico dos contadores
+            // Inicia cronômetro dinâmico
             this.startLiveTimers();
 
         } catch (e) {
@@ -71,75 +75,183 @@ const OrdersManager = {
             try { items = JSON.parse(items); } catch(e) { items = []; }
         }
 
-        const itemsHtml = Array.isArray(items) && items.length > 0
-            ? items.map(i => `<li><strong>${i.qty}x</strong> ${i.name} — R$ ${Number(i.total || 0).toFixed(2)}</li>`).join('')
-            : '<li>Nenhum item listado</li>';
+        const itemsSummary = Array.isArray(items) && items.length > 0
+            ? items.slice(0, 2).map(i => `${i.qty}x ${i.name}`).join(', ') + (items.length > 2 ? '...' : '')
+            : 'Sem itens';
 
-        let statusBadge = '🟢 Novo Pedido';
-        let actionButtons = `
-            <button class="btn btn-sm" style="background:#3B82F6; color:#fff;" onclick="OrdersManager.updateStatus('${o.id}', 'preparing', '${(o.client_name || '').replace(/'/g, "\\'")}', '${o.phone || ''}')">
-                👨‍🍳 Preparar
-            </button>
-            <button class="btn btn-sm btn-danger" onclick="OrdersManager.updateStatus('${o.id}', 'cancelled')">X</button>
-        `;
+        // Histórico de pedidos do cliente
+        const clientOrdersCount = this.getClientOrdersCount(o.phone, o.client_name);
 
-        if (o.status === 'preparing') {
-            statusBadge = '👨‍🍳 Em Preparo';
-            actionButtons = `
-                <button class="btn btn-sm btn-success" onclick="OrdersManager.updateStatus('${o.id}', 'completed', '${(o.client_name || '').replace(/'/g, "\\'")}', '${o.phone || ''}')">
-                    ✅ Concluir Pedido
-                </button>
-            `;
-        } else if (o.status === 'completed') {
-            statusBadge = '✅ Concluído';
-            actionButtons = '';
-        } else if (o.status === 'cancelled') {
-            statusBadge = '❌ Cancelado';
-            actionButtons = '';
-        }
+        let statusBadge = '🟢 Novo';
+        if (o.status === 'preparing') statusBadge = '👨‍🍳 Em Preparo';
+        else if (o.status === 'completed') statusBadge = '✅ Concluído';
+        else if (o.status === 'cancelled') statusBadge = '❌ Cancelado';
 
         const orderDataEscaped = encodeURIComponent(JSON.stringify(o));
 
         return `
-            <div class="card" style="margin-bottom:12px; padding:14px; border-left:4px solid ${o.status === 'pending' ? '#F59E0B' : o.status === 'preparing' ? '#3B82F6' : '#10B981'};">
+            <div class="card" onclick="OrdersManager.openOrderDetails('${o.id}')" style="margin-bottom:12px; padding:14px; border-left:4px solid ${o.status === 'pending' ? '#F59E0B' : o.status === 'preparing' ? '#3B82F6' : o.status === 'completed' ? '#10B981' : '#EF4444'}; cursor:pointer; transition: transform 0.1s;">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                     <div>
-                        <strong style="color:#F1F5F9; font-size:15px;">👤 ${o.client_name || 'Cliente'}</strong>
-                        ${o.phone ? `<div style="font-size:11px; color:#94A3B8;">📱 ${o.phone}</div>` : ''}
-                        <div style="font-size:11px; color:#94A3B8;">⏰ ${dateFormatted} • ${o.order_type === 'delivery' ? '🛵 Entrega' : '🏪 Retirada'}</div>
-                        <div style="font-size:11px; color:#10B981; margin-top:2px; font-weight:600;">💳 ${o.reference || 'Forma de pagamento não informada'}</div>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <strong style="color:#F1F5F9; font-size:15px;">👤 ${o.client_name || 'Cliente'}</strong>
+                            <span style="font-size:10px; background:#1E293B; color:#F59E0B; padding:2px 6px; border-radius:10px; font-weight:bold;">👑 ${clientOrdersCount}º pedido</span>
+                        </div>
+                        <div style="font-size:11px; color:#94A3B8; margin-top:2px;">⏰ ${dateFormatted} • ${o.order_type === 'delivery' ? '🛵 Entrega' : '🏪 Retirada'}</div>
+                        <div style="font-size:11px; color:#10B981; margin-top:2px; font-weight:600;">💳 ${o.reference || 'Pagamento na entrega'}</div>
                     </div>
+
                     <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
                         <span class="badge" style="background:#0F172A; border:1px solid #334155;">${statusBadge}</span>
-                        
-                        <!-- TAG DO CRONÔMETRO DE SLA -->
-                        <span class="order-timer-tag" 
-                              data-created="${o.created_at}" 
-                              data-status="${o.status}"
-                              style="font-size:11px; font-weight:bold; padding:3px 8px; border-radius:6px; background:#1E293B; color:#94A3B8; display:inline-flex; align-items:center; gap:4px;">
+                        <span class="order-timer-tag" data-created="${o.created_at}" data-status="${o.status}" style="font-size:11px; font-weight:bold; padding:3px 8px; border-radius:6px; background:#1E293B; color:#94A3B8;">
                             ⏱️ 00m 00s
                         </span>
                     </div>
                 </div>
 
-                <ul style="margin:10px 0; padding-left:18px; font-size:13px; color:#E2E8F0;">
-                    ${itemsHtml}
-                </ul>
+                <div style="font-size:12px; color:#CBD5E1; margin:10px 0; background:#0F172A; padding:8px 10px; border-radius:6px;">
+                    📝 <strong>Itens:</strong> ${itemsSummary}
+                </div>
 
                 <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px dashed #334155; padding-top:8px;">
                     <strong style="color:#FF6B35; font-size:16px;">Total: R$ ${Number(o.total || 0).toFixed(2)}</strong>
-                    <div style="display:flex; gap:6px;">
-                        <button class="btn btn-sm btn-secondary" onclick="OrdersManager.printOrder('${orderDataEscaped}')" title="Imprimir Comanda">
-                            🖨️ Comanda
-                        </button>
-                        ${actionButtons}
+                    <div style="display:flex; gap:6px;" onclick="event.stopPropagation();">
+                        <button class="btn btn-sm btn-secondary" onclick="OrdersManager.printOrder('${orderDataEscaped}')" title="Imprimir Comanda">🖨️</button>
+                        <button class="btn btn-sm" style="background:#25D366; color:#fff;" onclick="OrdersManager.openWhatsAppChat('${o.phone}', '${o.client_name}')" title="WhatsApp">💬 Chat</button>
                     </div>
                 </div>
             </div>
         `;
     },
 
-    // Atualiza os contadores de tempo na tela a cada 1 segundo
+    // Modal com detalhes do pedido
+    openOrderDetails(orderId) {
+        const o = this.allOrders.find(item => item.id === orderId);
+        if (!o) return;
+
+        const modalTitle = document.getElementById('modalTitle');
+        const modalBody = document.getElementById('modalBody');
+        const modalOverlay = document.getElementById('modalOverlay');
+
+        if (!modalTitle || !modalBody || !modalOverlay) return;
+
+        let items = o.items;
+        if (typeof items === 'string') {
+            try { items = JSON.parse(items); } catch(e) { items = []; }
+        }
+
+        const itemsDetailHtml = Array.isArray(items) && items.length > 0
+            ? items.map(i => `
+                <div style="padding:8px 0; border-bottom:1px solid #1E293B; display:flex; justify-content:space-between; align-items:flex-start;">
+                    <div>
+                        <div style="font-size:13px; font-weight:bold; color:#F1F5F9;">${i.qty}x ${i.name}</div>
+                        ${i.notes ? `<div style="font-size:11px; color:#F59E0B; margin-top:2px;">📌 Obs/Opcionais: ${i.notes}</div>` : ''}
+                        <div style="font-size:11px; color:#64748B;">Unitário: R$ ${Number(i.unit_price || 0).toFixed(2)}</div>
+                    </div>
+                    <div style="font-size:13px; font-weight:bold; color:#FF6B35;">R$ ${Number(i.total || 0).toFixed(2)}</div>
+                </div>
+            `).join('')
+            : '<div style="color:#94A3B8; font-size:12px;">Nenhum item listado.</div>';
+
+        const clientOrdersCount = this.getClientOrdersCount(o.phone, o.client_name);
+        const dateFormatted = new Date(o.created_at).toLocaleString('pt-BR');
+        const orderDataEscaped = encodeURIComponent(JSON.stringify(o));
+
+        modalTitle.textContent = `📋 Detalhes do Pedido`;
+
+        modalBody.innerHTML = `
+            <!-- Cabeçalho do Cliente -->
+            <div style="background:#0F172A; padding:12px; border-radius:8px; margin-bottom:14px; border:1px solid #1E293B;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <strong style="font-size:16px; color:#F1F5F9;">👤 ${o.client_name || 'Cliente'}</strong>
+                    <span style="font-size:11px; background:#1E293B; color:#F59E0B; padding:3px 8px; border-radius:12px; font-weight:bold;">
+                        👑 ${clientOrdersCount}º Pedido na Loja
+                    </span>
+                </div>
+                <div style="font-size:12px; color:#94A3B8; margin-top:4px;">📱 ${o.phone || 'Telefone não informado'}</div>
+                <div style="font-size:11px; color:#64748B; margin-top:2px;">⏰ Recebido em: ${dateFormatted}</div>
+            </div>
+
+            <!-- Dados de Entrega / Retirada -->
+            <div style="margin-bottom:14px; font-size:12px; color:#CBD5E1;">
+                <div style="font-weight:bold; color:#3B82F6; margin-bottom:4px;">📍 TIPO: ${o.order_type === 'delivery' ? '🛵 ENTREGA' : '🏪 RETIRADA NO BALCÃO'}</div>
+                ${o.order_type === 'delivery' ? `
+                    <div><strong>Endereço:</strong> ${o.address || 'A combinar'}, Nº ${o.number || 'S/N'}</div>
+                    ${o.reference ? `<div><strong>Referência / PGTO:</strong> ${o.reference}</div>` : ''}
+                ` : ''}
+                <div style="margin-top:4px;"><strong>Forma de Pagamento:</strong> <span style="color:#10B981; font-weight:bold;">${o.reference || 'Não informada'}</span></div>
+            </div>
+
+            <!-- Lista de Itens -->
+            <div style="margin-bottom:14px;">
+                <div style="font-size:12px; font-weight:bold; color:#94A3B8; text-transform:uppercase; margin-bottom:6px;">📋 Itens Solicitados</div>
+                <div style="background:#0F172A; padding:10px; border-radius:8px; border:1px solid #1E293B;">
+                    ${itemsDetailHtml}
+                </div>
+            </div>
+
+            <!-- Resumo Financeiro Detalhado -->
+            <div style="background:#1E293B; padding:12px; border-radius:8px; margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; font-size:12px; color:#94A3B8; margin-bottom:4px;">
+                    <span>Subtotal dos Itens:</span>
+                    <span>R$ ${Number(o.subtotal || 0).toFixed(2)}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:12px; color:#94A3B8; margin-bottom:6px;">
+                    <span>Taxa de Entrega (Frete):</span>
+                    <span>R$ ${Number(o.delivery_fee || 0).toFixed(2)}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:15px; font-weight:800; color:#10B981; border-top:1px dashed #334155; padding-top:6px;">
+                    <span>TOTAL DO PEDIDO:</span>
+                    <span>R$ ${Number(o.total || 0).toFixed(2)}</span>
+                </div>
+            </div>
+
+            <!-- Ações de Status -->
+            <div style="font-size:12px; font-weight:bold; color:#94A3B8; margin-bottom:8px;">⚡ Atualizar Status do Pedido:</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px;">
+                <button class="btn btn-sm" style="background:#3B82F6; color:#fff; padding:10px;" onclick="OrdersManager.updateStatus('${o.id}', 'preparing', '${(o.client_name || '').replace(/'/g, "\\'")}', '${o.phone || ''}'); closeModal();">
+                    👨‍🍳 Colocar em Preparo
+                </button>
+                <button class="btn btn-sm btn-success" style="padding:10px;" onclick="OrdersManager.updateStatus('${o.id}', 'completed', '${(o.client_name || '').replace(/'/g, "\\'")}', '${o.phone || ''}'); closeModal();">
+                    ✅ Concluir Pedido
+                </button>
+            </div>
+
+            <!-- Ações Rápidas -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <button class="btn btn-sm" style="background:#25D366; color:#fff; padding:10px;" onclick="OrdersManager.openWhatsAppChat('${o.phone}', '${o.client_name}')">
+                    💬 Conversar no Whats
+                </button>
+                <button class="btn btn-sm btn-secondary" style="padding:10px;" onclick="OrdersManager.printOrder('${orderDataEscaped}')">
+                    🖨️ Imprimir Comanda
+                </button>
+            </div>
+        `;
+
+        modalOverlay.style.display = 'flex';
+    },
+
+    getClientOrdersCount(phone, clientName) {
+        if (!this.allOrders || this.allOrders.length === 0) return 1;
+        const cleanPhone = phone ? phone.replace(/\D/g, '') : '';
+
+        return this.allOrders.filter(ord => {
+            const ordPhone = ord.phone ? ord.phone.replace(/\D/g, '') : '';
+            return (cleanPhone && ordPhone === cleanPhone) || (clientName && ord.client_name === clientName);
+        }).length;
+    },
+
+    openWhatsAppChat(phone, clientName) {
+        if (!phone) return alert('Cliente sem telefone cadastrado.');
+        let cleanPhone = phone.replace(/\D/g, '');
+        if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
+
+        const firstName = clientName ? clientName.split(' ')[0] : 'Cliente';
+        const msg = `Olá, ${firstName}! Tudo bem? Falamos do *Pastel e Batata Imperial* a respeito do seu pedido.`;
+
+        window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank');
+    },
+
     startLiveTimers() {
         if (this.timerInterval) clearInterval(this.timerInterval);
 
@@ -151,7 +263,6 @@ const OrdersManager = {
                 const createdAt = new Date(tag.getAttribute('data-created'));
                 const status = tag.getAttribute('data-status');
 
-                // Se o pedido já foi concluído ou cancelado, congela a contagem
                 if (status === 'completed' || status === 'cancelled') {
                     tag.innerHTML = status === 'completed' ? '🏁 Concluído' : '❌ Cancelado';
                     tag.style.background = '#1E293B';
@@ -166,16 +277,16 @@ const OrdersManager = {
                 const minsFormatted = String(totalMins).padStart(2, '0');
                 const secsFormatted = String(secs).padStart(2, '0');
 
-                let bgColor = 'rgba(16, 185, 129, 0.2)'; // Verde
+                let bgColor = 'rgba(16, 185, 129, 0.2)';
                 let textColor = '#10B981';
                 let icon = '⏱️';
 
                 if (totalMins >= 15 && totalMins < 30) {
-                    bgColor = 'rgba(245, 158, 11, 0.2)'; // Amarelo
+                    bgColor = 'rgba(245, 158, 11, 0.2)';
                     textColor = '#F59E0B';
                     icon = '⚠️';
                 } else if (totalMins >= 30) {
-                    bgColor = 'rgba(239, 68, 68, 0.2)'; // Vermelho
+                    bgColor = 'rgba(239, 68, 68, 0.2)';
                     textColor = '#EF4444';
                     icon = '🚨';
                 }
@@ -214,15 +325,7 @@ const OrdersManager = {
                     <title>Comanda - ${o.client_name || 'Cliente'}</title>
                     <style>
                         @page { margin: 0; }
-                        body {
-                            font-family: 'Courier New', Courier, monospace;
-                            width: 100%;
-                            max-width: 300px;
-                            margin: 0 auto;
-                            padding: 10px;
-                            color: #000;
-                            background: #fff;
-                        }
+                        body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: 300px; margin: 0 auto; padding: 10px; color: #000; background: #fff; }
                         .text-center { text-align: center; }
                         .line { border-bottom: 1px dashed #000; margin: 8px 0; }
                         .title { font-size: 16px; font-weight: bold; }
@@ -239,9 +342,7 @@ const OrdersManager = {
                     <div class="info"><strong>TIPO:</strong> ${o.order_type === 'delivery' ? '🛵 ENTREGA' : '🏪 RETIRADA'}</div>
                     <div class="info"><strong>CLIENTE:</strong> ${o.client_name || 'Não informado'}</div>
                     <div class="info"><strong>TEL:</strong> ${o.phone || 'S/N'}</div>
-                    ${o.order_type === 'delivery' ? `
-                        <div class="info"><strong>ENDEREÇO:</strong> ${o.address || ''}, Nº ${o.number || 'S/N'}</div>
-                    ` : ''}
+                    ${o.order_type === 'delivery' ? `<div class="info"><strong>ENDEREÇO:</strong> ${o.address || ''}, Nº ${o.number || 'S/N'}</div>` : ''}
                     <div class="info"><strong>PAGAMENTO:</strong> ${o.reference || 'Não informado'}</div>
 
                     <div class="line"></div>
@@ -257,10 +358,7 @@ const OrdersManager = {
                     <div class="text-center info">Obrigado pela preferência!</div>
 
                     <script>
-                        window.onload = function() {
-                            window.print();
-                            setTimeout(function() { window.close(); }, 500);
-                        };
+                        window.onload = function() { window.print(); setTimeout(function() { window.close(); }, 500); };
                     <\/script>
                 </body>
                 </html>
