@@ -1,4 +1,4 @@
-// js/menu.js - Lógica do Cardápio Digital
+// js/menu.js - Lógica do Cardápio Digital com Suporte a Formas de Pagamento e Troco
 
 const MenuApp = {
     orderType: 'delivery',
@@ -207,7 +207,7 @@ const MenuApp = {
     getStoreCoordinates() {
         const localSettings = JSON.parse(localStorage.getItem('dly_settings') || '{}');
         const phoneVal = this.storeData.phone || localSettings.phone || '';
-        const nameVal = this.storeData.store_name || localSettings.storeName || 'Nosso Delivery';
+        const nameVal = this.storeData.store_name || localSettings.storeName || 'Pastel e Batata Imperial';
 
         return {
             lat: this.storeData.store_lat || localSettings.storeLat || -17.8575,
@@ -308,6 +308,13 @@ const MenuApp = {
         if (modal) modal.style.display = 'none';
     },
 
+    toggleChangeInput(val) {
+        const changeGroup = document.getElementById('change-group');
+        if (changeGroup) {
+            changeGroup.style.display = val === 'Dinheiro' ? 'block' : 'none';
+        }
+    },
+
     setOrderType(type) {
         this.orderType = type;
         const buttons = document.querySelectorAll('#orderTypeToggle button');
@@ -384,16 +391,19 @@ const MenuApp = {
         const addrEl = document.getElementById('cli-address');
         const numEl = document.getElementById('cli-number');
         const refEl = document.getElementById('cli-reference');
+        const paymentEl = document.getElementById('cli-payment');
+        const changeEl = document.getElementById('cli-change');
 
         const name = nameEl?.value.trim() || 'Não informado';
         const phone = phoneEl?.value.trim() || '';
         const address = addrEl?.value.trim() || 'A combinar';
         const number = numEl?.value.trim() || '';
         const reference = refEl?.value.trim() || '';
+        const payment = paymentEl?.value || 'Pix';
+        const changeVal = changeEl?.value.trim() || '';
         const subtotal = this.getSubtotal();
 
         if (subtotal === 0) return alert('Adicione pelo menos 1 item ao pedido!');
-
         if (!phone) return alert('Por favor, informe seu número de WhatsApp com DDD!');
 
         if (this.orderType === 'delivery') {
@@ -424,6 +434,13 @@ const MenuApp = {
         const freight = this.orderType === 'delivery' ? this.currentDeliveryFee : 0;
         const totalFinal = subtotal + freight;
 
+        let paymentFormatted = payment;
+        if (payment === 'Dinheiro' && changeVal) {
+            paymentFormatted += ` (Troco para: ${changeVal})`;
+        }
+
+        const fullReference = reference ? `${reference} | PGTO: ${paymentFormatted}` : `PGTO: ${paymentFormatted}`;
+
         try {
             if (typeof dbClient !== 'undefined') {
                 await dbClient.from('orders').insert([{
@@ -432,7 +449,7 @@ const MenuApp = {
                     order_type: this.orderType,
                     address: address,
                     number: number,
-                    reference: reference,
+                    reference: fullReference,
                     items: orderItems,
                     subtotal: subtotal,
                     delivery_fee: freight,
@@ -455,7 +472,7 @@ const MenuApp = {
         } else {
             totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
                             `🏪 *FRETE:* R$ 0.00 (Retirada)\n` +
-                            `💰 *TOTAL FINAL:* R$ ${subtotal.toFixed(2)}`;
+                            `💰 *TOTAL FINAL:* R$ ${totalFinal.toFixed(2)}`;
         }
 
         const msg = `🛍️ *NOVO PEDIDO - ${storeCoords.storeName.toUpperCase()}*\n` +
@@ -463,6 +480,7 @@ const MenuApp = {
                     `📍 *TIPO:* ${typeLabel}\n` +
                     `👤 *CLIENTE:* ${name}\n` +
                     `📱 *WHATSAPP:* ${phone}\n` +
+                    `💳 *PAGAMENTO:* ${paymentFormatted}\n` +
                     `🏠 *ENDEREÇO:* ${address}\n` +
                     `🔢 *NÚMERO:* ${number || 'S/N'}\n` +
                     `🎯 *REFERÊNCIA:* ${reference || 'Não informada'}\n\n` +
