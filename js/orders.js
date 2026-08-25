@@ -1,7 +1,8 @@
-// js/orders.js - Pedidos ao Vivo com Notificação WhatsApp e Impressão de Comanda
+// js/orders.js - Pedidos ao Vivo com Cronômetro Inteligente de SLA e Notificações
 
 const OrdersManager = {
     knownOrdersCount: 0,
+    timerInterval: null,
 
     // Emite som de campainha de novo pedido usando Web Audio API
     playAlertSound() {
@@ -11,8 +12,8 @@ const OrdersManager = {
             const gain = ctx.createGain();
 
             osc.type = 'sine';
-            osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-            osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15); // A5
+            osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+            osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15);
 
             gain.gain.setValueAtTime(0.3, ctx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
@@ -45,7 +46,6 @@ const OrdersManager = {
                 return;
             }
 
-            // Toca som se entrou um pedido novo
             if (this.knownOrdersCount > 0 && orders.length > this.knownOrdersCount) {
                 this.playAlertSound();
                 if (typeof showToast === 'function') showToast('🔔 NOVO PEDIDO RECEBIDO!', 'success');
@@ -53,6 +53,9 @@ const OrdersManager = {
             this.knownOrdersCount = orders.length;
 
             container.innerHTML = orders.map(o => this.renderOrderCard(o)).join('');
+
+            // Inicia o relógio dinâmico dos contadores
+            this.startLiveTimers();
 
         } catch (e) {
             console.error('Erro ao carregar pedidos:', e);
@@ -106,7 +109,17 @@ const OrdersManager = {
                         <div style="font-size:11px; color:#94A3B8;">⏰ ${dateFormatted} • ${o.order_type === 'delivery' ? '🛵 Entrega' : '🏪 Retirada'}</div>
                         <div style="font-size:11px; color:#10B981; margin-top:2px; font-weight:600;">💳 ${o.reference || 'Forma de pagamento não informada'}</div>
                     </div>
-                    <span class="badge" style="background:#0F172A; border:1px solid #334155;">${statusBadge}</span>
+                    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+                        <span class="badge" style="background:#0F172A; border:1px solid #334155;">${statusBadge}</span>
+                        
+                        <!-- TAG DO CRONÔMETRO DE SLA -->
+                        <span class="order-timer-tag" 
+                              data-created="${o.created_at}" 
+                              data-status="${o.status}"
+                              style="font-size:11px; font-weight:bold; padding:3px 8px; border-radius:6px; background:#1E293B; color:#94A3B8; display:inline-flex; align-items:center; gap:4px;">
+                            ⏱️ 00m 00s
+                        </span>
+                    </div>
                 </div>
 
                 <ul style="margin:10px 0; padding-left:18px; font-size:13px; color:#E2E8F0;">
@@ -124,6 +137,57 @@ const OrdersManager = {
                 </div>
             </div>
         `;
+    },
+
+    // Atualiza os contadores de tempo na tela a cada 1 segundo
+    startLiveTimers() {
+        if (this.timerInterval) clearInterval(this.timerInterval);
+
+        const updateFn = () => {
+            const timerTags = document.querySelectorAll('.order-timer-tag');
+            const now = new Date();
+
+            timerTags.forEach(tag => {
+                const createdAt = new Date(tag.getAttribute('data-created'));
+                const status = tag.getAttribute('data-status');
+
+                // Se o pedido já foi concluído ou cancelado, congela a contagem
+                if (status === 'completed' || status === 'cancelled') {
+                    tag.innerHTML = status === 'completed' ? '🏁 Concluído' : '❌ Cancelado';
+                    tag.style.background = '#1E293B';
+                    tag.style.color = '#64748B';
+                    return;
+                }
+
+                const diffMs = Math.max(0, now - createdAt);
+                const totalMins = Math.floor(diffMs / 60000);
+                const secs = Math.floor((diffMs % 60000) / 1000);
+
+                const minsFormatted = String(totalMins).padStart(2, '0');
+                const secsFormatted = String(secs).padStart(2, '0');
+
+                let bgColor = 'rgba(16, 185, 129, 0.2)'; // Verde
+                let textColor = '#10B981';
+                let icon = '⏱️';
+
+                if (totalMins >= 15 && totalMins < 30) {
+                    bgColor = 'rgba(245, 158, 11, 0.2)'; // Amarelo
+                    textColor = '#F59E0B';
+                    icon = '⚠️';
+                } else if (totalMins >= 30) {
+                    bgColor = 'rgba(239, 68, 68, 0.2)'; // Vermelho
+                    textColor = '#EF4444';
+                    icon = '🚨';
+                }
+
+                tag.style.background = bgColor;
+                tag.style.color = textColor;
+                tag.innerHTML = `${icon} ${minsFormatted}m ${secsFormatted}s`;
+            });
+        };
+
+        updateFn();
+        this.timerInterval = setInterval(updateFn, 1000);
     },
 
     printOrder(orderDataEscaped) {
@@ -214,7 +278,6 @@ const OrdersManager = {
                 await dbClient.from('orders').update({ status: newStatus }).eq('id', orderId);
             }
 
-            // Notificação ao colocar em Preparo
             if (newStatus === 'preparing' && phone) {
                 let cleanPhone = phone.replace(/\D/g, '');
                 if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
@@ -225,7 +288,6 @@ const OrdersManager = {
                 window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank');
             }
 
-            // Notificação ao Concluir o Pedido
             if (newStatus === 'completed' && phone) {
                 let cleanPhone = phone.replace(/\D/g, '');
                 if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
@@ -248,7 +310,6 @@ const OrdersManager = {
     }
 };
 
-// Polling automático a cada 10 segundos para verificar novos pedidos
 setInterval(() => {
     const ordersTab = document.getElementById('tab-orders');
     if (ordersTab && ordersTab.classList.contains('active')) {
