@@ -150,6 +150,16 @@
     </select>
 </div>
 
+        <!-- CAMPO PIX (EXIBIDO SE A OPÇÃO 'PIX' FOR SELECIONADA) -->
+<div id="pix-info-group" style="display: none; margin-bottom: 12px; background: #0F172A; padding: 12px; border-radius: 8px; border: 1px solid #10B981;">
+    <div style="font-size: 11px; color: #10B981; font-weight: bold; margin-bottom: 6px;">⚡ Chave Pix da Loja:</div>
+    <div style="display: flex; gap: 8px; align-items: center;">
+        <input type="text" id="store-pix-key" value="Carregando..." readonly style="padding: 8px; font-size: 12px; font-weight: bold; background: #1E293B; color: #F1F5F9; border: 1px solid #334155; border-radius: 6px; flex: 1;">
+        <button type="button" class="btn btn-sm btn-success" onclick="MenuApp.copyPixKey()" style="font-size: 11px; padding: 8px 12px;">📋 Copiar</button>
+    </div>
+    <small style="font-size: 10px; color: #94A3B8; margin-top: 6px; display: block;">Copie a chave, faça a transferência e envie o comprovante ao finalizar o pedido pelo WhatsApp!</small>
+</div>
+
 <!-- CAMPO DE TROCO (APARECE APENAS PARA DINHEIRO) -->
 <div id="change-group" class="form-group" style="display: none; margin-bottom: 10px;">
     <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Precisa de troco para quanto?</label>
