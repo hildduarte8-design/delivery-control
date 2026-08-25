@@ -108,7 +108,13 @@
         </div>
     </div>
 
-    <div class="section-title">Últimas Movimentações <button class="btn btn-sm btn-secondary" onclick="switchTab('orders')" style="width:auto;">Ver todas</button></div>
+    <!-- PAINEL DE ANALYTICS & RANKING DE VENDAS -->
+    <div class="section-title" style="margin-top:24px;">📊 Desempenho & Analytics</div>
+    <div id="analytics-container">
+        <div style="text-align:center; color:#94A3B8; padding:20px; font-size:13px;">Carregando estatísticas...</div>
+    </div>
+
+    <div class="section-title" style="margin-top:24px;">Últimas Movimentações <button class="btn btn-sm btn-secondary" onclick="switchTab('orders')" style="width:auto;">Ver todas</button></div>
     <div class="card">
         <div class="mov-list" id="movList"></div>
     </div>
@@ -377,5 +383,15 @@
 <script src="js/orders.js"></script>
 <script src="js/customers.js"></script>
 <script src="js/analytics.js"></script>
+
+<script>
+    // Executa a renderização do Analytics sempre que o Dashboard abre
+    document.addEventListener('DOMContentLoaded', () => {
+        if (typeof AnalyticsManager !== 'undefined') {
+            AnalyticsManager.render();
+        }
+    });
+</script>
+
 </body>
 </html>
