@@ -1,7 +1,8 @@
-// js/analytics.js - Módulo de Desempenho, Ranking e Controle de Pratos Vendidos
+// js/analytics.js - Módulo de Desempenho, Faturamento por Pagamento, Ranking e Exportação CSV
 
 const AnalyticsManager = {
     currentPeriod: 'all', // 'today', '7days', 'month', 'all'
+    lastFilteredOrders: [],
 
     async render() {
         const container = document.getElementById('analytics-container');
@@ -15,7 +16,7 @@ const AnalyticsManager = {
                 return;
             }
 
-            // Busca pedidos concluídos
+            // Busca pedidos do banco
             const { data: orders, error } = await dbClient
                 .from('orders')
                 .select('*')
@@ -31,40 +32,65 @@ const AnalyticsManager = {
 
             // Filtra por período selecionado
             const filteredOrders = this.filterOrdersByPeriod(completedOrders, this.currentPeriod);
+            this.lastFilteredOrders = filteredOrders;
 
             // Processa as estatísticas
             const stats = this.processStats(filteredOrders);
 
             // Renderiza o painel completo
             container.innerHTML = `
-                <!-- Filtros de Período -->
-                <div style="display:flex; gap:8px; overflow-x:auto; margin-bottom:16px; padding-bottom:4px;">
-                    <button class="btn btn-sm ${this.currentPeriod === 'today' ? '' : 'btn-secondary'}" onclick="AnalyticsManager.setPeriod('today')" style="font-size:12px; padding:6px 12px; white-space:nowrap;">📅 Hoje</button>
-                    <button class="btn btn-sm ${this.currentPeriod === '7days' ? '' : 'btn-secondary'}" onclick="AnalyticsManager.setPeriod('7days')" style="font-size:12px; padding:6px 12px; white-space:nowrap;">🗓️ Últimos 7 dias</button>
-                    <button class="btn btn-sm ${this.currentPeriod === 'month' ? '' : 'btn-secondary'}" onclick="AnalyticsManager.setPeriod('month')" style="font-size:12px; padding:6px 12px; white-space:nowrap;">📆 Este Mês</button>
-                    <button class="btn btn-sm ${this.currentPeriod === 'all' ? '' : 'btn-secondary'}" onclick="AnalyticsManager.setPeriod('all')" style="font-size:12px; padding:6px 12px; white-space:nowrap;">🌐 Geral (Tudo)</button>
+                <!-- Filtros de Período e Exportação -->
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; overflow-x:auto; margin-bottom:16px; padding-bottom:4px;">
+                    <div style="display:flex; gap:6px;">
+                        <button class="btn btn-sm ${this.currentPeriod === 'today' ? '' : 'btn-secondary'}" onclick="AnalyticsManager.setPeriod('today')" style="font-size:11px; padding:6px 10px; white-space:nowrap;">📅 Hoje</button>
+                        <button class="btn btn-sm ${this.currentPeriod === '7days' ? '' : 'btn-secondary'}" onclick="AnalyticsManager.setPeriod('7days')" style="font-size:11px; padding:6px 10px; white-space:nowrap;">🗓️ 7 Dias</button>
+                        <button class="btn btn-sm ${this.currentPeriod === 'month' ? '' : 'btn-secondary'}" onclick="AnalyticsManager.setPeriod('month')" style="font-size:11px; padding:6px 10px; white-space:nowrap;">📆 Este Mês</button>
+                        <button class="btn btn-sm ${this.currentPeriod === 'all' ? '' : 'btn-secondary'}" onclick="AnalyticsManager.setPeriod('all')" style="font-size:11px; padding:6px 10px; white-space:nowrap;">🌐 Tudo</button>
+                    </div>
+                    <button class="btn btn-sm btn-success" onclick="AnalyticsManager.exportToCSV()" style="font-size:11px; padding:6px 12px; white-space:nowrap;">
+                        📊 Baixar Excel/CSV
+                    </button>
                 </div>
 
                 <!-- Cards de Resumo Rápido -->
-                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:10px; margin-bottom:18px;">
-                    <div class="card" style="padding:12px; text-align:center; border-top:3px solid #10B981;">
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:10px; margin-bottom:16px;">
+                    <div class="card" style="padding:12px; text-align:center; border-top:3px solid #10B981; margin:0;">
                         <span style="font-size:11px; color:#94A3B8;">Faturamento</span>
-                        <strong style="display:block; font-size:18px; color:#10B981; margin-top:2px;">R$ ${stats.totalRevenue.toFixed(2)}</strong>
+                        <strong style="display:block; font-size:17px; color:#10B981; margin-top:2px;">R$ ${stats.totalRevenue.toFixed(2)}</strong>
                     </div>
 
-                    <div class="card" style="padding:12px; text-align:center; border-top:3px solid #3B82F6;">
+                    <div class="card" style="padding:12px; text-align:center; border-top:3px solid #3B82F6; margin:0;">
                         <span style="font-size:11px; color:#94A3B8;">Total Pedidos</span>
-                        <strong style="display:block; font-size:18px; color:#3B82F6; margin-top:2px;">${stats.totalOrders}</strong>
+                        <strong style="display:block; font-size:17px; color:#3B82F6; margin-top:2px;">${stats.totalOrders}</strong>
                     </div>
 
-                    <div class="card" style="padding:12px; text-align:center; border-top:3px solid #F59E0B;">
+                    <div class="card" style="padding:12px; text-align:center; border-top:3px solid #F59E0B; margin:0;">
                         <span style="font-size:11px; color:#94A3B8;">Ticket Médio</span>
-                        <strong style="display:block; font-size:18px; color:#F59E0B; margin-top:2px;">R$ ${stats.ticketMedio.toFixed(2)}</strong>
+                        <strong style="display:block; font-size:17px; color:#F59E0B; margin-top:2px;">R$ ${stats.ticketMedio.toFixed(2)}</strong>
                     </div>
 
-                    <div class="card" style="padding:12px; text-align:center; border-top:3px solid #FF6B35;">
+                    <div class="card" style="padding:12px; text-align:center; border-top:3px solid #FF6B35; margin:0;">
                         <span style="font-size:11px; color:#94A3B8;">Itens Vendidos</span>
-                        <strong style="display:block; font-size:18px; color:#FF6B35; margin-top:2px;">${stats.totalItemsSold} un</strong>
+                        <strong style="display:block; font-size:17px; color:#FF6B35; margin-top:2px;">${stats.totalItemsSold} un</strong>
+                    </div>
+                </div>
+
+                <!-- Resumo por Forma de Pagamento -->
+                <div class="card" style="padding:14px; margin-bottom:16px;">
+                    <div style="font-size:13px; font-weight:bold; color:#F1F5F9; margin-bottom:10px;">💳 Faturamento por Forma de Pagamento</div>
+                    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; text-align:center;">
+                        <div style="background:#0F172A; padding:10px 6px; border-radius:8px; border:1px solid #1E293B;">
+                            <span style="font-size:10px; color:#94A3B8; display:block;">⚡ Pix</span>
+                            <strong style="font-size:14px; color:#10B981;">R$ ${stats.paymentBreakdown.Pix.toFixed(2)}</strong>
+                        </div>
+                        <div style="background:#0F172A; padding:10px 6px; border-radius:8px; border:1px solid #1E293B;">
+                            <span style="font-size:10px; color:#94A3B8; display:block;">💳 Cartão</span>
+                            <strong style="font-size:14px; color:#3B82F6;">R$ ${stats.paymentBreakdown.Cartao.toFixed(2)}</strong>
+                        </div>
+                        <div style="background:#0F172A; padding:10px 6px; border-radius:8px; border:1px solid #1E293B;">
+                            <span style="font-size:10px; color:#94A3B8; display:block;">💵 Dinheiro</span>
+                            <strong style="font-size:14px; color:#F59E0B;">R$ ${stats.paymentBreakdown.Dinheiro.toFixed(2)}</strong>
+                        </div>
                     </div>
                 </div>
 
@@ -72,7 +98,7 @@ const AnalyticsManager = {
                 <div class="card" style="padding:16px; margin-bottom:16px;">
                     <h3 style="font-size:15px; color:#F1F5F9; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;">
                         <span>🏆 Ranking dos Pratos Mais Vendidos</span>
-                        <span style="font-size:11px; color:#94A3B8; font-weight:normal;">${stats.productsList.length} pratos cadastrados</span>
+                        <span style="font-size:11px; color:#94A3B8; font-weight:normal;">${stats.productsList.length} pratos vendidos</span>
                     </h3>
 
                     ${stats.productsList.length === 0 ? `
@@ -142,9 +168,23 @@ const AnalyticsManager = {
         let totalRevenue = 0;
         let totalItemsSold = 0;
         const productsMap = {};
+        const paymentBreakdown = { Pix: 0, Cartao: 0, Dinheiro: 0, Outros: 0 };
 
         orders.forEach(o => {
-            totalRevenue += Number(o.total || 0);
+            const total = Number(o.total || 0);
+            totalRevenue += total;
+
+            // Classificação automática por forma de pagamento
+            const ref = (o.reference || '').toLowerCase();
+            if (ref.includes('pix')) {
+                paymentBreakdown.Pix += total;
+            } else if (ref.includes('cart') || ref.includes('débito') || ref.includes('crédito')) {
+                paymentBreakdown.Cartao += total;
+            } else if (ref.includes('dinheiro') || ref.includes('espécie')) {
+                paymentBreakdown.Dinheiro += total;
+            } else {
+                paymentBreakdown.Outros += total;
+            }
 
             let items = o.items;
             if (typeof items === 'string') {
@@ -180,7 +220,38 @@ const AnalyticsManager = {
             ticketMedio,
             totalItemsSold,
             productsList,
-            maxQty
+            maxQty,
+            paymentBreakdown
         };
+    },
+
+    exportToCSV() {
+        if (!this.lastFilteredOrders || this.lastFilteredOrders.length === 0) {
+            if (typeof showToast === 'function') showToast('Não há vendas no período para exportar.', 'warning');
+            else alert('Não há vendas no período para exportar.');
+            return;
+        }
+
+        let csv = 'Data/Hora;Cliente;Telefone;Tipo;Pagamento;Subtotal;Frete;Total;Status\n';
+
+        this.lastFilteredOrders.forEach(o => {
+            const date = new Date(o.created_at).toLocaleString('pt-BR');
+            const name = (o.client_name || '').replace(/;/g, '');
+            const phone = (o.phone || '').replace(/;/g, '');
+            const type = o.order_type === 'delivery' ? 'Entrega' : 'Retirada';
+            const payment = (o.reference || 'Não informado').replace(/;/g, '');
+            const subtotal = Number(o.subtotal || 0).toFixed(2);
+            const freight = Number(o.delivery_fee || 0).toFixed(2);
+            const total = Number(o.total || 0).toFixed(2);
+            const status = o.status || 'pending';
+
+            csv += `"${date}";"${name}";"${phone}";"${type}";"${payment}";"${subtotal}";"${freight}";"${total}";"${status}"\n`;
+        });
+
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `Relatorio_Vendas_${this.currentPeriod}_${new Date().toISOString().slice(0,10)}.csv`;
+        link.click();
     }
 };
