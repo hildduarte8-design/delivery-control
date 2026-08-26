@@ -13,6 +13,11 @@ function switchTab(tabId) {
     if (tabId === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
     if (tabId === 'orders' && typeof OrdersManager !== 'undefined') OrdersManager.fetchOrders();
     if (tabId === 'menu' && typeof MenuAdminManager !== 'undefined') MenuAdminManager.renderAdminProductsList();
+    if (tabId === 'financial') {
+        if (typeof renderStockList === 'function') renderStockList();
+        if (typeof renderFixedList === 'function') renderFixedList();
+        if (typeof renderLogisticsList === 'function') renderLogisticsList();
+    }
     if (tabId === 'settings' && typeof loadSettingsUI === 'function') loadSettingsUI();
 }
 
@@ -112,7 +117,7 @@ document.addEventListener('click', (e) => {
         }
     });
 
-    // 3. Executa a busca de dados correspondente à sub-aba aberta
+    // 3. Executa a busca/renderização de dados correspondente à sub-aba aberta
     if (targetSub === 'live-orders' && typeof OrdersManager !== 'undefined') {
         OrdersManager.fetchOrders();
     }
@@ -121,5 +126,14 @@ document.addEventListener('click', (e) => {
     }
     if (targetSub === 'customers' && typeof CustomersManager !== 'undefined') {
         CustomersManager.fetchCustomers();
+    }
+    if (targetSub === 'insumos' && typeof renderStockList === 'function') {
+        renderStockList();
+    }
+    if (targetSub === 'fixed' && typeof renderFixedList === 'function') {
+        renderFixedList();
+    }
+    if (targetSub === 'logistics' && typeof renderLogisticsList === 'function') {
+        renderLogisticsList();
     }
 });
