@@ -253,8 +253,9 @@ const OrdersManager = {
         let cleanPhone = phone.replace(/\D/g, '');
         if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
 
+        const storeName = typeof getStoreName === 'function' ? getStoreName() : 'Nosso Delivery';
         const firstName = clientName ? clientName.split(' ')[0] : 'Cliente';
-        const msg = `Olá, ${firstName}! Tudo bem? Falamos do *Pastel e Batata Imperial* a respeito do seu pedido.`;
+        const msg = `Olá, ${firstName}! Tudo bem? Falamos do *${storeName}* a respeito do seu pedido.`;
 
         window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank');
     },
@@ -312,6 +313,7 @@ const OrdersManager = {
         try {
             const o = JSON.parse(decodeURIComponent(orderDataEscaped));
             const dateFormatted = new Date(o.created_at).toLocaleString('pt-BR');
+            const storeName = typeof getStoreName === 'function' ? getStoreName() : 'Nosso Delivery';
 
             let items = o.items;
             if (typeof items === 'string') {
@@ -341,7 +343,7 @@ const OrdersManager = {
                     </style>
                 </head>
                 <body>
-                    <div class="text-center title">PASTEL E BATATA IMPERIAL</div>
+                    <div class="text-center title">${storeName.toUpperCase()}</div>
                     <div class="text-center info">*** COMANDA DE PRODUÇÃO ***</div>
                     <div class="line"></div>
 
@@ -383,12 +385,14 @@ const OrdersManager = {
                 await dbClient.from('orders').update({ status: newStatus }).eq('id', orderId);
             }
 
+            const storeName = typeof getStoreName === 'function' ? getStoreName() : 'Nosso Delivery';
+
             if (newStatus === 'preparing' && phone) {
                 let cleanPhone = phone.replace(/\D/g, '');
                 if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
 
                 const firstName = clientName ? clientName.split(' ')[0] : 'Cliente';
-                const msg = `Olá, ${firstName}! 👨‍🍳\n\nSeu pedido no *Pastel e Batata Imperial* já entrou em preparo com muito carinho! Em breve estará a caminho. 🛵💨`;
+                const msg = `Olá, ${firstName}! 👨‍🍳\n\nSeu pedido no *${storeName}* já entrou em preparo com muito carinho! Em breve estará a caminho. 🛵💨`;
 
                 window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank');
             }
@@ -398,7 +402,7 @@ const OrdersManager = {
                 if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
 
                 const firstName = clientName ? clientName.split(' ')[0] : 'Cliente';
-                const msg = `Olá, ${firstName}! 👑\n\nSeu pedido no *Pastel e Batata Imperial* foi finalizado e já está pronto / a caminho! 🛵😋\n\nAgradecemos imensamente a preferência e desejamos um excelente apetite!`;
+                const msg = `Olá, ${firstName}! 👑\n\nSeu pedido no *${storeName}* foi finalizado e já está pronto / a caminho! 🛵😋\n\nAgradecemos imensamente a preferência e desejamos um excelente apetite!`;
 
                 window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank');
             }
