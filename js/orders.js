@@ -129,12 +129,6 @@ const OrdersManager = {
         const o = this.allOrders.find(item => item.id === orderId);
         if (!o) return;
 
-        const modalTitle = document.getElementById('modalTitle');
-        const modalBody = document.getElementById('modalBody');
-        const modalOverlay = document.getElementById('modalOverlay');
-
-        if (!modalTitle || !modalBody || !modalOverlay) return;
-
         let items = o.items;
         if (typeof items === 'string') {
             try { items = JSON.parse(items); } catch(e) { items = []; }
@@ -156,10 +150,9 @@ const OrdersManager = {
         const clientOrdersCount = this.getClientOrdersCount(o.phone, o.client_name);
         const dateFormatted = new Date(o.created_at).toLocaleString('pt-BR');
         const orderDataEscaped = encodeURIComponent(JSON.stringify(o));
+        const clientNameEscaped = (o.client_name || '').replace(/'/g, "\\'");
 
-        modalTitle.textContent = `📋 Detalhes do Pedido`;
-
-        modalBody.innerHTML = `
+        const bodyHtml = `
             <!-- Cabeçalho do Cliente -->
             <div style="background:#0F172A; padding:12px; border-radius:8px; margin-bottom:14px; border:1px solid #1E293B;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -209,17 +202,17 @@ const OrdersManager = {
             <!-- Ações de Status -->
             <div style="font-size:12px; font-weight:bold; color:#94A3B8; margin-bottom:8px;">⚡ Atualizar Status do Pedido:</div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px;">
-                <button class="btn btn-sm" style="background:#3B82F6; color:#fff; padding:10px;" onclick="OrdersManager.updateStatus('${o.id}', 'preparing', '${(o.client_name || '').replace(/'/g, "\\'")}', '${o.phone || ''}'); closeModal();">
+                <button class="btn btn-sm" style="background:#3B82F6; color:#fff; padding:10px;" onclick="OrdersManager.updateStatus('${o.id}', 'preparing', '${clientNameEscaped}', '${o.phone || ''}'); closeModal();">
                     👨‍🍳 Colocar em Preparo
                 </button>
-                <button class="btn btn-sm btn-success" style="padding:10px;" onclick="OrdersManager.updateStatus('${o.id}', 'completed', '${(o.client_name || '').replace(/'/g, "\\'")}', '${o.phone || ''}'); closeModal();">
+                <button class="btn btn-sm btn-success" style="padding:10px;" onclick="OrdersManager.updateStatus('${o.id}', 'completed', '${clientNameEscaped}', '${o.phone || ''}'); closeModal();">
                     ✅ Concluir Pedido
                 </button>
             </div>
 
             <!-- Ações Rápidas -->
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                <button class="btn btn-sm" style="background:#25D366; color:#fff; padding:10px;" onclick="OrdersManager.openWhatsAppChat('${o.phone}', '${o.client_name}')">
+                <button class="btn btn-sm" style="background:#25D366; color:#fff; padding:10px;" onclick="OrdersManager.openWhatsAppChat('${o.phone}', '${clientNameEscaped}')">
                     💬 Conversar no Whats
                 </button>
                 <button class="btn btn-sm btn-secondary" style="padding:10px;" onclick="OrdersManager.printOrder('${orderDataEscaped}')">
@@ -228,7 +221,21 @@ const OrdersManager = {
             </div>
         `;
 
-        modalOverlay.style.display = 'flex';
+        // Utiliza a função global de modal configurada no ui.js
+        if (typeof openModal === 'function') {
+            openModal('📋 Detalhes do Pedido', bodyHtml);
+        } else {
+            const modalTitle = document.getElementById('modalTitle');
+            const modalBody = document.getElementById('modalBody');
+            const modalOverlay = document.getElementById('modalOverlay');
+
+            if (modalTitle) modalTitle.textContent = '📋 Detalhes do Pedido';
+            if (modalBody) modalBody.innerHTML = bodyHtml;
+            if (modalOverlay) {
+                modalOverlay.classList.add('active');
+                modalOverlay.style.display = 'flex';
+            }
+        }
     },
 
     getClientOrdersCount(phone, clientName) {
