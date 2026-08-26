@@ -53,8 +53,13 @@ const CustomersManager = {
                     try { items = JSON.parse(items); } catch(e) { items = []; }
                 }
 
-                // CONTABILIZA APENAS SE HOUVER ITENS OU VALOR REAL
-                if ((Array.isArray(items) && items.length > 0) || Number(o.total || 0) > 0) {
+                // CORREÇÃO: CONTABILIZA PEDIDO E VALORES APENAS SE FOR UMA COMPRA REAL (Não cadastro fake)
+                const isRealOrder = o.status !== 'customer_profile' && 
+                                    o.order_type !== 'customer_register' && 
+                                    o.status !== 'cancelled' && 
+                                    Number(o.total || 0) > 0;
+
+                if (isRealOrder) {
                     cust.ordersCount += 1;
                     cust.totalSpent += Number(o.total || 0);
 
@@ -169,16 +174,17 @@ const CustomersManager = {
 
         try {
             if (typeof dbClient !== 'undefined') {
+                // CORREÇÃO: REGISTRA O CLIENTE SEM CRIAR PEDIDO FANTASMA NAS VENDAS/ANALYTICS
                 const { error } = await dbClient.from('orders').insert([{
                     client_name: name,
                     phone: phone,
-                    order_type: 'pickup',
+                    order_type: 'customer_register',
                     address: address,
                     items: [],
                     subtotal: 0,
                     delivery_fee: 0,
                     total: 0,
-                    status: 'completed'
+                    status: 'customer_profile'
                 }]);
 
                 if (error) {
