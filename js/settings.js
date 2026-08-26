@@ -1,18 +1,28 @@
-// js/settings.js - Configurações, Logo, Identidade Visual, Cardápio em PDF, Upload, Edição e Exclusão
+// js/settings.js - Configurações, Identidade Visual, Logo, GPS, Cardápio e PDF
 
+// Aplica a cor primária dinâmica no CSS e na barra do navegador
 function applyDynamicTheme(color) {
     if (!color) return;
     document.documentElement.style.setProperty('--primary-color', color);
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeMeta) themeMeta.setAttribute('content', color);
 }
 
+// Alias de compatibilidade global
+if (typeof window.applyThemeColor === 'undefined') {
+    window.applyThemeColor = applyDynamicTheme;
+}
+
+// Carrega as configurações nos campos do formulário
 function loadSettingsUI() {
     const settings = (typeof DB !== 'undefined' && DB.load) 
-        ? DB.load('dly_settings', { storeName: '', phone: '', password: '', storeLat: '', storeLon: '', logoUrl: '', primaryColor: '#FF6B35' })
-        : { storeName: '', phone: '', password: '', storeLat: '', storeLon: '', logoUrl: '', primaryColor: '#FF6B35' };
+        ? DB.load('dly_settings', { storeName: '', phone: '', password: '', pixKey: '', storeLat: '', storeLon: '', logoUrl: '', primaryColor: '#FF6B35' })
+        : { storeName: '', phone: '', password: '', pixKey: '', storeLat: '', storeLon: '', logoUrl: '', primaryColor: '#FF6B35' };
     
     const nameEl = document.getElementById('cfg_store_name');
     const phoneEl = document.getElementById('cfg_phone');
     const passEl = document.getElementById('cfg_password');
+    const pixEl = document.getElementById('cfg_pix_key');
     const latEl = document.getElementById('cfg_store_lat');
     const lonEl = document.getElementById('cfg_store_lon');
     const logoEl = document.getElementById('cfg_logo_url');
@@ -20,19 +30,28 @@ function loadSettingsUI() {
     const colorHex = document.getElementById('cfg_color_hex');
     const btnGps = document.getElementById('btn_store_gps');
 
-    if (nameEl) nameEl.value = settings.storeName || '';
+    if (nameEl) nameEl.value = settings.storeName || settings.store_name || '';
     if (phoneEl) phoneEl.value = settings.phone || '';
     if (passEl) passEl.value = settings.password || '';
+    if (pixEl) pixEl.value = settings.pixKey || settings.pix_key || '';
     if (latEl) latEl.value = settings.storeLat || '';
     if (lonEl) lonEl.value = settings.storeLon || '';
-    if (logoEl) logoEl.value = settings.logoUrl || '';
+    if (logoEl) logoEl.value = settings.logoUrl || settings.logo_url || '';
+
+    const activeColor = settings.primaryColor || settings.primary_color || '#FF6B35';
 
     if (colorPicker && colorHex) {
-        colorPicker.value = settings.primaryColor || '#FF6B35';
-        colorHex.value = settings.primaryColor || '#FF6B35';
+        colorPicker.value = activeColor;
+        colorHex.value = activeColor;
         colorPicker.oninput = (e) => {
             colorHex.value = e.target.value;
             applyDynamicTheme(e.target.value);
+        };
+        colorHex.oninput = (e) => {
+            if (/^#[0-9A-F]{6}$/i.test(e.target.value)) {
+                colorPicker.value = e.target.value;
+                applyDynamicTheme(e.target.value);
+            }
         };
     }
 
@@ -41,10 +60,13 @@ function loadSettingsUI() {
         btnGps.style.background = "#10B981";
     }
 
-    applyDynamicTheme(settings.primaryColor);
-    renderAdminProductsList();
+    applyDynamicTheme(activeColor);
+    if (typeof renderAdminProductsList === 'function') {
+        renderAdminProductsList();
+    }
 }
 
+// Captura GPS atual da loja
 function getStoreGPS() {
     if (!navigator.geolocation) {
         if (typeof showToast === 'function') showToast('Seu navegador não suporta GPS', 'error');
@@ -64,16 +86,17 @@ function getStoreGPS() {
                 btn.textContent = '✅ Localização da Loja Capturada!';
                 btn.style.background = '#10B981';
             }
-            if (typeof showToast === 'function') showToast('GPS da loja capturado! Lembre-se de clicar em Salvar.');
+            if (typeof showToast === 'function') showToast('GPS capturado! Clique em Salvar para gravar.');
         },
         () => {
             if (btn) btn.textContent = '📍 Capturar GPS Atual da Loja';
-            if (typeof showToast === 'function') showToast('Erro ao obter sinal do GPS. Verifique a permissão.', 'error');
+            if (typeof showToast === 'function') showToast('Erro ao obter sinal do GPS.', 'error');
         },
         { enableHighAccuracy: true }
     );
 }
 
+// Upload de foto do logo para o Supabase Storage
 async function uploadProductImage(file) {
     try {
         if (typeof dbClient === 'undefined') return null;
@@ -101,10 +124,12 @@ async function uploadProductImage(file) {
     }
 }
 
+// FUNÇÃO ÚNICA E COMPLETA DE SALVAR CONFIGURAÇÕES
 async function saveSettings() {
     const storeName = document.getElementById('cfg_store_name')?.value.trim() || '';
     let rawPhone = document.getElementById('cfg_phone')?.value.replace(/\D/g, '') || '';
     const password = document.getElementById('cfg_password')?.value.trim() || '';
+    const pixKey = document.getElementById('cfg_pix_key')?.value.trim() || '';
     const storeLat = document.getElementById('cfg_store_lat')?.value || '';
     const storeLon = document.getElementById('cfg_store_lon')?.value || '';
     let logoUrl = document.getElementById('cfg_logo_url')?.value.trim() || '';
@@ -112,6 +137,7 @@ async function saveSettings() {
     const primaryColor = document.getElementById('cfg_primary_color')?.value || '#FF6B35';
 
     if (rawPhone.startsWith('55') && rawPhone.length > 11) rawPhone = rawPhone.slice(2);
+    
     if (!storeName) {
         if (typeof showToast === 'function') showToast('Informe o nome da loja', 'error');
         return;
@@ -121,6 +147,7 @@ async function saveSettings() {
         return;
     }
 
+    // Upload de novo logo se selecionado
     if (logoFileInput && logoFileInput.files && logoFileInput.files.length > 0) {
         if (typeof showToast === 'function') showToast('⌛ Enviando logo da loja...');
         const uploadedLogo = await uploadProductImage(logoFileInput.files[0]);
@@ -131,10 +158,15 @@ async function saveSettings() {
         }
     }
 
-    const updated = { storeName, phone: rawPhone, password, storeLat, storeLon, logoUrl, primaryColor };
+    // Salva localmente
+    const updated = { storeName, phone: rawPhone, password, pixKey, storeLat, storeLon, logoUrl, primaryColor };
     if (typeof DB !== 'undefined' && DB.save) DB.save('dly_settings', updated);
     if (typeof state !== 'undefined') state.settings = updated;
 
+    // Aplica a cor na hora
+    applyDynamicTheme(primaryColor);
+
+    // Salva no Supabase (se configurado)
     try {
         if (typeof dbClient !== 'undefined') {
             await dbClient.from('store_settings').upsert({
@@ -142,6 +174,7 @@ async function saveSettings() {
                 store_name: storeName,
                 phone: rawPhone,
                 password: password,
+                pix_key: pixKey,
                 logo_url: logoUrl,
                 primary_color: primaryColor,
                 updated_at: new Date().toISOString()
@@ -154,6 +187,7 @@ async function saveSettings() {
     if (typeof showToast === 'function') showToast('Configurações e marca salvas!');
 }
 
+// Renderiza a lista de pratos no admin
 async function renderAdminProductsList() {
     const container = document.getElementById('admin-products-list');
     if (!container) return;
@@ -193,7 +227,7 @@ async function renderAdminProductsList() {
                                     ${p.name} ${p.is_cross_sell ? '<small style="color:#60A5FA;">[Cross-Sell]</small>' : ''}
                                 </div>
                                 <div style="font-size:11px; color:#94A3B8;">Cat: <strong>${p.category || 'Geral'}</strong></div>
-                                <div style="font-size:12px; color:#FF6B35; font-weight:600;">
+                                <div style="font-size:12px; color:var(--primary-color, #FF6B35); font-weight:600;">
                                     R$ ${finalPrice.toFixed(2)} ${discount > 0 ? `<small style="color:#EF4444;">(-${discount}%)</small>` : ''}
                                 </div>
                             </div>
@@ -404,6 +438,7 @@ async function deleteProduct(id, name) {
     }
 }
 
+// Exporta o cardápio em PDF formatado para impressão
 async function exportMenuToPDF() {
     const pdfWindow = window.open('', '_blank');
     if (!pdfWindow) {
@@ -449,7 +484,7 @@ async function exportMenuToPDF() {
             ? DB.load('dly_settings', { storeName: 'Nosso Delivery', logoUrl: '', phone: '', primaryColor: '#FF6B35' }) 
             : { storeName: 'Nosso Delivery', logoUrl: '', phone: '', primaryColor: '#FF6B35' };
 
-        const primaryColor = settings.primaryColor || '#FF6B35';
+        const primaryColor = settings.primaryColor || settings.primary_color || '#FF6B35';
 
         const grouped = {};
         products.forEach(p => {
@@ -555,7 +590,7 @@ async function exportMenuToPDF() {
             <body>
                 <div class="menu-header">
                     ${logoHtml}
-                    <h1>${settings.storeName.toUpperCase() || 'NOSSO DELIVERY'}</h1>
+                    <h1>${(settings.storeName || 'NOSSO DELIVERY').toUpperCase()}</h1>
                     <p>Cardápio Oficial de Pedidos ${phoneFormatted ? '• ' + phoneFormatted : ''}</p>
                 </div>
 
