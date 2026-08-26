@@ -1,4 +1,26 @@
-// js/dashboard.js - Painel Principal do Dashboard & Resumo Financeiro
+// Helper: Calcula o intervalo do ciclo semanal estilo iFood (Quinta 00:00 a Quarta 23:59)
+function getIFoodWeeklyCycle(referenceDate = new Date()) {
+    const d = new Date(referenceDate);
+    d.setHours(0, 0, 0, 0);
+
+    // JS getDay(): 0 = Dom, 1 = Seg, 2 = Ter, 3 = Qua, 4 = Qui, 5 = Sex, 6 = Sáb
+    const dayOfWeek = d.getDay();
+
+    // Calcula quantos dias voltar para encontrar a última Quinta-feira (Início do Ciclo)
+    const daysSinceThursday = (dayOfWeek + 3) % 7;
+
+    const cycleStart = new Date(d);
+    cycleStart.setDate(d.getDate() - daysSinceThursday);
+    cycleStart.setHours(0, 0, 0, 0);
+
+    const cycleEnd = new Date(cycleStart);
+    cycleEnd.setDate(cycleStart.getDate() + 6);
+    cycleEnd.setHours(23, 59, 59, 999);
+
+    return { cycleStart, cycleEnd };
+}
+
+// js/dashboard.js - Painel Principal com Fechamento Semanal Estilo iFood (Quinta a Quarta)
 
 async function renderDashboard() {
     const balanceValue = document.getElementById('balanceValue');
@@ -19,7 +41,6 @@ async function renderDashboard() {
         let orders = [];
         let expenses = [];
 
-        // Busca dados do Supabase se disponível, ou usa o estado local
         if (typeof dbClient !== 'undefined') {
             const [ordersRes, expRes] = await Promise.all([
                 dbClient.from('orders').select('*').order('created_at', { ascending: false }),
@@ -53,7 +74,7 @@ async function renderDashboard() {
         if (inToday) inToday.textContent = `R$ ${todayIn.toFixed(2)}`;
         if (outToday) outToday.textContent = `R$ ${todayOut.toFixed(2)}`;
 
-        // 3. Saldo Atual Geral (Entradas - Gastos)
+        // 3. Saldo Atual Geral
         const totalInGeral = orders
             .filter(o => o.status !== 'cancelled')
             .reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
@@ -68,23 +89,43 @@ async function renderDashboard() {
                 : 'Sem movimentações ainda';
         }
 
-        // 4. Saldo da Semana
-        const startOfWeek = new Date(now);
-        startOfWeek.setDate(now.getDate() - now.getDay());
-        startOfWeek.setHours(0,0,0,0);
+        // 4. Saldo da Semana (Ciclo de Repasse: Quinta a Quarta)
+        const { cycleStart, cycleEnd } = getIFoodWeeklyCycle(now);
 
-        const weekOrders = orders.filter(o => o.status !== 'cancelled' && new Date(o.created_at || o.date) >= startOfWeek);
-        const weekExp = expenses.filter(e => new Date(e.created_at || e.date) >= startOfWeek);
+        const weekOrders = orders.filter(o => {
+            if (o.status === 'cancelled') return false;
+            const d = new Date(o.created_at || o.date);
+            return d >= cycleStart && d <= now; // Soma da quinta passada até hoje
+        });
+
+        const weekExp = expenses.filter(e => {
+            const d = new Date(e.created_at || e.date);
+            return d >= cycleStart && d <= now;
+        });
+
         const weekInVal = weekOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
         const weekOutVal = weekExp.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
         const weekNet = weekInVal - weekOutVal;
 
+        const isWednesday = now.getDay() === 3; // 3 = Quarta-feira
+
         if (weekBalance) weekBalance.textContent = `R$ ${weekNet.toFixed(2)}`;
-        if (weekRange) weekRange.textContent = `${startOfWeek.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'})} até hoje`;
+        if (weekRange) {
+            const startStr = cycleStart.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+            const endStr = cycleEnd.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+            weekRange.textContent = `Ciclo: ${startStr} (Qui) a ${endStr} (Qua)`;
+        }
+
         if (weekBadge) {
-            weekBadge.textContent = weekNet >= 0 ? '🟢 Positivo' : '🔴 Deficit';
-            weekBadge.style.background = weekNet >= 0 ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)';
-            weekBadge.style.color = weekNet >= 0 ? '#10B981' : '#EF4444';
+            if (isWednesday) {
+                weekBadge.textContent = '💰 Fechamento Hoje!';
+                weekBadge.style.background = 'rgba(245, 158, 11, 0.25)';
+                weekBadge.style.color = '#F59E0B';
+            } else {
+                weekBadge.textContent = weekNet >= 0 ? '🟢 Em andamento' : '🔴 Em andamento';
+                weekBadge.style.background = weekNet >= 0 ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)';
+                weekBadge.style.color = weekNet >= 0 ? '#10B981' : '#EF4444';
+            }
         }
 
         // 5. Saldo do Mês
