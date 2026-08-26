@@ -27,6 +27,15 @@ const state = {
     settings: {}
 };
 
+// Helper Global para obter o nome atualizado da loja em tempo de execução
+function getStoreName() {
+    if (state.settings && state.settings.storeName) {
+        return state.settings.storeName;
+    }
+    const localSettings = DB.load('dly_settings', {});
+    return localSettings.storeName || 'Pastel e Batata Imperial';
+}
+
 // Carrega dados locais e busca atualizações na nuvem (Supabase)
 async function loadAll() {
     // 1. Carregamento imediato do cache local
@@ -34,7 +43,7 @@ async function loadAll() {
     state.recipes = DB.load('dly_recipes', []);
     state.sales = DB.load('dly_sales', []);
     state.expenses = DB.load('dly_expenses', { fixed: [], logistics: [] });
-    state.settings = DB.load('dly_settings', { storeName: '', phone: '', password: '' });
+    state.settings = DB.load('dly_settings', { storeName: 'Pastel e Batata Imperial', phone: '', password: '' });
 
     // 2. Sincronização em segundo plano com o Supabase
     try {
@@ -65,7 +74,7 @@ async function loadAll() {
 
         if (cfgRes.data) {
             state.settings = {
-                storeName: cfgRes.data.store_name,
+                storeName: cfgRes.data.store_name || 'Pastel e Batata Imperial',
                 phone: cfgRes.data.phone,
                 password: cfgRes.data.password
             };
