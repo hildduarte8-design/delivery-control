@@ -12,6 +12,8 @@ function switchTab(tabId) {
     
     if (tabId === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
     if (tabId === 'orders' && typeof OrdersManager !== 'undefined') OrdersManager.fetchOrders();
+    if (tabId === 'menu' && typeof MenuAdminManager !== 'undefined') MenuAdminManager.renderAdminProductsList();
+    if (tabId === 'settings' && typeof loadSettingsUI === 'function') loadSettingsUI();
 }
 
 function openModal(title, bodyHtml) {
