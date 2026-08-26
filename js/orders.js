@@ -1,8 +1,9 @@
-// js/orders.js - Gestão Completa de Pedidos ao Vivo com Detalhes e Chat WhatsApp
+// js/orders.js - Gestão Completa de Pedidos ao Vivo com Supabase Realtime, Detalhes e Chat WhatsApp
 
 const OrdersManager = {
     knownOrdersCount: 0,
     timerInterval: null,
+    realtimeChannel: null,
     allOrders: [], // Guarda os pedidos para cálculo de histórico e abertura de detalhes
 
     // Emite som de campainha de novo pedido
@@ -29,9 +30,33 @@ const OrdersManager = {
         }
     },
 
+    // Inicializa a escuta em Tempo Real (Supabase Realtime)
+    initRealtime() {
+        if (typeof dbClient === 'undefined' || this.realtimeChannel) return;
+
+        try {
+            this.realtimeChannel = dbClient
+                .channel('public:orders-live')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
+                    console.log('🔔 Alteração detectada nos pedidos em tempo real:', payload.eventType);
+                    this.fetchOrders();
+                })
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('✅ Supabase Realtime conectado com sucesso para pedidos ao vivo!');
+                    }
+                });
+        } catch (e) {
+            console.error('Erro ao conectar Supabase Realtime:', e);
+        }
+    },
+
     async fetchOrders() {
         const container = document.getElementById('live-orders-container');
         if (!container) return;
+
+        // Garante que o Realtime está escutando eventos do banco
+        this.initRealtime();
 
         try {
             if (typeof dbClient === 'undefined') return;
@@ -50,6 +75,7 @@ const OrdersManager = {
 
             this.allOrders = orders;
 
+            // Toca a campainha quando um novo pedido entra no sistema
             if (this.knownOrdersCount > 0 && orders.length > this.knownOrdersCount) {
                 this.playAlertSound();
                 if (typeof showToast === 'function') showToast('🔔 NOVO PEDIDO RECEBIDO!', 'success');
@@ -58,7 +84,7 @@ const OrdersManager = {
 
             container.innerHTML = orders.map(o => this.renderOrderCard(o)).join('');
 
-            // Inicia cronômetro dinâmico
+            // Inicia ou atualiza o cronômetro dinâmico
             this.startLiveTimers();
 
         } catch (e) {
@@ -221,20 +247,8 @@ const OrdersManager = {
             </div>
         `;
 
-        // Utiliza a função global de modal configurada no ui.js
         if (typeof openModal === 'function') {
             openModal('📋 Detalhes do Pedido', bodyHtml);
-        } else {
-            const modalTitle = document.getElementById('modalTitle');
-            const modalBody = document.getElementById('modalBody');
-            const modalOverlay = document.getElementById('modalOverlay');
-
-            if (modalTitle) modalTitle.textContent = '📋 Detalhes do Pedido';
-            if (modalBody) modalBody.innerHTML = bodyHtml;
-            if (modalOverlay) {
-                modalOverlay.classList.add('active');
-                modalOverlay.style.display = 'flex';
-            }
         }
     },
 
@@ -419,9 +433,7 @@ const OrdersManager = {
     }
 };
 
-setInterval(() => {
-    const ordersTab = document.getElementById('tab-orders');
-    if (ordersTab && ordersTab.classList.contains('active')) {
-        OrdersManager.fetchOrders();
-    }
-}, 10000);
+// Inicia a escuta em tempo real automaticamente quando o arquivo carrega
+document.addEventListener('DOMContentLoaded', () => {
+    OrdersManager.initRealtime();
+});
