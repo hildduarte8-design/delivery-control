@@ -1,253 +1,233 @@
-// js/sales.js - Lançamento e Gestão de Vendas Manuais com Vínculo de Cliente e Cardápio
+// js/sales.js - Vendas Manuais de Balcão (Múltiplos Itens, Clientes e Descontos)
 
-async function openSaleModal() {
-    if (typeof openModal !== 'function') return;
+const SalesManager = {
+    currentSaleItems: [],
 
-    openModal('💰 Nova Venda Manual', '<div style="text-align:center; padding:20px; color:#94A3B8;">Carregando dados...</div>');
-
-    try {
-        let products = [];
-        let clients = [];
-
-        if (typeof dbClient !== 'undefined') {
-            // 1. Busca produtos ativos do cardápio
-            const { data: prds } = await dbClient
-                .from('products')
-                .select('*')
-                .eq('is_active', true)
-                .order('name', { ascending: true });
-            if (prds) products = prds;
-
-            // 2. Busca clientes já existentes do histórico de pedidos
-            const { data: ords } = await dbClient
-                .from('orders')
-                .select('client_name, phone')
-                .order('created_at', { ascending: false });
-
-            if (ords) {
-                const uniqueMap = {};
-                ords.forEach(o => {
-                    if (o.client_name) {
-                        const key = o.client_name.trim().toLowerCase();
-                        if (!uniqueMap[key]) {
-                            uniqueMap[key] = { name: o.client_name.trim(), phone: o.phone || '' };
-                        }
-                    }
-                });
-                clients = Object.values(uniqueMap);
-            }
+    async openSaleModal() {
+        this.currentSaleItems = [];
+        
+        // Carrega produtos do cardápio e clientes do banco
+        let products = window.currentAdminProducts || [];
+        if (products.length === 0 && typeof dbClient !== 'undefined') {
+            const { data } = await dbClient.from('products').select('*').eq('is_active', true);
+            products = data || [];
         }
 
-        const clientOptionsHtml = clients
-            .map(c => `<option value="${c.name}">${c.phone ? `📱 ${c.phone}` : ''}</option>`)
-            .join('');
+        let customers = [];
+        if (typeof CustomersManager !== 'undefined' && CustomersManager.allCustomers) {
+            customers = CustomersManager.allCustomers;
+        } else if (typeof dbClient !== 'undefined') {
+            const { data } = await dbClient.from('orders').select('client_name, phone, address');
+            customers = data || [];
+        }
 
-        const productOptionsHtml = products
-            .map(p => `<option value="${p.id}" data-price="${p.price}" data-name="${p.name}">${p.name} — R$ ${Number(p.price).toFixed(2)}</option>`)
-            .join('');
+        const customerOptions = customers.map(c => `
+            <option value="${c.name.replace(/"/g, '&quot;')}" data-phone="${c.phone || ''}" data-address="${c.address || ''}">
+                ${c.name} ${c.phone ? `(${c.phone})` : ''}
+            </option>
+        `).join('');
 
-        openModal('💰 Nova Venda Manual', `
-            <div class="form-group">
-                <label>Cliente (Selecione existente ou digite o nome de um novo) *</label>
-                <input type="text" id="sale_client_name" list="clients_datalist" placeholder="Digite ou selecione o cliente..." oninput="onClientInputSelected(this.value)">
-                <datalist id="clients_datalist">
-                    ${clientOptionsHtml}
-                </datalist>
-            </div>
+        const productOptions = products.map(p => `
+            <option value="${p.id}" data-name="${p.name.replace(/"/g, '&quot;')}" data-price="${p.price}">
+                ${p.name} - R$ ${Number(p.price).toFixed(2)}
+            </option>
+        `).join('');
 
-            <div class="form-group">
-                <label>WhatsApp / Telefone do Cliente (Opcional)</label>
-                <input type="tel" id="sale_client_phone" placeholder="33999999999">
-            </div>
-
-            <div class="form-group">
-                <label>Selecione o Item do Cardápio *</label>
-                <select id="sale_product_select" onchange="onSaleProductChange(this)">
-                    <option value="">-- Escolha um item do cardápio --</option>
-                    ${productOptionsHtml}
-                    <option value="custom">✏️ Outro / Valor Personalizado</option>
+        const modalBody = `
+            <!-- SELEÇÃO DE CLIENTE CADASTRADO -->
+            <div class="form-group" style="margin-bottom: 10px;">
+                <label style="font-size:12px; color:#CBD5E1;">Cliente Cadastrado (Opcional)</label>
+                <select id="sale_customer_select" onchange="SalesManager.onSelectCustomer(this)" style="font-size:13px; padding:8px;">
+                    <option value="">-- Cliente Avulso / Balcão --</option>
+                    ${customerOptions}
                 </select>
             </div>
 
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                <div class="form-group">
-                    <label>Quantidade *</label>
-                    <input type="number" id="sale_qty" value="1" min="1" oninput="calculateSaleTotal()">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:10px;">
+                <div class="form-group" style="margin:0;">
+                    <label style="font-size:11px; color:#94A3B8;">Nome do Cliente</label>
+                    <input type="text" id="sale_client_name" placeholder="Ex: Maria Souza" style="font-size:12px; padding:6px;">
                 </div>
-                <div class="form-group">
-                    <label>Valor Unitário (R$) *</label>
-                    <input type="number" step="0.01" id="sale_unit_price" placeholder="0.00" oninput="calculateSaleTotal()">
+                <div class="form-group" style="margin:0;">
+                    <label style="font-size:11px; color:#94A3B8;">WhatsApp</label>
+                    <input type="tel" id="sale_phone" placeholder="33999999999" style="font-size:12px; padding:6px;">
                 </div>
             </div>
 
-            <div class="form-group">
-                <label>Forma de Pagamento / Local</label>
-                <select id="sale_channel">
-                    <option value="Balcão (Dinheiro)">💵 Balcão (Dinheiro)</option>
-                    <option value="Balcão (Pix)">⚡ Balcão (Pix)</option>
-                    <option value="Balcão (Cartão)">💳 Balcão (Cartão)</option>
-                    <option value="WhatsApp Direct">📱 WhatsApp Direct</option>
-                </select>
+            <div class="form-group" style="margin-bottom:12px;">
+                <label style="font-size:11px; color:#94A3B8;">Endereço de Entrega / Observação</label>
+                <input type="text" id="sale_address" placeholder="Rua, Número, Bairro (ou Balcão)" style="font-size:12px; padding:6px;">
             </div>
 
-            <div style="background:#0F172A; padding:12px; border-radius:10px; margin-top:10px; text-align:right; border:1px solid #334155;">
-                <span style="font-size:12px; color:#94A3B8;">Total da Venda:</span>
-                <strong style="font-size:18px; color:#10B981; display:block;" id="sale_total_display">R$ 0.00</strong>
+            <!-- ADICIONAR ITENS DO CARDÁPIO -->
+            <div style="border-top:1px solid #334155; padding-top:10px; margin-top:10px;">
+                <div style="font-size:12px; font-weight:700; color:#FF6B35; margin-bottom:8px;">🛍️ Adicionar Itens do Cardápio</div>
+                <div style="display:flex; gap:6px; margin-bottom:10px;">
+                    <select id="sale_product_select" style="flex:1; font-size:12px; padding:6px;">
+                        <option value="">-- Selecione o Prato/Item --</option>
+                        ${productOptions}
+                    </select>
+                    <input type="number" id="sale_product_qty" value="1" min="1" style="width:60px; font-size:12px; padding:6px; text-align:center;">
+                    <button class="btn btn-sm btn-success" onclick="SalesManager.addItemToSale()" style="width:auto; padding:0 12px;">+ Add</button>
+                </div>
+
+                <!-- LISTA DE ITENS SELECIONADOS -->
+                <div id="sale_selected_items_list" style="background:#0F172A; border:1px solid #334155; border-radius:8px; padding:8px; min-height:60px; margin-bottom:12px;">
+                    <div style="color:#94A3B8; font-size:11px; text-align:center; padding:15px;">Nenhum item adicionado ainda.</div>
+                </div>
             </div>
 
-            <button class="btn btn-large" id="btn_save_sale" onclick="saveManualSale()" style="margin-top:12px;">
-                💾 Registrar Venda Manual
-            </button>
-        `);
+            <!-- VALORES, DESCONTO E TOTAL -->
+            <div style="background:#1E293B; border-radius:8px; padding:10px; border:1px solid #334155;">
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#CBD5E1; margin-bottom:6px;">
+                    <span>Subtotal dos Itens:</span>
+                    <strong id="sale_subtotal_display" style="color:#F1F5F9;">R$ 0,00</strong>
+                </div>
 
-        window.cachedClientsForSale = clients;
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; align-items:center;">
+                    <div>
+                        <label style="font-size:11px; color:#94A3B8;">Desconto (R$)</label>
+                        <input type="number" step="0.01" id="sale_discount_input" value="0.00" oninput="SalesManager.updateSaleTotals()" style="font-size:12px; padding:6px;">
+                    </div>
+                    <div>
+                        <label style="font-size:11px; color:#94A3B8;">Valor Final a Cobrar</label>
+                        <input type="number" step="0.01" id="sale_final_total" value="0.00" style="font-size:14px; font-weight:800; color:#10B981; padding:6px;">
+                    </div>
+                </div>
+            </div>
 
-    } catch (e) {
-        console.error('Erro ao abrir modal de venda:', e);
-        if (typeof showToast === 'function') showToast('Erro ao carregar dados do cardápio', 'error');
-    }
-}
+            <button class="btn btn-large" onclick="SalesManager.saveManualSale()" style="margin-top:14px;">💾 Finalizar Venda Manual</button>
+        `;
 
-function onClientInputSelected(val) {
-    if (!window.cachedClientsForSale) return;
-    const found = window.cachedClientsForSale.find(c => c.name.toLowerCase() === val.trim().toLowerCase());
-    const phoneInput = document.getElementById('sale_client_phone');
-    if (found && found.phone && phoneInput) {
-        phoneInput.value = found.phone;
-    }
-}
-
-function onSaleProductChange(selectEl) {
-    const selectedOption = selectEl.options[selectEl.selectedIndex];
-    const price = selectedOption.getAttribute('data-price');
-    const priceInput = document.getElementById('sale_unit_price');
-
-    if (price && priceInput) {
-        priceInput.value = Number(price).toFixed(2);
-    } else if (priceInput && selectEl.value === 'custom') {
-        priceInput.value = '';
-        priceInput.focus();
-    }
-    calculateSaleTotal();
-}
-
-function calculateSaleTotal() {
-    const qty = Number(document.getElementById('sale_qty')?.value || 1);
-    const price = Number(document.getElementById('sale_unit_price')?.value || 0);
-    const total = qty * price;
-    const display = document.getElementById('sale_total_display');
-    if (display) display.textContent = `R$ ${total.toFixed(2)}`;
-}
-
-async function saveManualSale() {
-    const clientName = document.getElementById('sale_client_name')?.value.trim();
-    const clientPhone = document.getElementById('sale_client_phone')?.value.trim() || '';
-    const productSelect = document.getElementById('sale_product_select');
-    const selectedOption = productSelect?.options[productSelect.selectedIndex];
-    const productName = selectedOption?.getAttribute('data-name') || (productSelect?.value === 'custom' ? 'Venda Avulsa' : 'Item do Cardápio');
-    const qty = Number(document.getElementById('sale_qty')?.value || 1);
-    const unitPrice = Number(document.getElementById('sale_unit_price')?.value || 0);
-    const channel = document.getElementById('sale_channel')?.value || 'Balcão';
-    const saveBtn = document.getElementById('btn_save_sale');
-
-    if (!clientName) {
-        if (typeof showToast === 'function') showToast('Informe o nome do cliente!', 'error');
-        return;
-    }
-    if (unitPrice <= 0 || qty <= 0) {
-        if (typeof showToast === 'function') showToast('Informe uma quantidade e valor válidos!', 'error');
-        return;
-    }
-
-    const totalFinal = qty * unitPrice;
-
-    try {
-        if (saveBtn) {
-            saveBtn.disabled = true;
-            saveBtn.textContent = '⌛ Registrando...';
+        if (typeof openModal === 'function') {
+            openModal('💰 Nova Venda / Entrada Manual', modalBody);
         }
+    },
 
-        if (typeof dbClient !== 'undefined') {
-            const { error: orderError } = await dbClient.from('orders').insert([{
-                client_name: clientName,
-                phone: clientPhone,
-                order_type: 'pickup',
-                address: channel,
-                items: [{ name: productName, qty: qty, unit_price: unitPrice, total: totalFinal }],
-                subtotal: totalFinal,
-                delivery_fee: 0,
-                total: totalFinal,
-                status: 'completed'
-            }]);
+    onSelectCustomer(selectEl) {
+        const selectedOption = selectEl.options[selectEl.selectedIndex];
+        const name = selectEl.value;
+        const phone = selectedOption.getAttribute('data-phone') || '';
+        const address = selectedOption.getAttribute('data-address') || '';
 
-            if (orderError) console.error('Erro ao salvar no banco:', orderError);
-        }
+        const nameInput = document.getElementById('sale_client_name');
+        const phoneInput = document.getElementById('sale_phone');
+        const addressInput = document.getElementById('sale_address');
 
-        if (typeof closeModal === 'function') closeModal();
-        if (typeof showToast === 'function') showToast('Venda manual registrada com sucesso!');
+        if (nameInput) nameInput.value = name;
+        if (phoneInput) phoneInput.value = phone;
+        if (addressInput) addressInput.value = address;
+    },
 
-        if (typeof renderSalesList === 'function') renderSalesList();
-        if (typeof renderDashboard === 'function') renderDashboard();
-        if (typeof CustomersManager !== 'undefined') CustomersManager.fetchCustomers();
+    addItemToSale() {
+        const select = document.getElementById('sale_product_select');
+        const qtyInput = document.getElementById('sale_product_qty');
+        
+        if (!select || !select.value) return;
 
-    } catch (e) {
-        console.error('Erro ao salvar venda:', e);
-        if (typeof showToast === 'function') showToast('Erro inesperado ao salvar venda', 'error');
-        if (saveBtn) {
-            saveBtn.disabled = false;
-            saveBtn.textContent = '💾 Registrar Venda Manual';
-        }
-    }
-}
+        const opt = select.options[select.selectedIndex];
+        const id = select.value;
+        const name = opt.getAttribute('data-name');
+        const price = parseFloat(opt.getAttribute('data-price')) || 0;
+        const qty = parseInt(qtyInput.value) || 1;
 
-async function renderSalesList() {
-    const container = document.getElementById('salesList');
-    if (!container) return;
-
-    try {
-        if (typeof dbClient === 'undefined') return;
-
-        const { data: orders, error } = await dbClient
-            .from('orders')
-            .select('*')
-            .order('created_at', { ascending: false });
-
-        if (error || !orders || orders.length === 0) {
-            container.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:20px; font-size:13px;">Nenhuma venda registrada ainda.</div>';
-            return;
-        }
-
-        // FILTRA APENAS VENDAS REAIS (COM VALOR OU ITENS)
-        const realSales = orders.filter(o => {
-            let items = o.items;
-            if (typeof items === 'string') {
-                try { items = JSON.parse(items); } catch(e) { items = []; }
-            }
-            return (Array.isArray(items) && items.length > 0) || Number(o.total || 0) > 0;
+        this.currentSaleItems.push({
+            id,
+            name,
+            price,
+            qty,
+            total: price * qty
         });
 
-        if (realSales.length === 0) {
-            container.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:20px; font-size:13px;">Nenhuma venda registrada ainda.</div>';
+        this.renderSelectedItemsList();
+        this.updateSaleTotals();
+    },
+
+    removeItemFromSale(index) {
+        this.currentSaleItems.splice(index, 1);
+        this.renderSelectedItemsList();
+        this.updateSaleTotals();
+    },
+
+    renderSelectedItemsList() {
+        const container = document.getElementById('sale_selected_items_list');
+        if (!container) return;
+
+        if (this.currentSaleItems.length === 0) {
+            container.innerHTML = '<div style="color:#94A3B8; font-size:11px; text-align:center; padding:15px;">Nenhum item adicionado ainda.</div>';
             return;
         }
 
-        container.innerHTML = realSales.map(o => {
-            const dateFormatted = new Date(o.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-            return `
-                <div class="card" style="margin-bottom:8px; padding:12px; display:flex; justify-content:space-between; align-items:center;">
-                    <div>
-                        <strong style="color:#F1F5F9; font-size:14px;">👤 ${o.client_name || 'Cliente'}</strong>
-                        <div style="font-size:11px; color:#94A3B8;">⏰ ${dateFormatted} • ${o.address || 'Balcão'}</div>
-                    </div>
-                    <div style="text-align:right;">
-                        <strong style="color:#10B981; font-size:14px;">R$ ${Number(o.total || 0).toFixed(2)}</strong>
-                        <div style="font-size:10px; color:#94A3B8;">${o.status === 'completed' ? '✅ Concluído' : '🟡 ' + o.status}</div>
-                    </div>
+        container.innerHTML = this.currentSaleItems.map((item, idx) => `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #1E293B; font-size:12px;">
+                <div>
+                    <strong style="color:#F1F5F9;">${item.qty}x ${item.name}</strong>
+                    <div style="font-size:10px; color:#94A3B8;">Unit: R$ ${item.price.toFixed(2)}</div>
                 </div>
-            `;
-        }).join('');
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="color:#10B981; font-weight:700;">R$ ${item.total.toFixed(2)}</span>
+                    <button class="btn btn-sm" onclick="SalesManager.removeItemFromSale(${idx})" style="background:#EF4444; color:#fff; padding:1px 6px; font-size:10px;">✕</button>
+                </div>
+            </div>
+        `).join('');
+    },
 
-    } catch (e) {
-        container.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:20px;">Erro ao carregar lista de vendas.</div>';
+    updateSaleTotals() {
+        const subtotal = this.currentSaleItems.reduce((acc, i) => acc + i.total, 0);
+        const discount = parseFloat(document.getElementById('sale_discount_input')?.value) || 0;
+        const finalTotal = Math.max(0, subtotal - discount);
+
+        const subtotalEl = document.getElementById('sale_subtotal_display');
+        const finalTotalInput = document.getElementById('sale_final_total');
+
+        if (subtotalEl) subtotalEl.textContent = `R$ ${subtotal.toFixed(2)}`;
+        if (finalTotalInput) finalTotalInput.value = finalTotal.toFixed(2);
+    },
+
+    async saveManualSale() {
+        const client_name = document.getElementById('sale_client_name')?.value.trim() || 'Cliente Balcão';
+        const phone = document.getElementById('sale_phone')?.value.trim() || '';
+        const address = document.getElementById('sale_address')?.value.trim() || 'Venda no Balcão';
+        const discount = parseFloat(document.getElementById('sale_discount_input')?.value) || 0;
+        const total = parseFloat(document.getElementById('sale_final_total')?.value) || 0;
+
+        if (this.currentSaleItems.length === 0 && total <= 0) {
+            return alert('Adicione pelo menos um item ou informe o valor da venda!');
+        }
+
+        const subtotal = this.currentSaleItems.reduce((acc, i) => acc + i.total, 0);
+
+        const orderData = {
+            client_name,
+            phone,
+            address,
+            order_type: 'pickup',
+            payment_method: 'Dinheiro/Pix',
+            items: this.currentSaleItems,
+            subtotal: subtotal > 0 ? subtotal : total,
+            delivery_fee: 0,
+            discount: discount,
+            total: total,
+            status: 'completed',
+            created_at: new Date().toISOString()
+        };
+
+        try {
+            if (typeof dbClient !== 'undefined') {
+                await dbClient.from('orders').insert([orderData]);
+            }
+
+            if (typeof showToast === 'function') showToast('Venda manual registrada com sucesso!');
+            if (typeof closeModal === 'function') closeModal();
+
+            if (typeof renderDashboard === 'function') renderDashboard();
+            if (typeof OrdersManager !== 'undefined') OrdersManager.fetchOrders();
+
+        } catch (e) {
+            console.error('Erro ao registrar venda:', e);
+            alert('Erro ao salvar venda.');
+        }
     }
-}
+};
+
+window.openSaleModal = () => SalesManager.openSaleModal();
