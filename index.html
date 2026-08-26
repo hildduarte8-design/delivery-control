@@ -121,7 +121,7 @@
     </div>
 </section>
 
-<!-- ABA 2: PEDIDOS, VENDAS & CLIENTES (UNIFICADA) -->
+<!-- ABA 2: PEDIDOS, VENDAS & CLIENTES -->
 <section id="tab-orders" class="tab-content">
     <div class="subtabs" id="ordersSubtabs">
         <button class="active" data-sub="live-orders">🛍️ Pedidos ao Vivo</button>
@@ -129,7 +129,6 @@
         <button data-sub="customers">👥 Clientes</button>
     </div>
 
-    <!-- Sub-painel 1: Pedidos em Tempo Real do Cardápio -->
     <div class="sub-panel active" data-panel="live-orders">
         <div class="section-title">
             <span>🛍️ Pedidos em Tempo Real</span>
@@ -140,7 +139,6 @@
         </div>
     </div>
 
-    <!-- Sub-painel 2: Lançamento Manual e Histórico -->
     <div class="sub-panel" data-panel="manual-sales">
         <div class="section-title">Vendas & Serviços no Balcão</div>
         <button class="btn btn-large" onclick="openSaleModal()">
@@ -151,7 +149,6 @@
         <div id="salesList"></div>
     </div>
 
-    <!-- Sub-painel 3: Lista de Clientes & CRM -->
     <div class="sub-panel" data-panel="customers">
         <div class="section-title">
             <span>👥 Histórico de Clientes</span>
@@ -163,7 +160,7 @@
     </div>
 </section>
 
-<!-- ABA 3: CARDÁPIO DIGITAL (NOVA ABA EXCLUSIVA) -->
+<!-- ABA 3: CARDÁPIO DIGITAL -->
 <section id="tab-menu" class="tab-content">
     <div class="section-title">
         <span>🍔 Gestão de Pratos do Cardápio</span>
@@ -175,13 +172,16 @@
     </div>
 </section>
 
-<!-- ABA 4: ESTOQUE -->
-<section id="tab-stock" class="tab-content">
-    <div class="subtabs" id="stockSubtabs">
+<!-- ABA 4: GESTÃO & FINANCEIRO (UNIFICADA: ESTOQUE + GASTOS) -->
+<section id="tab-financial" class="tab-content">
+    <div class="subtabs" id="financialSubtabs">
         <button class="active" data-sub="insumos">📦 Insumos</button>
+        <button data-sub="fixed">📋 Contas Fixas</button>
+        <button data-sub="logistics">🛵 Logística</button>
         <button data-sub="calc">🧮 Calculadora</button>
     </div>
 
+    <!-- Sub-painel 1: Estoque de Insumos -->
     <div class="sub-panel active" data-panel="insumos">
         <div class="section-title">Meu Estoque <small id="stockCount">0 itens</small></div>
         <button class="btn btn-large" onclick="openStockModal()">
@@ -192,6 +192,44 @@
         <div id="stockList"></div>
     </div>
 
+    <!-- Sub-painel 2: Contas Fixas -->
+    <div class="sub-panel" data-panel="fixed">
+        <div class="card" style="background: linear-gradient(135deg, rgba(239,68,68,0.15) 0%, rgba(239,68,68,0.04) 100%); border-color: rgba(239,68,68,0.3);">
+            <div class="label" style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Total Mensal Fixo</div>
+            <div style="font-size:30px;font-weight:800;color:#EF4444;margin-top:6px;" id="fixedTotal">R$ 0,00</div>
+        </div>
+
+        <button class="btn btn-large" onclick="openFixedExpenseModal()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Nova Conta Fixa
+        </button>
+        <div style="height:14px"></div>
+        <div id="fixedList"></div>
+    </div>
+
+    <!-- Sub-painel 3: Gastos com Logística -->
+    <div class="sub-panel" data-panel="logistics">
+        <button class="btn btn-large" onclick="openLogisticsModal()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Novo Gasto de Logística
+        </button>
+        <div style="height:14px"></div>
+
+        <div class="filter-row">
+            <div style="flex:1;">
+                <label style="font-size:12px;color:#94A3B8;display:block;margin-bottom:4px;">Filtrar por data</label>
+                <input type="date" id="logisticsFilterDate" onchange="renderLogisticsList()">
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;">
+                <label style="font-size:12px;color:#94A3B8;margin-bottom:4px;">Total do dia</label>
+                <div class="total-chip negative" id="logisticsTotal">R$ 0,00</div>
+            </div>
+        </div>
+
+        <div id="logisticsList"></div>
+    </div>
+
+    <!-- Sub-painel 4: Calculadora de Receita -->
     <div class="sub-panel" data-panel="calc">
         <div class="section-title">Calculadora de Custo <small>Monte sua receita</small></div>
 
@@ -226,50 +264,7 @@
     </div>
 </section>
 
-<!-- ABA 5: GASTOS -->
-<section id="tab-expenses" class="tab-content">
-    <div class="subtabs" id="expSubtabs">
-        <button class="active" data-sub="fixed">📋 Contas Fixas</button>
-        <button data-sub="logistics">🛵 Logística</button>
-    </div>
-
-    <div class="sub-panel active" data-panel="fixed">
-        <div class="card" style="background: linear-gradient(135deg, rgba(239,68,68,0.15) 0%, rgba(239,68,68,0.04) 100%); border-color: rgba(239,68,68,0.3);">
-            <div class="label" style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Total Mensal Fixo</div>
-            <div style="font-size:30px;font-weight:800;color:#EF4444;margin-top:6px;" id="fixedTotal">R$ 0,00</div>
-        </div>
-
-        <button class="btn btn-large" onclick="openFixedExpenseModal()">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Nova Conta Fixa
-        </button>
-        <div style="height:14px"></div>
-        <div id="fixedList"></div>
-    </div>
-
-    <div class="sub-panel" data-panel="logistics">
-        <button class="btn btn-large" onclick="openLogisticsModal()">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Novo Gasto de Logística
-        </button>
-        <div style="height:14px"></div>
-
-        <div class="filter-row">
-            <div style="flex:1;">
-                <label style="font-size:12px;color:#94A3B8;display:block;margin-bottom:4px;">Filtrar por data</label>
-                <input type="date" id="logisticsFilterDate" onchange="renderLogisticsList()">
-            </div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;">
-                <label style="font-size:12px;color:#94A3B8;margin-bottom:4px;">Total do dia</label>
-                <div class="total-chip negative" id="logisticsTotal">R$ 0,00</div>
-            </div>
-        </div>
-
-        <div id="logisticsList"></div>
-    </div>
-</section>
-
-<!-- ABA 6: CONFIGURAÇÕES DA LOJA -->
+<!-- ABA 5: CONFIGURAÇÕES DA LOJA -->
 <section id="tab-settings" class="tab-content">
     <div class="section-title">🎨 Personalização & Marca</div>
     <div class="card">
@@ -337,7 +332,7 @@
     <button onclick="window.location.href='cardapio.html'"><span class="icon-wrap" style="background:rgba(245,158,11,0.15);color:#F59E0B;">📖</span> Ver Cardápio</button>
 </div>
 
-<!-- NAVEGAÇÃO INFERIOR -->
+<!-- NAVEGAÇÃO INFERIOR UNIFICADA (5 ABAS) -->
 <nav class="bottom-nav">
     <button class="active" data-tab="dashboard">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 0 0 1 1h3m10-11l2 2m-2-2v10a1 1 0 0 1-1 1h-3m0 0a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1"/></svg>
@@ -353,13 +348,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
         Cardápio
     </button>
-    <button data-tab="stock">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-        Estoque
-    </button>
-    <button data-tab="expenses">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-        Gastos
+    <button data-tab="financial">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        Gestão
     </button>
     <button data-tab="settings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -399,7 +390,6 @@
 <script src="js/analytics.js"></script>
 
 <script>
-    // Executa a renderização do Analytics sempre que o Dashboard abre
     document.addEventListener('DOMContentLoaded', () => {
         if (typeof AnalyticsManager !== 'undefined') {
             AnalyticsManager.render();
