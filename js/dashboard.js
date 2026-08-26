@@ -1,129 +1,135 @@
-// js/dashboard.js - Painel de Controle e Resumo de Vendas
+// js/dashboard.js - Painel Principal do Dashboard & Resumo Financeiro
 
-let currentAnalyticsPeriod = 'today';
+async function renderDashboard() {
+    const balanceValue = document.getElementById('balanceValue');
+    const balanceTrend = document.getElementById('balanceTrend');
+    const inToday = document.getElementById('inToday');
+    const outToday = document.getElementById('outToday');
+    const weekBalance = document.getElementById('weekBalance');
+    const weekRange = document.getElementById('weekRange');
+    const weekBadge = document.getElementById('weekBadge');
+    const monthBalance = document.getElementById('monthBalance');
+    const monthRange = document.getElementById('monthRange');
+    const monthBadge = document.getElementById('monthBadge');
+    const movList = document.getElementById('movList');
 
-function renderDashboard() {
-    const dashEl = document.getElementById('tab-dashboard');
-    if (!dashEl) return;
+    if (!balanceValue) return;
 
-    // Busca os dados do analytics local (caso a função exista)
-    const analytics = typeof getAnalyticsData === 'function' 
-        ? getAnalyticsData(currentAnalyticsPeriod) 
-        : { totalRevenue: 0, salesCount: 0, totalExpenses: 0, netProfit: 0, topProducts: [] };
+    try {
+        let orders = [];
+        let expenses = [];
 
-    dashEl.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-            <div class="section-title" style="margin:0;">📊 Resumo de Vendas</div>
-            <select id="analytics-period" onchange="changeAnalyticsPeriod(this.value)" style="background:#1E293B; color:#F1F5F9; border:1px solid #334155; padding:6px 10px; border-radius:8px; font-size:12px; font-weight:bold;">
-                <option value="today" ${currentAnalyticsPeriod === 'today' ? 'selected' : ''}>Hoje</option>
-                <option value="7days" ${currentAnalyticsPeriod === '7days' ? 'selected' : ''}>Últimos 7 Dias</option>
-                <option value="month" ${currentAnalyticsPeriod === 'month' ? 'selected' : ''}>Este Mês</option>
-            </select>
-        </div>
+        // Busca dados do Supabase se disponível, ou usa o estado local
+        if (typeof dbClient !== 'undefined') {
+            const [ordersRes, expRes] = await Promise.all([
+                dbClient.from('orders').select('*').order('created_at', { ascending: false }),
+                dbClient.from('expenses').select('*')
+            ]);
+            orders = ordersRes.data || [];
+            expenses = expRes.data || [];
+        } else if (typeof state !== 'undefined') {
+            orders = state.sales || [];
+            expenses = [...(state.expenses?.fixed || []), ...(state.expenses?.logistics || [])];
+        }
 
-        <!-- CARDS DE SALDO E LUCRO -->
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;">
-            <div class="card" style="margin:0; padding:14px; background:#1E293B; border-left:4px solid #10B981;">
-                <div style="font-size:11px; color:#94A3B8; text-transform:uppercase; font-weight:bold;">Faturamento</div>
-                <div style="font-size:18px; font-weight:800; color:#10B981; margin-top:4px;">
-                    R$ ${Number(analytics.totalRevenue || 0).toFixed(2)}
-                </div>
-                <div style="font-size:10px; color:#64748B; margin-top:2px;">${analytics.salesCount || 0} pedidos</div>
-            </div>
+        const now = new Date();
+        const todayStr = now.toISOString().split('T')[0];
 
-            <div class="card" style="margin:0; padding:14px; background:#1E293B; border-left:4px solid #EF4444;">
-                <div style="font-size:11px; color:#94A3B8; text-transform:uppercase; font-weight:bold;">Custos/Saídas</div>
-                <div style="font-size:18px; font-weight:800; color:#EF4444; margin-top:4px;">
-                    R$ ${Number(analytics.totalExpenses || 0).toFixed(2)}
-                </div>
-            </div>
-        </div>
+        // 1. Entradas de Hoje
+        const todayOrders = orders.filter(o => {
+            if (o.status === 'cancelled') return false;
+            const orderDate = new Date(o.created_at || o.date).toISOString().split('T')[0];
+            return orderDate === todayStr;
+        });
+        const todayIn = todayOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
 
-        <div class="card" style="background:#0F172A; border:1px solid #334155; margin-bottom:16px; padding:14px;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:13px; font-weight:bold; color:#CBD5E1;">LUCRO LÍQUIDO REAL</span>
-                <span style="font-size:20px; font-weight:800; color:${(analytics.netProfit || 0) >= 0 ? '#10B981' : '#EF4444'};">
-                    R$ ${Number(analytics.netProfit || 0).toFixed(2)}
-                </span>
-            </div>
-        </div>
+        // 2. Gastos de Hoje
+        const todayExp = expenses.filter(e => {
+            const expDate = new Date(e.created_at || e.date).toISOString().split('T')[0];
+            return expDate === todayStr;
+        });
+        const todayOut = todayExp.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
 
-        <!-- CARD DO CARDÁPIO DIGITAL NO DASHBOARD -->
-        <div class="card" style="background: linear-gradient(135deg, rgba(245,158,11,0.15) 0%, rgba(30,41,59,1) 100%); border-color: rgba(245,158,11,0.3); padding: 16px; margin-bottom:16px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
-                <div>
-                    <div style="font-size:15px; font-weight:800; color:#F59E0B;">📖 Cardápio Digital</div>
-                    <div style="font-size:12px; color:#94A3B8; margin-top:2px;">Divulgue sua loja e receba pedidos organizados</div>
-                </div>
-                <span style="font-size: 24px;">🛵</span>
-            </div>
-            
-            <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
-                <button class="btn btn-sm btn-secondary" onclick="navigator.clipboard.writeText(window.location.origin + '/cardapio.html'); showToast('Link copiado!');" style="font-size:12px; padding:10px;">
-                    📋 Copiar Link
-                </button>
-                <button class="btn btn-sm" style="background:#25D366; color:#fff; font-size:12px; padding:10px;" onclick="window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent('Olá! Confira nosso cardápio e faça seu pedido por aqui: ' + window.location.origin + '/cardapio.html'), '_blank')">
-                    📲 Enviar Whats
-                </button>
-                <button class="btn btn-sm btn-secondary" onclick="exportMenuToPDF()" style="font-size:12px; padding:10px;">
-                    📄 Baixar PDF
-                </button>
-                <button class="btn btn-sm" style="background:#F59E0B; color:#fff; font-size:12px; padding:10px;" onclick="window.location.href='cardapio.html'">
-                    👁️ Abrir
-                </button>
-            </div>
-        </div>
+        if (inToday) inToday.textContent = `R$ ${todayIn.toFixed(2)}`;
+        if (outToday) outToday.textContent = `R$ ${todayOut.toFixed(2)}`;
 
-        <!-- ÁREA DO ANALYTICS DINÂMICO (SUPABASE) -->
-        <div id="analytics-container" style="margin-bottom:16px;"></div>
+        // 3. Saldo Atual Geral (Entradas - Gastos)
+        const totalInGeral = orders
+            .filter(o => o.status !== 'cancelled')
+            .reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
+        const totalOutGeral = expenses
+            .reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
+        const currentBalance = totalInGeral - totalOutGeral;
 
-        <!-- PRODUTOS MAIS VENDIDOS -->
-        <div class="card" style="margin-bottom:16px;">
-            <div style="font-size:13px; font-weight:bold; color:#F1F5F9; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
-                🏆 Produtos Mais Vendidos (Resumo)
-            </div>
-            <div id="top-products-list">
-                ${renderTopProductsHtml(analytics.topProducts)}
-            </div>
-        </div>
+        balanceValue.textContent = `R$ ${currentBalance.toFixed(2)}`;
+        if (balanceTrend) {
+            balanceTrend.textContent = orders.length > 0 
+                ? `${orders.length} pedido(s) registrado(s)` 
+                : 'Sem movimentações ainda';
+        }
 
-        <!-- BOTÃO DE FECHAMENTO DE CAIXA -->
-        <button class="btn btn-large" onclick="closeDailyCashier()" style="background:#FF6B35; font-weight:bold; width:100%;">
-            🔒 Fechar Caixa do Dia
-        </button>
-    `;
+        // 4. Saldo da Semana
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay());
+        startOfWeek.setHours(0,0,0,0);
 
-    // 🟢 RENDERIZA O MÓDULO DE ANALYTICS APÓS MONTAR A TELA
-    if (typeof AnalyticsManager !== 'undefined') {
-        AnalyticsManager.render();
-    }
-}
+        const weekOrders = orders.filter(o => o.status !== 'cancelled' && new Date(o.created_at || o.date) >= startOfWeek);
+        const weekExp = expenses.filter(e => new Date(e.created_at || e.date) >= startOfWeek);
+        const weekInVal = weekOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
+        const weekOutVal = weekExp.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
+        const weekNet = weekInVal - weekOutVal;
 
-function renderTopProductsHtml(products) {
-    if (!products || products.length === 0) {
-        return '<div style="font-size:12px; color:#64748B; text-align:center; padding:10px;">Nenhum produto vendido neste período.</div>';
-    }
+        if (weekBalance) weekBalance.textContent = `R$ ${weekNet.toFixed(2)}`;
+        if (weekRange) weekRange.textContent = `${startOfWeek.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'})} até hoje`;
+        if (weekBadge) {
+            weekBadge.textContent = weekNet >= 0 ? '🟢 Positivo' : '🔴 Deficit';
+            weekBadge.style.background = weekNet >= 0 ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)';
+            weekBadge.style.color = weekNet >= 0 ? '#10B981' : '#EF4444';
+        }
 
-    return products.map((p, index) => `
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #334155;">
-            <div style="display:flex; align-items:center; gap:8px;">
-                <span style="font-size:12px; font-weight:bold; color:#FF6B35; background:#0F172A; width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center;">${index + 1}</span>
-                <span style="font-size:13px; font-weight:600; color:#F1F5F9;">${p.name}</span>
-            </div>
-            <span style="font-size:12px; font-weight:bold; color:#94A3B8;">${p.qty}x un.</span>
-        </div>
-    `).join('');
-}
+        // 5. Saldo do Mês
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthOrders = orders.filter(o => o.status !== 'cancelled' && new Date(o.created_at || o.date) >= startOfMonth);
+        const monthExp = expenses.filter(e => new Date(e.created_at || e.date) >= startOfMonth);
+        const monthInVal = monthOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
+        const monthOutVal = monthExp.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
+        const monthNet = monthInVal - monthOutVal;
 
-function changeAnalyticsPeriod(period) {
-    currentAnalyticsPeriod = period;
-    renderDashboard();
-}
+        if (monthBalance) monthBalance.textContent = `R$ ${monthNet.toFixed(2)}`;
+        if (monthRange) monthRange.textContent = now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+        if (monthBadge) {
+            monthBadge.textContent = monthNet >= 0 ? '🟢 Positivo' : '🔴 Deficit';
+            monthBadge.style.background = monthNet >= 0 ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)';
+            monthBadge.style.color = monthNet >= 0 ? '#10B981' : '#EF4444';
+        }
 
-function closeDailyCashier() {
-    const analytics = typeof getAnalyticsData === 'function' ? getAnalyticsData('today') : { totalRevenue: 0, netProfit: 0, salesCount: 0 };
-    
-    if (confirm(`Deseja fechar o caixa de hoje?\n\nFaturamento: R$ ${analytics.totalRevenue.toFixed(2)}\nLucro: R$ ${analytics.netProfit.toFixed(2)}\nTotal Pedidos: ${analytics.salesCount}`)) {
-        if (typeof showToast === 'function') showToast('Caixa do dia fechado e registrado no histórico!');
+        // 6. Últimas Movimentações (5 mais recentes)
+        if (movList) {
+            const recentOrders = orders.slice(0, 5);
+            if (recentOrders.length === 0) {
+                movList.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:15px; font-size:12px;">Nenhuma movimentação recente</div>';
+            } else {
+                movList.innerHTML = recentOrders.map(o => {
+                    const timeStr = new Date(o.created_at || o.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                    return `
+                        <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #1E293B;">
+                            <div>
+                                <strong style="color:#F1F5F9; font-size:13px; display:block;">👤 ${o.client_name || 'Venda/Pedido'}</strong>
+                                <span style="font-size:11px; color:#94A3B8;">⏰ ${timeStr} • ${o.order_type === 'delivery' ? '🛵 Entrega' : '🏪 Balcão'}</span>
+                            </div>
+                            <span style="font-size:14px; font-weight:bold; color:#10B981;">+ R$ ${Number(o.total || o.amount || 0).toFixed(2)}</span>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+
+        // 7. Renderiza Analytics
+        if (typeof AnalyticsManager !== 'undefined' && typeof AnalyticsManager.render === 'function') {
+            AnalyticsManager.render();
+        }
+
+    } catch (e) {
+        console.error('Erro ao renderizar Dashboard:', e);
     }
 }
