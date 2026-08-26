@@ -23,9 +23,8 @@ function showWelcome() {
         <div style="background:#0F172A; border-radius:12px; padding:14px; margin-bottom:14px; border:1px solid #334155;">
             <div style="font-size:13px; color:#94A3B8; line-height:1.7;">
                 <strong style="color:#FF6B35;">🛍️ Pedidos:</strong> acompanhamento ao vivo<br>
-                <strong style="color:#FF6B35;">📦 Estoque:</strong> insumos + calculadora de custo<br>
-                <strong style="color:#FF6B35;">💰 Entradas:</strong> vendas e serviços com canal<br>
-                <strong style="color:#FF6B35;">📊 Gastos:</strong> contas fixas e logística<br>
+                <strong style="color:#FF6B35;">🍔 Cardápio:</strong> gestão de pratos e preços<br>
+                <strong style="color:#FF6B35;">📊 Gestão:</strong> insumos, contas e logística<br>
                 <strong style="color:#FF6B35;">🏠 Dashboard:</strong> saldo em tempo real
             </div>
         </div>
@@ -69,15 +68,15 @@ function validatePassword() {
     }
 }
 
-// --- NAVEGAÇÃO POR GESTOS (INCLUINDO A ABA PEDIDOS) ---
+// --- NAVEGAÇÃO POR GESTOS (COM AS 5 ABAS UNIFICADAS) ---
 function initGestureNavigation() {
     let startX = 0;
     let startY = 0;
     let currentX = 0;
     let isDragging = false;
 
-    // Incluído 'orders' no fluxo de telas
-    const tabsOrder = ['dashboard', 'orders', 'stock', 'expenses', 'settings'];
+    // Estrutura das 5 abas unificadas
+    const tabsOrder = ['dashboard', 'orders', 'menu', 'financial', 'settings'];
     const mainContainer = document.querySelector('main');
 
     if (!mainContainer) return;
@@ -169,8 +168,8 @@ function init() {
     if (typeof updateNotificationBadge === 'function') updateNotificationBadge();
     
     // Inicializa a escuta de pedidos em tempo real
-    if (typeof OrdersManager !== 'undefined' && OrdersManager.init) {
-        OrdersManager.init();
+    if (typeof OrdersManager !== 'undefined' && OrdersManager.initRealtime) {
+        OrdersManager.initRealtime();
     }
     
     initGestureNavigation();
