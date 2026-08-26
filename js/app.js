@@ -1,11 +1,20 @@
-// js/app.js - Inicialização, Autenticação, Relógio e Gestos de Navegação com Física Tátil
+// js/app.js - Inicialização, Autenticação, Tema Dinâmico e Gestos de Navegação
+
+// Aplica a cor da marca dinamicamente no CSS do app
+function applyThemeColor(colorHex) {
+    if (!colorHex) return;
+    document.documentElement.style.setProperty('--primary-color', colorHex);
+    
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeMeta) themeMeta.setAttribute('content', colorHex);
+}
 
 function updateHeader() {
     const d = new Date();
     const hh = d.getHours();
-    let g = 'Bom dia';
-    if (hh >= 12 && hh < 18) g = 'Boa tarde';
-    else if (hh >= 18 || hh < 5) g = 'Boa noite';
+    let g = 'Bom dia ☀️';
+    if (hh >= 12 && hh < 18) g = 'Boa tarde 🌤️';
+    else if (hh >= 18 || hh < 5) g = 'Boa noite 🌙';
     
     const greetingEl = document.getElementById('greetingText');
     const dateEl = document.getElementById('currentDate');
@@ -22,10 +31,10 @@ function showWelcome() {
         </p>
         <div style="background:#0F172A; border-radius:12px; padding:14px; margin-bottom:14px; border:1px solid #334155;">
             <div style="font-size:13px; color:#94A3B8; line-height:1.7;">
-                <strong style="color:#FF6B35;">🛍️ Pedidos:</strong> acompanhamento ao vivo<br>
-                <strong style="color:#FF6B35;">🍔 Cardápio:</strong> gestão de pratos e preços<br>
-                <strong style="color:#FF6B35;">📊 Gestão:</strong> insumos, contas e logística<br>
-                <strong style="color:#FF6B35;">🏠 Dashboard:</strong> saldo em tempo real
+                <strong style="color:var(--primary-color, #FF6B35);">🛍️ Pedidos:</strong> acompanhamento ao vivo<br>
+                <strong style="color:var(--primary-color, #FF6B35);">🍔 Cardápio:</strong> gestão de pratos e preços<br>
+                <strong style="color:var(--primary-color, #FF6B35);">📊 Gestão:</strong> insumos, contas e logística<br>
+                <strong style="color:var(--primary-color, #FF6B35);">🏠 Dashboard:</strong> saldo em tempo real
             </div>
         </div>
         <button class="btn btn-large" onclick="localStorage.setItem('dly_welcomed','1'); closeModal(); if(typeof weeklyNotificationBanner === 'function') weeklyNotificationBanner();">
@@ -34,48 +43,52 @@ function showWelcome() {
     `);
 }
 
+// Controle da Tela de Login / Bloqueio Total
 function checkAdminAuth() {
-    if (typeof DB === 'undefined') return;
-    const settings = DB.load('dly_settings', {});
+    const settings = typeof DB !== 'undefined' ? DB.load('dly_settings', {}) : {};
     const savedPassword = settings.password;
+    const loginScreen = document.getElementById('loginScreen');
+    const storeTitle = document.getElementById('login_store_title');
 
-    // Se nenhuma senha foi definida ainda, libera o acesso
-    if (!savedPassword) return;
+    // Carrega nome e cor salvos da loja
+    if (storeTitle && settings.store_name) storeTitle.textContent = settings.store_name;
+    if (settings.primary_color) applyThemeColor(settings.primary_color);
 
-    // Se já foi autenticado nesta sessão do navegador, libera
-    if (sessionStorage.getItem('dly_auth') === 'true') return;
+    // Se nenhuma senha foi salva ou a sessão já está autenticada, esconde a tela de login
+    if (!savedPassword || sessionStorage.getItem('dly_auth') === 'true') {
+        if (loginScreen) loginScreen.style.display = 'none';
+        return true;
+    }
 
-    // Solicita a senha para desbloquear a interface
-    openModal('🔒 Acesso Restrito', `
-        <div class="form-group" style="margin-top: 10px;">
-            <label>Digite a senha do gestor</label>
-            <input type="password" id="admin_pass_input" placeholder="****" style="margin-top: 6px;">
-        </div>
-        <button class="btn btn-large" onclick="validatePassword()" style="margin-top: 12px;">Entrar no Painel</button>
-    `);
+    // Exibe a tela de login bloqueando o painel
+    if (loginScreen) loginScreen.style.display = 'flex';
+    return false;
 }
 
 function validatePassword() {
     const input = document.getElementById('admin_pass_input')?.value;
     const settings = typeof DB !== 'undefined' ? DB.load('dly_settings', {}) : {};
+    const loginScreen = document.getElementById('loginScreen');
 
     if (input && input === settings.password) {
         sessionStorage.setItem('dly_auth', 'true');
-        closeModal();
-        showToast('Acesso liberado!');
+        if (loginScreen) loginScreen.style.display = 'none';
+        if (typeof showToast === 'function') showToast('Acesso liberado!');
+        
+        if (typeof switchTab === 'function') switchTab('dashboard');
+        if (typeof renderDashboard === 'function') renderDashboard();
     } else {
-        showToast('Senha incorreta!', 'error');
+        if (typeof showToast === 'function') showToast('Senha incorreta!', 'error');
     }
 }
 
-// --- NAVEGAÇÃO POR GESTOS (COM AS 5 ABAS UNIFICADAS) ---
+// --- NAVEGAÇÃO POR GESTOS (5 ABAS UNIFICADAS) ---
 function initGestureNavigation() {
     let startX = 0;
     let startY = 0;
     let currentX = 0;
     let isDragging = false;
 
-    // Estrutura das 5 abas unificadas
     const tabsOrder = ['dashboard', 'orders', 'menu', 'financial', 'settings'];
     const mainContainer = document.querySelector('main');
 
@@ -84,7 +97,6 @@ function initGestureNavigation() {
     mainContainer.style.willChange = 'transform, opacity';
 
     mainContainer.addEventListener('touchstart', (e) => {
-        // Ignora toques em modais, inputs, seletores ou listas horizontais
         if (e.target.closest('.cross-sell-items, .subtabs, .modal-overlay, input, textarea, select, .category-scroll-bar')) {
             isDragging = false;
             return;
@@ -161,13 +173,15 @@ function init() {
     if (typeof loadAll === 'function') loadAll();
     
     updateHeader();
-    checkAdminAuth();
     
-    if (typeof switchTab === 'function') switchTab('dashboard');
-    if (typeof renderDashboard === 'function') renderDashboard();
+    const isAuthed = checkAdminAuth();
+    if (isAuthed) {
+        if (typeof switchTab === 'function') switchTab('dashboard');
+        if (typeof renderDashboard === 'function') renderDashboard();
+    }
+
     if (typeof updateNotificationBadge === 'function') updateNotificationBadge();
     
-    // Inicializa a escuta de pedidos em tempo real
     if (typeof OrdersManager !== 'undefined' && OrdersManager.initRealtime) {
         OrdersManager.initRealtime();
     }
