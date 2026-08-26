@@ -247,40 +247,83 @@
         <div id="logisticsList"></div>
     </div>
 
-    <!-- Sub-painel 4: Calculadora de Receita -->
+   <!-- Sub-painel 4: Calculadora de Ficha Técnica e Precificação para Delivery -->
     <div class="sub-panel" data-panel="calc">
-        <div class="section-title">Calculadora de Custo <small>Monte sua receita</small></div>
-
-        <div class="form-group">
-            <label>Nome da Receita / Produto Final</label>
-            <input type="text" id="recipeName" placeholder="Ex: Marmita executiva">
+        <div class="section-title">
+            <span>🧮 Calculadora & Ficha Técnica</span>
+            <small>Precificação inteligente para Delivery</small>
         </div>
 
-        <div id="ingredientsList"></div>
-        <button class="btn btn-secondary btn-sm" onclick="addIngredient()" style="margin-top:4px;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Adicionar Ingrediente
-        </button>
+        <div class="card" style="background:#1E293B; margin-bottom:12px;">
+            <div class="form-group">
+                <label>Nome do Prato / Receita *</label>
+                <input type="text" id="recipeName" placeholder="Ex: Marmita Executiva de Carne / Pastel Especial">
+            </div>
 
-        <button class="btn btn-large" onclick="calculateCost()" style="margin-top:16px;">Calcular Custo</button>
-
-        <div class="cost-result hidden" id="costResult">
-            <div class="label">Preço de Custo Real</div>
-            <div class="value" id="costValue">R$ 0,00</div>
-            <div style="font-size:13px;color:#94A3B8;">Sugestões de venda:</div>
-            <div class="sales-suggestion">
-                <button onclick="setPriceFromMargin(0.3)"><span class="pct">+30% lucro</span><span class="amt" id="margin30">R$ 0,00</span></button>
-                <button onclick="setPriceFromMargin(0.5)"><span class="pct">+50% lucro</span><span class="amt" id="margin50">R$ 0,00</span></button>
-                <button onclick="setPriceFromMargin(1.0)"><span class="pct">+100% lucro</span><span class="amt" id="margin100">R$ 0,00</span></button>
+            <div class="form-group">
+                <label>Rendimento da Receita (Porções / Unidades)</label>
+                <input type="number" id="recipeYield" value="1" min="1" oninput="CalculatorManager.calculateCost()" placeholder="Ex: 1 para porção única, ou 10 para produção em lote">
             </div>
         </div>
 
-        <button class="btn btn-success" id="saveRecipeBtn" onclick="saveCurrentRecipe()">💾 Salvar Receita</button>
+        <!-- LISTA DINÂMICA DE INSUMOS E EMBALAGENS -->
+        <div class="section-title" style="font-size:13px; color:#F59E0B;">📦 Insumos & Embalagens</div>
+        <div id="ingredientsList"></div>
 
-        <div class="section-title" style="margin-top:24px;">Receitas Salvas</div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="CalculatorManager.addIngredientRow()" style="margin-top:4px; margin-bottom:16px;">
+            ➕ Adicionar Outro Insumo / Embalagem
+        </button>
+
+        <!-- CARD DE MARGEM E TAXAS DO DELIVERY -->
+        <div class="card" style="background:#0F172A; border:1px solid #334155; margin-bottom:14px;">
+            <div style="font-size:12px; font-weight:700; color:#CBD5E1; margin-bottom:8px;">⚙️ Configurar Taxas e Margem Desejada</div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px;">
+                <div>
+                    <label style="font-size:10px; color:#94A3B8;">Cartão (%)</label>
+                    <input type="number" id="calcCardFee" value="2.5" step="0.1" oninput="CalculatorManager.calculateCost()" style="font-size:12px; padding:6px;">
+                </div>
+                <div>
+                    <label style="font-size:10px; color:#94A3B8;">iFood / App (%)</label>
+                    <input type="number" id="calcDeliveryFee" value="12.0" step="0.1" oninput="CalculatorManager.calculateCost()" style="font-size:12px; padding:6px;">
+                </div>
+                <div>
+                    <label style="font-size:10px; color:#94A3B8;">Lucro Alvo (%)</label>
+                    <input type="number" id="calcProfitMargin" value="50.0" step="1" oninput="CalculatorManager.calculateCost()" style="font-size:12px; padding:6px;">
+                </div>
+            </div>
+        </div>
+
+        <!-- RESUMO DO CUSTO E PREÇO SUGERIDO -->
+        <div class="cost-result hidden" id="costResult" style="margin-bottom:16px;">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px;">
+                <div style="background:#0F172A; padding:10px; border-radius:8px; text-align:center; border:1px solid #334155;">
+                    <div class="label" style="font-size:10px; color:#94A3B8;">Custo Total Lote</div>
+                    <div class="value" id="costValue" style="font-size:18px; font-weight:800; color:#EF4444;">R$ 0,00</div>
+                </div>
+                <div style="background:#0F172A; padding:10px; border-radius:8px; text-align:center; border:1px solid #334155;">
+                    <div class="label" style="font-size:10px; color:#94A3B8;">Custo por Porção (CMV)</div>
+                    <div class="value" id="costPerPortion" style="font-size:18px; font-weight:800; color:#F59E0B;">R$ 0,00</div>
+                </div>
+            </div>
+
+            <div style="font-size:12px; font-weight:700; color:#F1F5F9; margin-bottom:6px;">💡 Sugestão de Preço de Venda:</div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+                <div style="background:rgba(16,185,129,0.15); border:1px solid #10B981; padding:10px; border-radius:8px; text-align:center;">
+                    <span style="font-size:10px; color:#CBD5E1; display:block;">🏪 Preço Balcão</span>
+                    <strong id="suggestedCounterPrice" style="font-size:16px; color:#10B981;">R$ 0,00</strong>
+                </div>
+                <div style="background:rgba(245,158,11,0.15); border:1px solid #F59E0B; padding:10px; border-radius:8px; text-align:center;">
+                    <span style="font-size:10px; color:#CBD5E1; display:block;">🛵 Preço iFood / Delivery</span>
+                    <strong id="suggestedDeliveryPrice" style="font-size:16px; color:#F59E0B;">R$ 0,00</strong>
+                </div>
+            </div>
+        </div>
+
+        <button type="button" class="btn btn-success btn-large" onclick="CalculatorManager.saveCurrentRecipe()">💾 Salvar Ficha Técnica</button>
+
+        <div class="section-title" style="margin-top:24px;">Minhas Fichas Técnicas Salvas</div>
         <div id="recipesList"></div>
     </div>
-</section>
 
 <!-- ABA 5: CONFIGURAÇÕES DA LOJA -->
 <section id="tab-settings" class="tab-content">
@@ -390,25 +433,24 @@
 </div>
 
 <!-- SCRIPTS MODULARES -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>    
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/storage.js"></script>
 <script src="js/calculations.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/stock.js"></script>
 <script src="js/sales.js"></script>
 <script src="js/expenses.js"></script>
+<script src="js/calculator.js"></script>
 <script src="js/dashboard.js"></script>
 <script src="js/notifications.js"></script>
 <script src="js/pwa.js"></script>
 <script src="js/app.js"></script>
-<script src="js/menu-admin.js"></script>
 <script src="js/settings.js"></script>
+<script src="js/menu-admin.js"></script>
+<script src="js/menu-pdf.js"></script>
 <script src="js/orders.js"></script>
 <script src="js/customers.js"></script>
-<script src="js/analytics.js"></script>
-<script src="js/settings.js"></script>
-<script src="js/menu-admin.js"></script>
-<script src="js/menu-pdf.js"></script>    
+<script src="js/analytics.js"></script>  
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
