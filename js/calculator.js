@@ -1,16 +1,64 @@
-// js/calculator.js - Ficha Técnica Profissional e Precificação Amigável
+// js/calculator.js - Ficha Técnica Sincronizada com Estoque em Tempo Real
 
 const CalculatorManager = {
     ingredientRows: [],
+    stockItemsCache: [],
 
-    init() {
+    async init() {
         this.ingredientRows = [];
+        await this.refreshStockList();
+        
         const container = document.getElementById('ingredientsList');
-        if (container) {
-            container.innerHTML = '';
+        if (container && container.children.length === 0) {
             this.addIngredientRow();
         }
         this.loadSavedRecipes();
+    },
+
+    // Sincroniza e puxa insumos atualizados do Banco / LocalStorage
+    async refreshStockList() {
+        try {
+            if (typeof dbClient !== 'undefined') {
+                const { data } = await dbClient.from('stock').select('*').order('name', { ascending: true });
+                this.stockItemsCache = data || [];
+            } else if (typeof DB !== 'undefined') {
+                this.stockItemsCache = DB.load('dly_stock', []);
+            }
+
+            // Atualiza todos os selects já abertos na tela
+            document.querySelectorAll('.ing-stock-select').forEach(select => {
+                const currentValue = select.value;
+                select.innerHTML = '<option value="">-- Puxar Item do Estoque (Opcional) --</option>' + this.getStockOptionsHtml();
+                select.value = currentValue;
+            });
+
+            // Recalcula custos com os novos preços
+            this.calculateCost();
+
+            if (typeof showToast === 'function') {
+                showToast('Insumos sincronizados com o estoque!');
+            }
+        } catch (e) {
+            console.error('Erro ao sincronizar estoque na calculadora:', e);
+        }
+    },
+
+    getStockOptionsHtml() {
+        if (!this.stockItemsCache || this.stockItemsCache.length === 0) return '';
+
+        return this.stockItemsCache.map(item => {
+            const price = Number(item.unit_cost || item.price || 0);
+            const pkgQty = Number(item.package_qty || 1);
+            const unit = item.unit || 'un';
+
+            return `<option value="${item.id || item.name}" 
+                data-name="${item.name.replace(/"/g, '&quot;')}" 
+                data-price="${price * pkgQty}" 
+                data-qty="${pkgQty}" 
+                data-unit="${unit}">
+                ${item.name} (R$ ${price.toFixed(2)}/${unit})
+            </option>`;
+        }).join('');
     },
 
     addIngredientRow(data = null) {
@@ -26,7 +74,6 @@ const CalculatorManager = {
                     <button type="button" class="btn btn-sm" onclick="CalculatorManager.removeIngredientRow('${rowId}')" style="background:#EF4444; color:#fff; padding:2px 8px; font-size:10px;">✕ Excluir</button>
                 </div>
 
-                <!-- SELETOR RÁPIDO DO ESTOQUE -->
                 <div class="form-group" style="margin-bottom:8px;">
                     <select class="ing-stock-select" onchange="CalculatorManager.onSelectStockItem('${rowId}', this.value)" style="font-size:12px; padding:6px; background:#1E293B; color:#F1F5F9; border:1px solid #475569;">
                         <option value="">-- Puxar Item do Estoque (Opcional) --</option>
@@ -36,20 +83,19 @@ const CalculatorManager = {
 
                 <div class="form-group" style="margin-bottom:8px;">
                     <label style="font-size:11px; color:#94A3B8;">Nome do Ingrediente ou Embalagem</label>
-                    <input type="text" class="ing-name" value="${data?.name || ''}" placeholder="Ex: Queijo Muçarela, Caixa de Pizza, Óleo" style="font-size:12px; padding:6px;">
+                    <input type="text" class="ing-name" value="${data?.name || ''}" placeholder="Ex: Queijo Muçarela, Caixa de Pizza" style="font-size:12px; padding:6px;">
                 </div>
 
-                <!-- EMBALAGEM COMPRADA (PREÇO x TAMANHO) -->
                 <div style="background:#1E293B; padding:8px; border-radius:6px; margin-bottom:8px;">
-                    <div style="font-size:10px; font-weight:700; color:#CBD5E1; margin-bottom:4px; text-transform:uppercase;">1. Dados da Embalagem Comprada no Mercado</div>
+                    <div style="font-size:10px; font-weight:700; color:#CBD5E1; margin-bottom:4px; text-transform:uppercase;">1. Dados da Embalagem / Compra</div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:6px;">
                         <div>
                             <label style="font-size:10px; color:#94A3B8;">Preço Pago (R$)</label>
-                            <input type="number" step="0.01" class="ing-purchase-price" value="${data?.purchasePrice || ''}" placeholder="Ex: 45.00" oninput="CalculatorManager.calculateCost()" style="font-size:12px; padding:6px;">
+                            <input type="number" step="0.01" class="ing-purchase-price" value="${data?.purchasePrice || ''}" placeholder="120.00" oninput="CalculatorManager.calculateCost()" style="font-size:12px; padding:6px;">
                         </div>
                         <div>
-                            <label style="font-size:10px; color:#94A3B8;">Tamanho / Peso</label>
-                            <input type="number" step="0.001" class="ing-purchase-qty" value="${data?.purchaseQty || '1'}" placeholder="Ex: 1 ou 500" oninput="CalculatorManager.calculateCost()" style="font-size:12px; padding:6px;">
+                            <label style="font-size:10px; color:#94A3B8;">Tamanho/Peso</label>
+                            <input type="number" step="0.001" class="ing-purchase-qty" value="${data?.purchaseQty || '1'}" placeholder="3.5" oninput="CalculatorManager.calculateCost()" style="font-size:12px; padding:6px;">
                         </div>
                         <div>
                             <label style="font-size:10px; color:#94A3B8;">Unidade</label>
@@ -64,13 +110,12 @@ const CalculatorManager = {
                     </div>
                 </div>
 
-                <!-- QUANTIDADE USADA NA RECEITA -->
                 <div style="background:#1E293B; padding:8px; border-radius:6px;">
-                    <div style="font-size:10px; font-weight:700; color:#CBD5E1; margin-bottom:4px; text-transform:uppercase;">2. Quanto vai no prato / porção</div>
+                    <div style="font-size:10px; font-weight:700; color:#CBD5E1; margin-bottom:4px; text-transform:uppercase;">2. Quantidade Usada no Prato</div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; align-items:center;">
                         <div>
                             <label style="font-size:10px; color:#94A3B8;">Qtd Usada</label>
-                            <input type="number" step="0.001" class="ing-recipe-qty" value="${data?.recipeQty || ''}" placeholder="Ex: 150 (g) ou 1 (un)" oninput="CalculatorManager.calculateCost()" style="font-size:12px; padding:6px;">
+                            <input type="number" step="0.001" class="ing-recipe-qty" value="${data?.recipeQty || ''}" placeholder="Ex: 150 (g)" oninput="CalculatorManager.calculateCost()" style="font-size:12px; padding:6px;">
                         </div>
                         <div>
                             <label style="font-size:10px; color:#94A3B8;">Unidade Usada</label>
@@ -86,7 +131,7 @@ const CalculatorManager = {
                 </div>
 
                 <div style="text-align:right; margin-top:8px; font-size:12px; color:#F1F5F9;">
-                    Custo deste item na receita: <strong class="ing-cost-display" style="color:#10B981;">R$ 0,00</strong>
+                    Custo no prato: <strong class="ing-cost-display" style="color:#10B981;">R$ 0,00</strong>
                 </div>
             </div>
         `;
@@ -100,16 +145,6 @@ const CalculatorManager = {
         if (el) el.remove();
         this.ingredientRows = this.ingredientRows.filter(id => id !== rowId);
         this.calculateCost();
-    },
-
-    getStockOptionsHtml() {
-        let options = '';
-        if (typeof state !== 'undefined' && state.stock && state.stock.length > 0) {
-            state.stock.forEach(item => {
-                options += `<option value="${item.id}" data-name="${item.name}" data-price="${item.price || item.cost || 0}" data-qty="${item.quantity || 1}" data-unit="${item.unit || 'un'}">${item.name} (R$ ${Number(item.price || item.cost || 0).toFixed(2)} / ${item.unit || 'un'})</option>`;
-            });
-        }
-        return options;
     },
 
     onSelectStockItem(rowId, stockId) {
@@ -147,14 +182,11 @@ const CalculatorManager = {
             const recipeQty = parseFloat(card.querySelector('.ing-recipe-qty').value) || 0;
             const recipeUnit = card.querySelector('.ing-recipe-unit').value;
 
-            // Transforma tudo para a unidade base (grama, ml ou unidade)
             let totalBasePurchaseQty = purchaseQty;
-            if (purchaseUnit === 'kg') totalBasePurchaseQty = purchaseQty * 1000;
-            else if (purchaseUnit === 'l') totalBasePurchaseQty = purchaseQty * 1000;
+            if (purchaseUnit === 'kg' || purchaseUnit === 'l') totalBasePurchaseQty = purchaseQty * 1000;
 
             let totalBaseRecipeQty = recipeQty;
-            if (recipeUnit === 'kg') totalBaseRecipeQty = recipeQty * 1000;
-            else if (recipeUnit === 'l') totalBaseRecipeQty = recipeQty * 1000;
+            if (recipeUnit === 'kg' || recipeUnit === 'l') totalBaseRecipeQty = recipeQty * 1000;
 
             const costPerBaseUnit = purchasePrice / (totalBasePurchaseQty || 1);
             const itemCost = costPerBaseUnit * totalBaseRecipeQty;
@@ -170,11 +202,9 @@ const CalculatorManager = {
 
         const costValueEl = document.getElementById('costValue');
         const costPerPortionEl = document.getElementById('costPerPortion');
-        const costResult = document.getElementById('costResult');
 
         if (costValueEl) costValueEl.textContent = `R$ ${totalCost.toFixed(2)}`;
         if (costPerPortionEl) costPerPortionEl.textContent = `R$ ${costPerPortion.toFixed(2)}`;
-        if (costResult) costResult.classList.remove('hidden');
 
         this.calculateSuggestedPrices(costPerPortion);
     },
@@ -184,11 +214,9 @@ const CalculatorManager = {
         const deliveryFeePct = parseFloat(document.getElementById('calcDeliveryFee')?.value) || 12.0;
         const profitMarginPct = parseFloat(document.getElementById('calcProfitMargin')?.value) || 50.0;
 
-        // Divisor de Margem para Balcão
         const counterDivisor = 1 - ((cardTaxPct + profitMarginPct) / 100);
         const counterPrice = counterDivisor > 0 ? (costPerPortion / counterDivisor) : (costPerPortion * 2);
 
-        // Divisor de Margem para iFood/Delivery
         const deliveryDivisor = 1 - ((cardTaxPct + deliveryFeePct + profitMarginPct) / 100);
         const deliveryPrice = deliveryDivisor > 0 ? (costPerPortion / deliveryDivisor) : (costPerPortion * 2.5);
 
@@ -206,8 +234,7 @@ const CalculatorManager = {
         const totalCost = parseFloat(costValText) || 0;
 
         if (!name) {
-            if (typeof showToast === 'function') showToast('Informe o nome do prato ou receita!', 'error');
-            else alert('Informe o nome da receita!');
+            if (typeof showToast === 'function') showToast('Informe o nome da receita!', 'error');
             return;
         }
 
@@ -229,7 +256,7 @@ const CalculatorManager = {
             total_cost: totalCost,
             cost_per_portion: totalCost / yieldQty,
             ingredients: ingredientsData,
-            created_at: new Date().toISOString()
+            updated_at: new Date().toISOString()
         };
 
         try {
