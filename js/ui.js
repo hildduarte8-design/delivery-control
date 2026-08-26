@@ -15,13 +15,24 @@ function switchTab(tabId) {
 }
 
 function openModal(title, bodyHtml) {
-    document.getElementById('modalTitle').textContent = title;
-    document.getElementById('modalBody').innerHTML = bodyHtml;
-    document.getElementById('modalOverlay').classList.add('active');
+    const titleEl = document.getElementById('modalTitle');
+    const bodyEl = document.getElementById('modalBody');
+    const overlay = document.getElementById('modalOverlay');
+
+    if (titleEl) titleEl.textContent = title;
+    if (bodyEl) bodyEl.innerHTML = bodyHtml;
+    if (overlay) {
+        overlay.classList.add('active');
+        overlay.style.display = 'flex';
+    }
 }
 
 function closeModal() {
-    document.getElementById('modalOverlay').classList.remove('active');
+    const overlay = document.getElementById('modalOverlay');
+    if (overlay) {
+        overlay.classList.remove('active');
+        overlay.style.display = 'none';
+    }
 }
 
 function showToast(msg, type = 'success') {
@@ -55,6 +66,23 @@ document.addEventListener('DOMContentLoaded', () => {
             const tab = btn.getAttribute('data-tab');
             if (tab) switchTab(tab);
         });
+    });
+
+    // Fechar modal ao clicar no fundo escuro (backdrop)
+    const overlay = document.getElementById('modalOverlay');
+    if (overlay) {
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                closeModal();
+            }
+        });
+    }
+
+    // Fechar modal ao apertar a tecla ESC
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeModal();
+        }
     });
 });
 
