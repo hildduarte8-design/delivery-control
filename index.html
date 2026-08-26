@@ -19,6 +19,24 @@
 
 <body>
 
+<!-- TELA DE LOGIN / BLOQUEIO DE TELA CHEIA -->
+<div id="loginScreen" style="position: fixed; inset: 0; background: #0F172A; z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 20px;">
+    <div class="card" style="width: 100%; max-width: 360px; padding: 24px; text-align: center; border: 1px solid #1E293B;">
+        <div style="font-size: 40px; margin-bottom: 8px;">🛵</div>
+        <h2 style="color: #F1F5F9; font-size: 20px; font-weight: 800; margin-bottom: 4px;" id="login_store_title">Delivery Control</h2>
+        <p style="color: #94A3B8; font-size: 12px; margin-bottom: 20px;">Painel Administrativo do Gestor</p>
+
+        <div class="form-group" style="text-align: left; margin-bottom: 16px;">
+            <label style="font-size: 12px; color: #CBD5E1;">Senha de Acesso</label>
+            <input type="password" id="admin_pass_input" placeholder="••••••••" style="margin-top: 6px; text-align: center; font-size: 16px; letter-spacing: 2px;" onkeydown="if(event.key==='Enter') validatePassword()">
+        </div>
+
+        <button class="btn btn-large" onclick="validatePassword()" style="background: var(--primary-color, #FF6B35); color: #fff;">
+            🔓 Entrar no Painel
+        </button>
+    </div>
+</div>    
+    
 <header class="app-header">
     <div>
         <div class="greeting" id="greetingText">Bom dia</div>
