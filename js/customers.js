@@ -1,43 +1,81 @@
 // js/customers.js - Gestão de Clientes (CRM + Disparo de Marketing no WhatsApp)
 
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(String(text || '')));
+    return div.innerHTML;
+}
+
 const CustomersManager = {
+    allCustomers: [],
+
     async fetchCustomers() {
         const container = document.getElementById('customersList');
         const countEl = document.getElementById('customersCount');
         if (!container) return;
 
+        let topBarHtml = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                <button class="btn btn-sm btn-success" onclick="CustomersManager.openNewCustomerModal()" style="width:100%; padding:10px; font-size:13px;">
+                    👤 + Cadastrar Novo Cliente
+                </button>
+            </div>
+        `;
+
         try {
-            if (typeof dbClient === 'undefined') return;
+            let dbCustomers = [];
+            let dbOrders = [];
 
-            const { data: orders, error } = await dbClient
-                .from('orders')
-                .select('*')
-                .order('created_at', { ascending: false });
+            if (typeof dbClient !== 'undefined') {
+                // 1. Busca cadastros da tabela de clientes
+                try {
+                    const { data: custData } = await dbClient.from('customers').select('*').order('created_at', { ascending: false });
+                    if (custData) dbCustomers = custData;
+                } catch (e) {
+                    console.warn('Tabela "customers" ainda não existe ou indisponível:', e);
+                }
 
-            let topBarHtml = `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-                    <button class="btn btn-sm btn-success" onclick="CustomersManager.openNewCustomerModal()" style="width:100%; padding:10px; font-size:13px;">
-                        👤 + Cadastrar Novo Cliente
-                    </button>
-                </div>
-            `;
-
-            if (error || !orders || orders.length === 0) {
-                container.innerHTML = topBarHtml + '<div style="color:#94A3B8; text-align:center; padding:30px; font-size:13px;">Nenhum cliente registrado ainda.</div>';
-                if (countEl) countEl.textContent = '0 clientes';
-                return;
+                // 2. Busca histórico de pedidos para agregação do CRM
+                try {
+                    const { data: ordData } = await dbClient.from('orders').select('*').order('created_at', { ascending: false });
+                    if (ordData) dbOrders = ordData;
+                } catch (e) {
+                    console.warn('Erro ao buscar pedidos para CRM:', e);
+                }
             }
 
             const customersMap = {};
 
-            orders.forEach(o => {
-                const clientKey = (o.client_name || 'Cliente Sem Nome').trim().toLowerCase();
-                const displayName = o.client_name || 'Cliente Sem Nome';
+            // Mapeia cadastros explícitos de clientes
+            dbCustomers.forEach(c => {
+                const key = (c.phone || c.name || '').trim().toLowerCase();
+                if (!key) return;
+                customersMap[key] = {
+                    id: c.id,
+                    name: c.name || 'Cliente Sem Nome',
+                    phone: c.phone || '',
+                    address: c.address || '',
+                    totalSpent: 0,
+                    ordersCount: 0,
+                    lastOrderDate: null,
+                    itemsFrequency: {}
+                };
+            });
 
-                if (!customersMap[clientKey]) {
-                    customersMap[clientKey] = {
-                        name: displayName,
+            // Agrega métricas e histórico de pedidos reais
+            dbOrders.forEach(o => {
+                const phoneKey = o.phone ? o.phone.trim().toLowerCase() : '';
+                const nameKey = o.client_name ? o.client_name.trim().toLowerCase() : '';
+                const key = phoneKey || nameKey;
+
+                if (!key) return;
+
+                if (!customersMap[key]) {
+                    customersMap[key] = {
+                        id: null,
+                        name: o.client_name || 'Cliente Sem Nome',
                         phone: o.phone || '',
+                        address: o.address || '',
                         totalSpent: 0,
                         ordersCount: 0,
                         lastOrderDate: null,
@@ -45,18 +83,18 @@ const CustomersManager = {
                     };
                 }
 
-                const cust = customersMap[clientKey];
+                const cust = customersMap[key];
                 if (o.phone && !cust.phone) cust.phone = o.phone;
+                if (o.address && !cust.address) cust.address = o.address;
 
                 let items = o.items;
                 if (typeof items === 'string') {
                     try { items = JSON.parse(items); } catch(e) { items = []; }
                 }
 
-                // CORREÇÃO: CONTABILIZA PEDIDO E VALORES APENAS SE FOR UMA COMPRA REAL (Não cadastro fake)
-                const isRealOrder = o.status !== 'customer_profile' && 
-                                    o.order_type !== 'customer_register' && 
-                                    o.status !== 'cancelled' && 
+                const isRealOrder = o.status !== 'cancelled' &&
+                                    o.status !== 'customer_profile' &&
+                                    o.order_type !== 'customer_register' &&
                                     Number(o.total || 0) > 0;
 
                 if (isRealOrder) {
@@ -78,41 +116,51 @@ const CustomersManager = {
             });
 
             const customersList = Object.values(customersMap).sort((a, b) => b.totalSpent - a.totalSpent);
+            this.allCustomers = customersList;
+
+            if (typeof state !== 'undefined') state.customers = customersList;
 
             if (countEl) countEl.textContent = `${customersList.length} cliente(s)`;
 
-            container.innerHTML = topBarHtml + customersList.map(c => this.renderCustomerCard(c)).join('');
+            if (customersList.length === 0) {
+                container.innerHTML = topBarHtml + '<div style="color:#94A3B8; text-align:center; padding:30px; font-size:13px;">Nenhum cliente registrado ainda.</div>';
+                return;
+            }
+
+            container.innerHTML = topBarHtml + customersList.map((c, index) => this.renderCustomerCard(c, index)).join('');
 
         } catch (e) {
             console.error('Erro ao carregar clientes:', e);
-            container.innerHTML = '<div style="color:#EF4444; text-align:center; padding:20px; font-size:13px;">Erro ao carregar lista de clientes.</div>';
+            container.innerHTML = topBarHtml + '<div style="color:#EF4444; text-align:center; padding:20px; font-size:13px;">Erro ao carregar lista de clientes.</div>';
         }
     },
 
-    renderCustomerCard(c) {
+    renderCustomerCard(c, index) {
         const lastDateText = (c.ordersCount > 0 && c.lastOrderDate)
             ? new Date(c.lastOrderDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
             : 'Nenhum pedido realizado';
 
-        const sortedItems = Object.entries(c.itemsFrequency)
+        const sortedItems = Object.entries(c.itemsFrequency || {})
             .sort((a, b) => b[1] - a[1])
             .slice(0, 3);
 
         const favsHtml = sortedItems.length > 0
-            ? sortedItems.map(([name, qty]) => `<span style="background:#0F172A; border:1px solid #334155; color:#F1F5F9; font-size:11px; padding:2px 8px; border-radius:12px;">❤️ ${name} (${qty}x)</span>`).join(' ')
+            ? sortedItems.map(([name, qty]) => `<span style="background:#0F172A; border:1px solid #334155; color:#F1F5F9; font-size:11px; padding:2px 8px; border-radius:12px;">❤️ ${escapeHtml(name)} (${qty}x)</span>`).join(' ')
             : '<span style="color:#94A3B8; font-size:11px;">Sem pedidos anteriores</span>';
 
         const cleanPhone = c.phone ? c.phone.replace(/\D/g, '') : '';
+        const safeName = escapeHtml(c.name);
+        const safePhone = escapeHtml(c.phone);
 
         return `
             <div class="card" style="margin-bottom:12px; padding:14px; border-left:4px solid #FF6B35;">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
                     <div>
-                        <strong style="color:#F1F5F9; font-size:15px;">👤 ${c.name}</strong>
-                        ${c.phone ? `<div style="font-size:11px; color:#94A3B8;">📱 ${c.phone}</div>` : '<div style="font-size:11px; color:#EF4444;">Sem WhatsApp cadastrado</div>'}
+                        <strong style="color:#F1F5F9; font-size:15px;">👤 ${safeName}</strong>
+                        ${c.phone ? `<div style="font-size:11px; color:#94A3B8;">📱 ${safePhone}</div>` : '<div style="font-size:11px; color:#EF4444;">Sem WhatsApp cadastrado</div>'}
                     </div>
                     <div style="text-align:right;">
-                        <div style="font-size:15px; font-weight:800; color:#10B981;">R$ ${c.totalSpent.toFixed(2)}</div>
+                        <div style="font-size:15px; font-weight:800; color:#10B981;">R$ ${Number(c.totalSpent || 0).toFixed(2)}</div>
                         <div style="font-size:10px; color:#94A3B8;">${c.ordersCount} pedido(s)</div>
                     </div>
                 </div>
@@ -130,7 +178,7 @@ const CustomersManager = {
                     </div>
 
                     ${cleanPhone ? `
-                        <button class="btn btn-sm" onclick="CustomersManager.openMarketingModal('${c.name.replace(/'/g, "\\'")}', '${cleanPhone}')" style="background:#25D366; color:#fff; font-size:11px; padding:6px 10px; white-space:nowrap; margin-left:8px;">
+                        <button class="btn btn-sm" onclick="CustomersManager.openMarketingModalByIndex(${index})" style="background:#25D366; color:#fff; font-size:11px; padding:6px 10px; white-space:nowrap; margin-left:8px;">
                             💬 Enviar Mensagem
                         </button>
                     ` : ''}
@@ -164,7 +212,7 @@ const CustomersManager = {
 
     async saveNewCustomer() {
         const name = document.getElementById('new_cust_name')?.value.trim();
-        let phone = document.getElementById('new_cust_phone')?.value.trim() || '';
+        const phone = document.getElementById('new_cust_phone')?.value.trim() || '';
         const address = document.getElementById('new_cust_address')?.value.trim() || 'Balcão';
 
         if (!name) {
@@ -172,25 +220,18 @@ const CustomersManager = {
             return;
         }
 
+        const customerPayload = {
+            id: `cust_${Date.now()}`,
+            name,
+            phone,
+            address,
+            created_at: new Date().toISOString()
+        };
+
         try {
             if (typeof dbClient !== 'undefined') {
-                // CORREÇÃO: REGISTRA O CLIENTE SEM CRIAR PEDIDO FANTASMA NAS VENDAS/ANALYTICS
-                const { error } = await dbClient.from('orders').insert([{
-                    client_name: name,
-                    phone: phone,
-                    order_type: 'customer_register',
-                    address: address,
-                    items: [],
-                    subtotal: 0,
-                    delivery_fee: 0,
-                    total: 0,
-                    status: 'customer_profile'
-                }]);
-
-                if (error) {
-                    if (typeof showToast === 'function') showToast('Erro ao cadastrar cliente', 'error');
-                    return;
-                }
+                const { error } = await dbClient.from('customers').upsert([customerPayload]);
+                if (error) console.error('Erro no Supabase ao salvar cliente:', error);
             }
 
             if (typeof closeModal === 'function') closeModal();
@@ -199,20 +240,31 @@ const CustomersManager = {
 
         } catch (e) {
             console.error('Erro ao salvar cliente:', e);
+            if (typeof showToast === 'function') showToast('Erro ao cadastrar cliente.', 'error');
         }
+    },
+
+    openMarketingModalByIndex(index) {
+        const c = this.allCustomers[index];
+        if (!c) return;
+
+        const cleanPhone = c.phone ? c.phone.replace(/\D/g, '') : '';
+        this.openMarketingModal(c.name, cleanPhone);
     },
 
     openMarketingModal(name, phone) {
         if (typeof openModal !== 'function') return;
 
-        openModal(`💬 Mensagem para ${name}`, `
+        const safeName = escapeHtml(name);
+
+        openModal(`💬 Mensagem para ${safeName}`, `
             <p style="font-size:12px; color:#94A3B8; margin-bottom:12px;">
                 Selecione o modelo de campanha para gerar a mensagem personalizada:
             </p>
 
             <div class="form-group">
                 <label>Modelo de Mensagem</label>
-                <select id="mkt_template_select" onchange="CustomersManager.updateMktPreview('${name.replace(/'/g, "\\'")}')">
+                <select id="mkt_template_select" onchange="CustomersManager.updateMktPreview('${safeName.replace(/'/g, "\\'")}')">
                     <option value="winback">🎁 Cupom para Sumidos (Reativação)</option>
                     <option value="promo">🔥 Oferta do Dia / Promoção</option>
                     <option value="new_product">🍔 Novidade no Cardápio</option>
@@ -225,7 +277,7 @@ const CustomersManager = {
                 <textarea id="mkt_message_text" rows="5" style="width:100%; font-size:12px; line-height:1.4; padding:8px;"></textarea>
             </div>
 
-            <button class="btn btn-large" onclick="CustomersManager.sendMarketingWhatsApp('${phone}')" style="background:#25D366; color:#fff; margin-top:10px;">
+            <button class="btn btn-large" onclick="CustomersManager.sendMarketingWhatsApp('${escapeHtml(phone)}')" style="background:#25D366; color:#fff; margin-top:10px;">
                 🚀 Abrir WhatsApp e Enviar
             </button>
         `);
