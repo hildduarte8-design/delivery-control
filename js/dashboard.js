@@ -20,8 +20,148 @@ function getIFoodWeeklyCycle(referenceDate = new Date()) {
     return { cycleStart, cycleEnd };
 }
 
-// js/dashboard.js - Painel Principal com Fechamento Semanal Estilo iFood (Quinta a Quarta)
+// Módulo do Analytics (Trata Formas de Pagamento e Correção de Preço dos Pratos)
+const AnalyticsManager = {
+    currentFilter: 'all',
+    cachedOrders: [],
 
+    setFilter(filterType) {
+        this.currentFilter = filterType;
+        this.render();
+    },
+
+    render(ordersList = null) {
+        if (ordersList && Array.isArray(ordersList)) {
+            this.cachedOrders = ordersList;
+        }
+
+        let orders = this.cachedOrders;
+        if (!orders || orders.length === 0) {
+            if (typeof state !== 'undefined' && Array.isArray(state.orders)) orders = state.orders;
+            else orders = JSON.parse(localStorage.getItem('dly_orders') || localStorage.getItem('dly_sales') || '[]');
+        }
+
+        const now = new Date();
+        const todayStr = now.toISOString().split('T')[0];
+
+        // Filtra pedidos ativos por período selecionado
+        const filteredOrders = orders.filter(o => {
+            if (o.status === 'cancelled') return false;
+
+            const orderDate = new Date(o.created_at || o.date || now);
+            const orderDateStr = orderDate.toISOString().split('T')[0];
+
+            if (this.currentFilter === 'today') return orderDateStr === todayStr;
+            if (this.currentFilter === '7days') {
+                const diffDays = Math.ceil(Math.abs(now - orderDate) / (1000 * 60 * 60 * 24));
+                return diffDays <= 7;
+            }
+            if (this.currentFilter === 'month') {
+                return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
+            }
+            return true;
+        });
+
+        let totalRevenue = 0;
+        let totalOrdersCount = filteredOrders.length;
+        let totalItemsQty = 0;
+
+        let totalPix = 0;
+        let totalCard = 0;
+        let totalCash = 0;
+
+        const rankingMap = new Map();
+
+        filteredOrders.forEach(o => {
+            const orderTotal = Number(o.total || o.amount || 0);
+            totalRevenue += orderTotal;
+
+            // Busca flexível de forma de pagamento
+            const method = String(o.payment_method || o.reference || o.paymentMethod || '').toLowerCase();
+
+            if (method.includes('pix')) {
+                totalPix += orderTotal;
+            } else if (method.includes('carta') || method.includes('cartão') || method.includes('credito') || method.includes('debito') || method.includes('card')) {
+                totalCard += orderTotal;
+            } else {
+                totalCash += orderTotal; // Dinheiro, Dinheiro/Pix, Pagamento na entrega
+            }
+
+            // Cálculo dos pratos e soma dos valores
+            let items = o.items;
+            if (typeof items === 'string') {
+                try { items = JSON.parse(items); } catch (e) { items = []; }
+            }
+
+            if (Array.isArray(items) && items.length > 0) {
+                items.forEach(item => {
+                    const qty = Number(item.qty || item.quantity || 1);
+                    totalItemsQty += qty;
+
+                    const name = item.name || 'Item do Cardápio';
+
+                    // Fallback de valor caso o item antigo não tenha preco gravado no JSON
+                    let itemTotal = Number(item.total || 0);
+                    if (itemTotal <= 0) {
+                        const unitPrice = Number(item.price || item.unit_price || item.unitPrice || (orderTotal > 0 ? orderTotal / items.length : 0));
+                        itemTotal = unitPrice * qty;
+                    }
+
+                    if (!rankingMap.has(name)) {
+                        rankingMap.set(name, { qty: 0, revenue: 0 });
+                    }
+
+                    const curr = rankingMap.get(name);
+                    curr.qty += qty;
+                    curr.revenue += itemTotal;
+                });
+            }
+        });
+
+        // Atualização dos cards na tela
+        const elFaturamento = document.getElementById('dash_faturamento') || document.getElementById('analyticsRevenue');
+        const elTotalPedidos = document.getElementById('dash_total_pedidos') || document.getElementById('analyticsOrdersCount');
+        const elTicketMedio = document.getElementById('dash_ticket_medio') || document.getElementById('analyticsTicket');
+        const elItensVendidos = document.getElementById('dash_itens_vendidos') || document.getElementById('analyticsItemsCount');
+
+        const elPix = document.getElementById('dash_pay_pix') || document.getElementById('payPixVal');
+        const elCard = document.getElementById('dash_pay_card') || document.getElementById('payCardVal');
+        const elCash = document.getElementById('dash_pay_cash') || document.getElementById('payCashVal');
+
+        if (elFaturamento) elFaturamento.textContent = `R$ ${totalRevenue.toFixed(2)}`;
+        if (elTotalPedidos) elTotalPedidos.textContent = totalOrdersCount;
+        if (elTicketMedio) elTicketMedio.textContent = `R$ ${(totalOrdersCount > 0 ? totalRevenue / totalOrdersCount : 0).toFixed(2)}`;
+        if (elItensVendidos) elItensVendidos.textContent = `${totalItemsQty} un`;
+
+        if (elPix) elPix.textContent = `R$ ${totalPix.toFixed(2)}`;
+        if (elCard) elCard.textContent = `R$ ${totalCard.toFixed(2)}`;
+        if (elCash) elCash.textContent = `R$ ${totalCash.toFixed(2)}`;
+
+        // Renderização do ranking
+        const rankingContainer = document.getElementById('dash_ranking_list') || document.getElementById('rankingContainer');
+        if (rankingContainer) {
+            const sortedRanking = Array.from(rankingMap.entries()).sort((a, b) => b[1].qty - a[1].qty);
+
+            if (sortedRanking.length === 0) {
+                rankingContainer.innerHTML = '<div style="color:#94A3B8; font-size:12px; padding:15px; text-align:center;">Nenhum prato vendido ainda.</div>';
+            } else {
+                rankingContainer.innerHTML = sortedRanking.map(([name, data], idx) => {
+                    const trophy = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🏅';
+                    return `
+                        <div style="margin-bottom:10px; padding:8px; background:#0F172A; border-radius:6px; border:1px solid #1E293B;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; color:#F1F5F9;">
+                                <span>${trophy} <strong>${escapeHtml(name)}</strong></span>
+                                <strong style="color:#10B981;">${data.qty} un <span style="color:#94A3B8; font-size:11px; font-weight:normal;">(R$ ${data.revenue.toFixed(2)})</span></strong>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+    }
+};
+
+// js/dashboard.js - Painel Principal com Fechamento Semanal Estilo iFood (Quinta a Quarta)
 async function renderDashboard() {
     const balanceValue = document.getElementById('balanceValue');
     const balanceTrend = document.getElementById('balanceTrend');
@@ -155,7 +295,7 @@ async function renderDashboard() {
                     return `
                         <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #1E293B;">
                             <div>
-                                <strong style="color:#F1F5F9; font-size:13px; display:block;">👤 ${o.client_name || 'Venda/Pedido'}</strong>
+                                <strong style="color:#F1F5F9; font-size:13px; display:block;">👤 ${escapeHtml(o.client_name || o.customer_name || 'Venda/Pedido')}</strong>
                                 <span style="font-size:11px; color:#94A3B8;">⏰ ${timeStr} • ${o.order_type === 'delivery' ? '🛵 Entrega' : '🏪 Balcão'}</span>
                             </div>
                             <span style="font-size:14px; font-weight:bold; color:#10B981;">+ R$ ${Number(o.total || o.amount || 0).toFixed(2)}</span>
@@ -166,11 +306,16 @@ async function renderDashboard() {
         }
 
         // 7. Renderiza Analytics
-        if (typeof AnalyticsManager !== 'undefined' && typeof AnalyticsManager.render === 'function') {
-            AnalyticsManager.render();
-        }
+        AnalyticsManager.render(orders);
 
     } catch (e) {
         console.error('Erro ao renderizar Dashboard:', e);
     }
 }
+
+window.AnalyticsManager = AnalyticsManager;
+window.renderDashboard = renderDashboard;
+
+document.addEventListener('DOMContentLoaded', () => {
+    renderDashboard();
+});
