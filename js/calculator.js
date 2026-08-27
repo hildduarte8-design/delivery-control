@@ -1,4 +1,11 @@
-// js/calculator.js - Ficha Técnica Sincronizada com Estoque em Tempo Real
+// js/calculator.js - Ficha Técnica Sincronizada com Estoque e Precificação Inteligente
+
+// Helper local de sanitização contra XSS
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(String(text || '')));
+    return div.innerHTML;
+}
 
 const CalculatorManager = {
     ingredientRows: [],
@@ -6,7 +13,8 @@ const CalculatorManager = {
 
     async init() {
         this.ingredientRows = [];
-        await this.refreshStockList();
+        // Carregamento silencioso no boot da aplicação (silent = true)
+        await this.refreshStockList(true);
         
         const container = document.getElementById('ingredientsList');
         if (container && container.children.length === 0) {
@@ -16,26 +24,31 @@ const CalculatorManager = {
     },
 
     // Sincroniza e puxa insumos atualizados do Banco / LocalStorage
-    async refreshStockList() {
+    async refreshStockList(silent = false) {
         try {
             if (typeof dbClient !== 'undefined') {
-                const { data } = await dbClient.from('stock').select('*').order('name', { ascending: true });
-                this.stockItemsCache = data || [];
+                const { data, error } = await dbClient.from('stock').select('*').order('name', { ascending: true });
+                if (!error && data) {
+                    this.stockItemsCache = data;
+                }
             } else if (typeof DB !== 'undefined') {
                 this.stockItemsCache = DB.load('dly_stock', []);
+            } else {
+                this.stockItemsCache = JSON.parse(localStorage.getItem('dly_stock') || '[]');
             }
 
-            // Atualiza todos os selects já abertos na tela
+            // Atualiza os seletores de estoque abertos na tela
             document.querySelectorAll('.ing-stock-select').forEach(select => {
                 const currentValue = select.value;
                 select.innerHTML = '<option value="">-- Puxar Item do Estoque (Opcional) --</option>' + this.getStockOptionsHtml();
                 select.value = currentValue;
             });
 
-            // Recalcula custos com os novos preços
+            // Recalcula custos com os novos dados de estoque
             this.calculateCost();
 
-            if (typeof showToast === 'function') {
+            // Notifica o usuário apenas em chamadas manuais (ex: clique no botão sincronizar)
+            if (!silent && typeof showToast === 'function') {
                 showToast('Insumos sincronizados com o estoque!');
             }
         } catch (e) {
@@ -47,16 +60,18 @@ const CalculatorManager = {
         if (!this.stockItemsCache || this.stockItemsCache.length === 0) return '';
 
         return this.stockItemsCache.map(item => {
-            const price = Number(item.unit_cost || item.price || 0);
-            const pkgQty = Number(item.package_qty || 1);
+            const pkgQty = Number(item.package_qty ?? item.packageQty ?? 1);
+            const totalPrice = Number(item.total_price ?? item.totalPrice ?? 0);
+            const unitCost = Number(item.unit_cost ?? item.unitCost ?? (pkgQty > 0 ? totalPrice / pkgQty : 0));
             const unit = item.unit || 'un';
+            const safeName = escapeHtml(item.name);
 
-            return `<option value="${item.id || item.name}" 
-                data-name="${item.name.replace(/"/g, '&quot;')}" 
-                data-price="${price * pkgQty}" 
+            return `<option value="${escapeHtml(item.id || item.name)}" 
+                data-name="${safeName}" 
+                data-price="${totalPrice > 0 ? totalPrice : (unitCost * pkgQty)}" 
                 data-qty="${pkgQty}" 
-                data-unit="${unit}">
-                ${item.name} (R$ ${price.toFixed(2)}/${unit})
+                data-unit="${escapeHtml(unit)}">
+                ${safeName} (R$ ${unitCost.toFixed(2)}/${escapeHtml(unit)})
             </option>`;
         }).join('');
     },
@@ -83,7 +98,7 @@ const CalculatorManager = {
 
                 <div class="form-group" style="margin-bottom:8px;">
                     <label style="font-size:11px; color:#94A3B8;">Nome do Ingrediente ou Embalagem</label>
-                    <input type="text" class="ing-name" value="${data?.name || ''}" placeholder="Ex: Queijo Muçarela, Caixa de Pizza" style="font-size:12px; padding:6px;">
+                    <input type="text" class="ing-name" value="${escapeHtml(data?.name || '')}" placeholder="Ex: Queijo Muçarela, Caixa de Pizza" style="font-size:12px; padding:6px;">
                 </div>
 
                 <div style="background:#1E293B; padding:8px; border-radius:6px; margin-bottom:8px;">
@@ -155,7 +170,7 @@ const CalculatorManager = {
         const select = row.querySelector('.ing-stock-select');
         const opt = select.options[select.selectedIndex];
 
-        row.querySelector('.ing-name').value = opt.getAttribute('data-name');
+        row.querySelector('.ing-name').value = opt.getAttribute('data-name') || '';
         row.querySelector('.ing-purchase-price').value = parseFloat(opt.getAttribute('data-price')) || 0;
         row.querySelector('.ing-purchase-qty').value = parseFloat(opt.getAttribute('data-qty')) || 1;
 
@@ -174,37 +189,70 @@ const CalculatorManager = {
         let totalCost = 0;
         const cards = document.querySelectorAll('.ingredient-card');
 
+        const MASS_UNITS = ['kg', 'g'];
+        const VOLUME_UNITS = ['l', 'ml'];
+        const UNIT_UNITS = ['un'];
+
         cards.forEach(card => {
-            const purchasePrice = parseFloat(card.querySelector('.ing-purchase-price').value) || 0;
-            const purchaseQty = parseFloat(card.querySelector('.ing-purchase-qty').value) || 1;
-            const purchaseUnit = card.querySelector('.ing-purchase-unit').value;
+            const purchasePrice = parseFloat(card.querySelector('.ing-purchase-price')?.value) || 0;
+            const purchaseQty = parseFloat(card.querySelector('.ing-purchase-qty')?.value) || 1;
+            const purchaseUnit = card.querySelector('.ing-purchase-unit')?.value || 'un';
 
-            const recipeQty = parseFloat(card.querySelector('.ing-recipe-qty').value) || 0;
-            const recipeUnit = card.querySelector('.ing-recipe-unit').value;
+            const recipeQty = parseFloat(card.querySelector('.ing-recipe-qty')?.value) || 0;
+            const recipeUnit = card.querySelector('.ing-recipe-unit')?.value || 'g';
 
+            const display = card.querySelector('.ing-cost-display');
+
+            // Validação de compatibilidade de unidades
+            const isMassPurchase = MASS_UNITS.includes(purchaseUnit);
+            const isVolumePurchase = VOLUME_UNITS.includes(purchaseUnit);
+            const isUnitPurchase = UNIT_UNITS.includes(purchaseUnit);
+
+            const isMassRecipe = MASS_UNITS.includes(recipeUnit);
+            const isVolumeRecipe = VOLUME_UNITS.includes(recipeUnit);
+            const isUnitRecipe = UNIT_UNITS.includes(recipeUnit);
+
+            const compatible = 
+                (isMassPurchase && isMassRecipe) ||
+                (isVolumePurchase && isVolumeRecipe) ||
+                (isUnitPurchase && isUnitRecipe);
+
+            if (!compatible && recipeQty > 0) {
+                if (display) {
+                    display.textContent = '⚠️ Unidades incompatíveis';
+                    display.style.color = '#EF4444';
+                }
+                return;
+            }
+
+            // Converte para a unidade base (grama, ml ou unidade)
             let totalBasePurchaseQty = purchaseQty;
             if (purchaseUnit === 'kg' || purchaseUnit === 'l') totalBasePurchaseQty = purchaseQty * 1000;
 
             let totalBaseRecipeQty = recipeQty;
             if (recipeUnit === 'kg' || recipeUnit === 'l') totalBaseRecipeQty = recipeQty * 1000;
 
-            const costPerBaseUnit = purchasePrice / (totalBasePurchaseQty || 1);
+            const costPerBaseUnit = totalBasePurchaseQty > 0 ? (purchasePrice / totalBasePurchaseQty) : 0;
             const itemCost = costPerBaseUnit * totalBaseRecipeQty;
 
             totalCost += itemCost;
 
-            const display = card.querySelector('.ing-cost-display');
-            if (display) display.textContent = `R$ ${itemCost.toFixed(2)}`;
+            if (display) {
+                display.textContent = `R$ ${itemCost.toFixed(2)}`;
+                display.style.color = '#10B981';
+            }
         });
 
-        const yieldQty = parseFloat(document.getElementById('recipeYield')?.value) || 1;
+        const yieldQty = Math.max(1, parseFloat(document.getElementById('recipeYield')?.value) || 1);
         const costPerPortion = totalCost / yieldQty;
 
         const costValueEl = document.getElementById('costValue');
         const costPerPortionEl = document.getElementById('costPerPortion');
+        const costResultCard = document.getElementById('costResult');
 
         if (costValueEl) costValueEl.textContent = `R$ ${totalCost.toFixed(2)}`;
         if (costPerPortionEl) costPerPortionEl.textContent = `R$ ${costPerPortion.toFixed(2)}`;
+        if (costResultCard) costResultCard.classList.remove('hidden');
 
         this.calculateSuggestedPrices(costPerPortion);
     },
@@ -229,24 +277,25 @@ const CalculatorManager = {
 
     async saveCurrentRecipe() {
         const name = document.getElementById('recipeName')?.value.trim();
-        const yieldQty = parseFloat(document.getElementById('recipeYield')?.value) || 1;
+        const yieldQty = Math.max(1, parseFloat(document.getElementById('recipeYield')?.value) || 1);
         const costValText = document.getElementById('costValue')?.textContent.replace('R$', '').replace(',', '.').trim();
         const totalCost = parseFloat(costValText) || 0;
 
         if (!name) {
             if (typeof showToast === 'function') showToast('Informe o nome da receita!', 'error');
+            else alert('Informe o nome da receita!');
             return;
         }
 
         const ingredientsData = [];
         document.querySelectorAll('.ingredient-card').forEach(card => {
             ingredientsData.push({
-                name: card.querySelector('.ing-name').value,
-                purchasePrice: card.querySelector('.ing-purchase-price').value,
-                purchaseQty: card.querySelector('.ing-purchase-qty').value,
-                purchaseUnit: card.querySelector('.ing-purchase-unit').value,
-                recipeQty: card.querySelector('.ing-recipe-qty').value,
-                recipeUnit: card.querySelector('.ing-recipe-unit').value
+                name: card.querySelector('.ing-name')?.value || '',
+                purchasePrice: parseFloat(card.querySelector('.ing-purchase-price')?.value) || 0,
+                purchaseQty: parseFloat(card.querySelector('.ing-purchase-qty')?.value) || 1,
+                purchaseUnit: card.querySelector('.ing-purchase-unit')?.value || 'un',
+                recipeQty: parseFloat(card.querySelector('.ing-recipe-qty')?.value) || 0,
+                recipeUnit: card.querySelector('.ing-recipe-unit')?.value || 'g'
             });
         });
 
@@ -260,19 +309,37 @@ const CalculatorManager = {
         };
 
         try {
+            // 1. Tenta salvar no Supabase com conflito resolvido no nome da receita
             if (typeof dbClient !== 'undefined') {
-                await dbClient.from('recipes').upsert([recipePayload]);
-            } else if (typeof DB !== 'undefined') {
-                const local = DB.load('dly_recipes', []);
-                local.push(recipePayload);
-                DB.save('dly_recipes', local);
+                const { error } = await dbClient.from('recipes').upsert([recipePayload], { onConflict: 'name' });
+                if (error) console.error('Erro ao salvar no Supabase:', error);
             }
+
+            // 2. Grava no LocalStorage offline-first
+            let localRecipes = [];
+            if (typeof DB !== 'undefined') {
+                localRecipes = DB.load('dly_recipes', []);
+            } else {
+                localRecipes = JSON.parse(localStorage.getItem('dly_recipes') || '[]');
+            }
+
+            const idx = localRecipes.findIndex(r => r.name === name);
+            if (idx >= 0) {
+                localRecipes[idx] = { ...localRecipes[idx], ...recipePayload };
+            } else {
+                localRecipes.push(recipePayload);
+            }
+
+            if (typeof DB !== 'undefined') DB.save('dly_recipes', localRecipes);
+            localStorage.setItem('dly_recipes', JSON.stringify(localRecipes));
+            if (typeof state !== 'undefined') state.recipes = localRecipes;
 
             if (typeof showToast === 'function') showToast('Ficha Técnica salva com sucesso!');
             this.loadSavedRecipes();
 
         } catch (e) {
             console.error('Erro ao salvar receita:', e);
+            if (typeof showToast === 'function') showToast('Erro ao salvar ficha técnica.', 'error');
         }
     },
 
@@ -283,13 +350,16 @@ const CalculatorManager = {
         try {
             let recipes = [];
             if (typeof dbClient !== 'undefined') {
-                const { data } = await dbClient.from('recipes').select('*').order('created_at', { ascending: false });
-                recipes = data || [];
-            } else if (typeof DB !== 'undefined') {
-                recipes = DB.load('dly_recipes', []);
+                const { data, error } = await dbClient.from('recipes').select('*').order('updated_at', { ascending: false });
+                if (!error && data) recipes = data;
             }
 
             if (recipes.length === 0) {
+                if (typeof DB !== 'undefined') recipes = DB.load('dly_recipes', []);
+                else recipes = JSON.parse(localStorage.getItem('dly_recipes') || '[]');
+            }
+
+            if (!recipes || recipes.length === 0) {
                 container.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:15px; font-size:12px;">Nenhuma ficha técnica salva ainda.</div>';
                 return;
             }
@@ -298,9 +368,9 @@ const CalculatorManager = {
                 <div class="card" style="margin-bottom:8px; padding:12px; background:#1E293B; border-left:4px solid #3B82F6;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <div>
-                            <strong style="color:#F1F5F9; font-size:14px; display:block;">🍲 ${r.name}</strong>
+                            <strong style="color:#F1F5F9; font-size:14px; display:block;">🍲 ${escapeHtml(r.name)}</strong>
                             <span style="font-size:11px; color:#94A3B8;">
-                                Rendimento: ${r.yield_qty || 1} porção(ões) • Custo/Un: <strong style="color:#10B981;">R$ ${Number(r.cost_per_portion || r.total_cost).toFixed(2)}</strong>
+                                Rendimento: ${r.yield_qty || 1} porção(ões) • Custo/Un: <strong style="color:#10B981;">R$ ${Number(r.cost_per_portion || r.total_cost || 0).toFixed(2)}</strong>
                             </span>
                         </div>
                     </div>
@@ -308,6 +378,7 @@ const CalculatorManager = {
             `).join('');
 
         } catch (e) {
+            console.error('Erro ao carregar fichas salvas:', e);
             container.innerHTML = '<div style="color:#EF4444; text-align:center; padding:10px;">Erro ao carregar fichas salvas.</div>';
         }
     }
