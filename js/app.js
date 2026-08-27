@@ -20,7 +20,7 @@ function updateHeader() {
     const dateEl = document.getElementById('currentDate');
     
     if (greetingEl) greetingEl.textContent = g;
-    if (dateEl) dateEl.textContent = d.toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' });
+    if (dateEl) dateEl.textContent = d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
 function showWelcome() {
@@ -50,17 +50,17 @@ function checkAdminAuth() {
     const loginScreen = document.getElementById('loginScreen');
     const storeTitle = document.getElementById('login_store_title');
 
-    // Carrega nome e cor salvos da loja
-    if (storeTitle && settings.store_name) storeTitle.textContent = settings.store_name;
-    if (settings.primary_color) applyThemeColor(settings.primary_color);
+    const storeName = settings.store_name || settings.storeName;
+    const primaryColor = settings.primary_color || settings.primaryColor;
 
-    // Se nenhuma senha foi salva ou a sessão já está autenticada, esconde a tela de login
+    if (storeTitle && storeName) storeTitle.textContent = storeName;
+    if (primaryColor) applyThemeColor(primaryColor);
+
     if (!savedPassword || sessionStorage.getItem('dly_auth') === 'true') {
         if (loginScreen) loginScreen.style.display = 'none';
         return true;
     }
 
-    // Exibe a tela de login bloqueando o painel
     if (loginScreen) loginScreen.style.display = 'flex';
     return false;
 }
@@ -167,12 +167,17 @@ function initGestureNavigation() {
     }, { passive: true });
 }
 
-function init() {
+// CORREÇÃO AUDITORIA #01/#04: Função de inicialização assíncrona com await no banco
+async function init() {
     if (typeof setupManifest === 'function') setupManifest();
     if (typeof setupServiceWorker === 'function') setupServiceWorker();
-    if (typeof loadAll === 'function') loadAll();
     
     updateHeader();
+    
+    // Aguarda o banco/cache carregar completamente antes de pintar o painel
+    if (typeof loadAll === 'function') {
+        await loadAll();
+    }
     
     const isAuthed = checkAdminAuth();
     if (isAuthed) {
