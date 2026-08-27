@@ -1,5 +1,12 @@
 // js/menu-admin.js - Gestão e CRUD do Cardápio Digital (Modo Gestor)
 
+// Auxiliar de sanitização contra XSS
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(String(text || '')));
+    return div.innerHTML;
+}
+
 const MenuAdminManager = {
     async uploadProductImage(file) {
         try {
@@ -44,7 +51,7 @@ const MenuAdminManager = {
                 .order('created_at', { ascending: false });
 
             if (error) {
-                container.innerHTML = `<div style="color:#EF4444; text-align:center;">Erro: ${error.message}</div>`;
+                container.innerHTML = `<div style="color:#EF4444; text-align:center;">Erro: ${escapeHtml(error.message)}</div>`;
                 return;
             }
 
@@ -59,32 +66,34 @@ const MenuAdminManager = {
                 const discount = Number(p.discount_pct || 0);
                 const originalPrice = Number(p.price || 0);
                 const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
+                const safeName = escapeHtml(p.name);
+                const safeCat = escapeHtml(p.category || 'Geral');
 
                 return `
                     <div class="card product-admin-card" style="margin-bottom:10px; padding:12px; display:flex; justify-content:space-between; align-items:center; background:#1E293B; border-left:4px solid ${p.is_active ? '#10B981' : '#64748B'};">
                         <div style="display:flex; align-items:center; gap:10px; flex:1;">
                             <div class="reorder-btns" style="display:flex; flex-direction:column; gap:2px;">
-                                <button class="btn-arrow" onclick="MenuAdminManager.moveProductOrder('${p.id}', ${p.display_order || index}, -1)" title="Subir Posição" style="background:none; border:none; color:#94A3B8; cursor:pointer; font-size:10px;">▲</button>
-                                <button class="btn-arrow" onclick="MenuAdminManager.moveProductOrder('${p.id}', ${p.display_order || index}, 1)" title="Descer Posição" style="background:none; border:none; color:#94A3B8; cursor:pointer; font-size:10px;">▼</button>
+                                <button class="btn-arrow" onclick="MenuAdminManager.moveProductOrder('${escapeHtml(p.id)}', ${p.display_order ?? index}, -1)" title="Subir Posição" style="background:none; border:none; color:#94A3B8; cursor:pointer; font-size:10px;">▲</button>
+                                <button class="btn-arrow" onclick="MenuAdminManager.moveProductOrder('${escapeHtml(p.id)}', ${p.display_order ?? index}, 1)" title="Descer Posição" style="background:none; border:none; color:#94A3B8; cursor:pointer; font-size:10px;">▼</button>
                             </div>
-                            ${p.image_url ? `<img src="${p.image_url}" style="width:48px; height:48px; border-radius:8px; object-fit:cover;">` : '<span style="font-size:24px;">🍽️</span>'}
+                            ${p.image_url ? `<img src="${escapeHtml(p.image_url)}" style="width:48px; height:48px; border-radius:8px; object-fit:cover;">` : '<span style="font-size:24px;">🍽️</span>'}
                             <div>
                                 <strong style="color:#F1F5F9; font-size:14px; display:block;">
-                                    ${p.name} ${p.is_cross_sell ? '<small style="color:#60A5FA;">[Cross-Sell]</small>' : ''}
+                                    ${safeName} ${p.is_cross_sell ? '<small style="color:#60A5FA;">[Cross-Sell]</small>' : ''}
                                 </strong>
                                 <span style="font-size:11px; color:#94A3B8;">
-                                    ${p.category || 'Geral'} • R$ ${finalPrice.toFixed(2)} 
+                                    ${safeCat} • R$ ${finalPrice.toFixed(2)} 
                                     ${discount > 0 ? `<span style="color:#10B981;">(-${discount}%)</span>` : ''}
                                 </span>
                             </div>
                         </div>
 
                         <div style="display:flex; gap:6px; align-items:center;">
-                            <button class="btn btn-sm ${p.is_active ? 'btn-success' : 'btn-secondary'}" onclick="MenuAdminManager.toggleProductActive('${p.id}', ${!p.is_active})" title="${p.is_active ? 'Pausar item' : 'Ativar item'}">
+                            <button class="btn btn-sm ${p.is_active ? 'btn-success' : 'btn-secondary'}" onclick="MenuAdminManager.toggleProductActive('${escapeHtml(p.id)}', ${!p.is_active})" title="${p.is_active ? 'Pausar item' : 'Ativar item'}">
                                 ${p.is_active ? '🟢' : '⚪'}
                             </button>
-                            <button class="btn btn-sm btn-secondary" onclick="MenuAdminManager.openProductModal('${p.id}')" title="Editar">✏️</button>
-                            <button class="btn btn-sm btn-danger" onclick="MenuAdminManager.deleteProduct('${p.id}')" title="Excluir">🗑️</button>
+                            <button class="btn btn-sm btn-secondary" onclick="MenuAdminManager.openProductModal('${escapeHtml(p.id)}')" title="Editar">✏️</button>
+                            <button class="btn btn-sm btn-danger" onclick="MenuAdminManager.deleteProduct('${escapeHtml(p.id)}')" title="Excluir">🗑️</button>
                         </div>
                     </div>
                 `;
@@ -98,7 +107,7 @@ const MenuAdminManager = {
     async openProductModal(productId = null) {
         let p = { name: '', description: '', price: '', category: 'Especialidades', discount_pct: 0, is_active: true, is_cross_sell: false, image_url: '' };
 
-        if (productId) {
+        if (productId && typeof dbClient !== 'undefined') {
             const { data } = await dbClient.from('products').select('*').eq('id', productId).single();
             if (data) p = data;
         }
@@ -108,16 +117,16 @@ const MenuAdminManager = {
             ? window.currentAdminProducts.map(item => item.category).filter(Boolean)
             : [];
         const uniqueCategories = [...new Set([...defaultCategories, ...customCategories])];
-        const categoryOptionsHtml = uniqueCategories.map(cat => `<option value="${cat}">`).join('');
+        const categoryOptionsHtml = uniqueCategories.map(cat => `<option value="${escapeHtml(cat)}">`).join('');
 
         const bodyHtml = `
             <div class="form-group">
                 <label>Nome do Prato / Item *</label>
-                <input type="text" id="prod_name" value="${p.name || ''}" placeholder="Ex: Pastel Duplo de Carne">
+                <input type="text" id="prod_name" value="${escapeHtml(p.name || '')}" placeholder="Ex: Pastel Duplo de Carne">
             </div>
             <div class="form-group">
                 <label>Categoria *</label>
-                <input type="text" id="prod_category" value="${p.category || 'Geral'}" placeholder="Ex: Pastéis, Bebidas..." list="cat_list">
+                <input type="text" id="prod_category" value="${escapeHtml(p.category || 'Geral')}" placeholder="Ex: Pastéis, Bebidas..." list="cat_list">
                 <datalist id="cat_list">
                     ${categoryOptionsHtml}
                 </datalist>
@@ -134,7 +143,7 @@ const MenuAdminManager = {
             </div>
             <div class="form-group">
                 <label>Descrição / Ingredientes</label>
-                <textarea id="prod_desc" rows="2" placeholder="Ex: Carne moída especial e tempero da casa">${p.description || ''}</textarea>
+                <textarea id="prod_desc" rows="2" placeholder="Ex: Carne moída especial e tempero da casa">${escapeHtml(p.description || '')}</textarea>
             </div>
             <div class="form-group">
                 <label>Foto do Prato (Galeria / PC)</label>
@@ -142,7 +151,7 @@ const MenuAdminManager = {
             </div>
             <div class="form-group">
                 <label>Ou URL da Imagem</label>
-                <input type="text" id="prod_img" value="${p.image_url || ''}" placeholder="https://link-da-imagem.com/foto.jpg">
+                <input type="text" id="prod_img" value="${escapeHtml(p.image_url || '')}" placeholder="https://link-da-imagem.com/foto.jpg">
             </div>
             <div style="margin-bottom:14px; display:flex; gap:12px; flex-wrap:wrap;">
                 <label style="font-size:12px; color:#CBD5E1; display:flex; align-items:center; gap:6px; cursor:pointer;">
@@ -152,7 +161,7 @@ const MenuAdminManager = {
                     <input type="checkbox" id="prod_cross" ${p.is_cross_sell ? 'checked' : ''}> Sugerir no Carrinho (Cross-sell)
                 </label>
             </div>
-            <button class="btn btn-large" id="btn_save_prod" onclick="MenuAdminManager.saveProduct('${productId || ''}')">💾 Salvar Prato</button>
+            <button class="btn btn-large" id="btn_save_prod" onclick="MenuAdminManager.saveProduct('${escapeHtml(productId || '')}')">💾 Salvar Prato</button>
         `;
 
         if (typeof openModal === 'function') {
@@ -214,25 +223,63 @@ const MenuAdminManager = {
 
     async moveProductOrder(id, currentOrder, direction) {
         try {
-            const newOrder = currentOrder + direction;
-            if (typeof dbClient !== 'undefined') {
-                await dbClient.from('products').update({ display_order: newOrder }).eq('id', id);
-                this.renderAdminProductsList();
-            }
+            if (typeof dbClient === 'undefined') return;
+
+            const { data: products, error } = await dbClient
+                .from('products')
+                .select('id, display_order')
+                .order('display_order', { ascending: true });
+
+            if (error || !products || products.length === 0) return;
+
+            const currentIndex = products.findIndex(p => p.id === id);
+            if (currentIndex === -1) return;
+
+            const swapIndex = currentIndex + direction;
+            if (swapIndex < 0 || swapIndex >= products.length) return;
+
+            const currentProduct = products[currentIndex];
+            const swapProduct = products[swapIndex];
+
+            const orderA = swapProduct.display_order ?? swapIndex;
+            const orderB = currentProduct.display_order ?? currentIndex;
+
+            await Promise.all([
+                dbClient.from('products').update({ display_order: orderA === orderB ? swapIndex : orderA }).eq('id', currentProduct.id),
+                dbClient.from('products').update({ display_order: orderA === orderB ? currentIndex : orderB }).eq('id', swapProduct.id)
+            ]);
+
+            this.renderAdminProductsList();
         } catch (e) {
             console.error('Erro ao reordenar:', e);
+            if (typeof showToast === 'function') showToast('Erro ao reordenar pratos.', 'error');
         }
     },
 
     async toggleProductActive(productId, newStatus) {
-        await dbClient.from('products').update({ is_active: newStatus }).eq('id', productId);
-        this.renderAdminProductsList();
+        try {
+            if (typeof dbClient === 'undefined') return;
+            const { error } = await dbClient.from('products').update({ is_active: newStatus }).eq('id', productId);
+            if (error) throw error;
+            if (typeof showToast === 'function') showToast(newStatus ? 'Prato ativado!' : 'Prato pausado!');
+            this.renderAdminProductsList();
+        } catch (e) {
+            console.error('Erro ao alterar status do produto:', e);
+            if (typeof showToast === 'function') showToast('Erro ao atualizar produto.', 'error');
+        }
     },
 
     async deleteProduct(productId) {
-        if (confirm('Tem certeza que deseja remover este prato do cardápio?')) {
-            await dbClient.from('products').delete().eq('id', productId);
+        if (!confirm('Tem certeza que deseja remover este prato do cardápio?')) return;
+        try {
+            if (typeof dbClient === 'undefined') return;
+            const { error } = await dbClient.from('products').delete().eq('id', productId);
+            if (error) throw error;
+            if (typeof showToast === 'function') showToast('Prato removido do cardápio!');
             this.renderAdminProductsList();
+        } catch (e) {
+            console.error('Erro ao deletar produto:', e);
+            if (typeof showToast === 'function') showToast('Erro ao remover prato.', 'error');
         }
     }
 };
