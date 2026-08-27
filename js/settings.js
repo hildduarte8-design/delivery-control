@@ -1,4 +1,4 @@
-// js/settings.js - Configurações da Loja, Identidade Visual, GPS e Senha
+// js/settings.js - Configurações da Loja, Identidade Visual, GPS, Senha e Backup
 
 function applyDynamicTheme(color) {
     if (!color) return;
@@ -12,9 +12,13 @@ if (typeof window.applyThemeColor === 'undefined') {
 }
 
 function loadSettingsUI() {
-    const settings = (typeof DB !== 'undefined' && DB.load) 
-        ? DB.load('dly_settings', { storeName: '', phone: '', password: '', pixKey: '', storeLat: '', storeLon: '', logoUrl: '', primaryColor: '#FF6B35' })
-        : { storeName: '', phone: '', password: '', pixKey: '', storeLat: '', storeLon: '', logoUrl: '', primaryColor: '#FF6B35' };
+    let settings = { storeName: '', phone: '', password: '', pixKey: '', storeLat: '', storeLon: '', logoUrl: '', primaryColor: '#FF6B35' };
+    
+    if (typeof state !== 'undefined' && state.settings) {
+        settings = state.settings;
+    } else if (typeof DB !== 'undefined' && DB.load) {
+        settings = DB.load('dly_settings', settings);
+    }
     
     const nameEl = document.getElementById('cfg_store_name');
     const phoneEl = document.getElementById('cfg_phone');
@@ -52,7 +56,7 @@ function loadSettingsUI() {
         };
     }
 
-    if (btnGps && settings.storeLat) {
+    if (btnGps && (settings.storeLat || latEl?.value)) {
         btnGps.textContent = "✅ Localização da Loja Gravada!";
         btnGps.style.background = "#10B981";
     }
@@ -164,6 +168,8 @@ async function saveSettings() {
                 pix_key: pixKey,
                 logo_url: logoUrl,
                 primary_color: primaryColor,
+                store_lat: storeLat,
+                store_lon: storeLon,
                 updated_at: new Date().toISOString()
             });
         }
@@ -173,6 +179,63 @@ async function saveSettings() {
 
     if (typeof showToast === 'function') showToast('Configurações salvas!');
 }
+
+// --- NOVO: FUNÇÃO DE BACKUP EM 1 CLIQUE ---
+async function downloadSystemBackup() {
+    try {
+        if (typeof showToast === 'function') showToast('Gerando backup dos dados...');
+
+        let backupData = {
+            exportedAt: new Date().toISOString(),
+            settings: window.state?.settings || {},
+            stock: [],
+            recipes: [],
+            expenses: [],
+            orders: [],
+            customers: []
+        };
+
+        if (typeof dbClient !== 'undefined') {
+            const [stockRes, recipesRes, expRes, ordersRes, custRes] = await Promise.all([
+                dbClient.from('stock').select('*'),
+                dbClient.from('recipes').select('*'),
+                dbClient.from('expenses').select('*'),
+                dbClient.from('orders').select('*'),
+                dbClient.from('customers').select('*')
+            ]);
+
+            backupData.stock = stockRes.data || [];
+            backupData.recipes = recipesRes.data || [];
+            backupData.expenses = expRes.data || [];
+            backupData.orders = ordersRes.data || [];
+            backupData.customers = custRes.data || [];
+        } else {
+            backupData.stock = JSON.parse(localStorage.getItem('dly_stock') || '[]');
+            backupData.recipes = JSON.parse(localStorage.getItem('dly_recipes') || '[]');
+            backupData.expenses = JSON.parse(localStorage.getItem('dly_expenses') || '[]');
+            backupData.orders = JSON.parse(localStorage.getItem('dly_sales') || '[]');
+        }
+
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", `delivery_backup_${new Date().toISOString().slice(0, 10)}.json`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+
+        if (typeof showToast === 'function') showToast('Backup baixado com sucesso!');
+    } catch (e) {
+        console.error('Erro ao gerar backup:', e);
+        if (typeof showToast === 'function') showToast('Erro ao gerar arquivo de backup.', 'error');
+    }
+}
+
+// Global hooks
+window.loadSettingsUI = loadSettingsUI;
+window.saveSettings = saveSettings;
+window.getStoreGPS = getStoreGPS;
+window.downloadSystemBackup = downloadSystemBackup;
 
 document.addEventListener('DOMContentLoaded', () => {
     if (typeof loadSettingsUI === 'function') loadSettingsUI();
