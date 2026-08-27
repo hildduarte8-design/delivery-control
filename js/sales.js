@@ -11,6 +11,7 @@ const SalesManager = {
     customersCache: [],
     productsCache: [],
 
+    // Busca clientes agregando do CustomersManager, do banco, do cache local e dos pedidos existentes
     async getCustomersList() {
         let list = [];
 
@@ -31,6 +32,7 @@ const SalesManager = {
             list = JSON.parse(localStorage.getItem('dly_customers') || '[]');
         }
 
+        // FALLBACK: Se não houver tabela de clientes, extrai dos pedidos já cadastrados
         if (list.length === 0) {
             let orders = [];
             if (typeof state !== 'undefined' && Array.isArray(state.orders) && state.orders.length > 0) {
@@ -66,6 +68,7 @@ const SalesManager = {
         return list;
     },
 
+    // Busca os produtos do cardápio
     async getProductsList() {
         let products = window.currentAdminProducts || [];
 
@@ -90,6 +93,7 @@ const SalesManager = {
     async openSaleModal() {
         this.currentSaleItems = [];
 
+        // Busca os dados antes de montar o HTML
         const customers = await this.getCustomersList();
         const products = await this.getProductsList();
 
@@ -110,6 +114,7 @@ const SalesManager = {
 
         const modalBody = `
             <div style="padding:2px;">
+                <!-- SELEÇÃO DE CLIENTE CADASTRADO -->
                 <div class="form-group" style="margin-bottom:10px;">
                     <label style="font-size:12px; color:#CBD5E1;">Cliente Cadastrado (Opcional)</label>
                     <select id="sale_customer_select" onchange="SalesManager.onSelectCustomer(this.value)" style="font-size:13px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155;">
@@ -134,6 +139,7 @@ const SalesManager = {
                     <input type="text" id="sale_address" placeholder="Rua, Número, Bairro (ou Balcão)" style="font-size:12px; padding:6px;">
                 </div>
 
+                <!-- ADICIONAR ITENS DO CARDÁPIO -->
                 <div style="border-top:1px solid #334155; padding-top:10px; margin-top:10px;">
                     <div style="font-size:12px; font-weight:700; color:#FF6B35; margin-bottom:8px;">🛍️ Adicionar Itens do Cardápio</div>
                     <div style="display:flex; gap:6px; margin-bottom:10px;">
@@ -145,11 +151,13 @@ const SalesManager = {
                         <button class="btn btn-sm btn-success" onclick="SalesManager.addItemToSale()" style="width:auto; padding:0 12px; font-weight:700;">+ Add</button>
                     </div>
 
+                    <!-- LISTA DE ITENS SELECIONADOS -->
                     <div id="sale_selected_items_list" style="background:#0F172A; border:1px solid #334155; border-radius:8px; padding:8px; min-height:60px; margin-bottom:12px;">
                         <div style="color:#94A3B8; font-size:11px; text-align:center; padding:15px;">Nenhum item adicionado ainda.</div>
                     </div>
                 </div>
 
+                <!-- VALORES, DESCONTO E TOTAL -->
                 <div style="background:#1E293B; border-radius:8px; padding:10px; border:1px solid #334155;">
                     <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#CBD5E1; margin-bottom:6px;">
                         <span>Subtotal dos Itens:</span>
@@ -279,8 +287,12 @@ const SalesManager = {
 
         const subtotal = this.currentSaleItems.reduce((acc, i) => acc + i.total, 0);
 
+        const orderId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
+            ? `sale_${crypto.randomUUID()}` 
+            : `sale_${Date.now()}`;
+
         const orderData = {
-            id: `sale_${Date.now()}`,
+            id: orderId,
             client_name,
             customer_name: client_name,
             phone,
@@ -344,7 +356,7 @@ async function renderSalesList() {
         if (typeof dbClient !== 'undefined') {
             const { data, error } = await dbClient.from('orders').select('*').order('created_at', { ascending: false });
             if (!error && data) {
-                sales = data.filter(s => s.source === 'Manual' || s.id.startsWith('sale_'));
+                sales = data.filter(s => s.source === 'Manual' || String(s.id).startsWith('sale_'));
             }
         }
     } catch (e) {
