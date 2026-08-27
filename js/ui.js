@@ -10,6 +10,7 @@ function switchTab(tabId) {
     const btn = document.querySelector(`.bottom-nav button[data-tab="${tabId}"]`);
     if (btn) btn.classList.add('active');
     
+    // Executa o carregamento de dados da aba selecionada
     if (tabId === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
     if (tabId === 'orders' && typeof OrdersManager !== 'undefined') OrdersManager.fetchOrders();
     if (tabId === 'menu' && typeof MenuAdminManager !== 'undefined') MenuAdminManager.renderAdminProductsList();
@@ -31,6 +32,7 @@ function openModal(title, bodyHtml) {
     if (overlay) {
         overlay.classList.add('active');
         overlay.style.display = 'flex';
+        document.body.style.overflow = 'hidden'; // Evita rolagem do fundo
     }
 }
 
@@ -39,6 +41,7 @@ function closeModal() {
     if (overlay) {
         overlay.classList.remove('active');
         overlay.style.display = 'none';
+        document.body.style.overflow = ''; // Restaura a rolagem
     }
 }
 
@@ -62,9 +65,18 @@ function quickAction(action) {
 document.addEventListener('DOMContentLoaded', () => {
     const fabBtn = document.getElementById('fabBtn');
     const fabMenu = document.getElementById('fabMenu');
+    
     if (fabBtn && fabMenu) {
-        fabBtn.addEventListener('click', () => {
+        fabBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
             fabMenu.classList.toggle('active');
+        });
+
+        // Fecha o menu FAB ao clicar fora
+        document.addEventListener('click', (e) => {
+            if (!fabMenu.contains(e.target) && e.target !== fabBtn) {
+                fabMenu.classList.remove('active');
+            }
         });
     }
     
@@ -137,3 +149,10 @@ document.addEventListener('click', (e) => {
         renderLogisticsList();
     }
 });
+
+// Exposição global de funções de interface
+window.switchTab = switchTab;
+window.openModal = openModal;
+window.closeModal = closeModal;
+window.showToast = showToast;
+window.quickAction = quickAction;
