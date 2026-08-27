@@ -114,37 +114,44 @@ const StockManager = {
 
         const newQty = currentQty + addedQty;
 
-        try {
-            if (typeof dbClient !== 'undefined') {
-                await dbClient.from('stock').update({ 
+        // 1. Atualização imediata no Cache local (UI responde na hora)
+        let localStock = JSON.parse(localStorage.getItem('dly_stock') || '[]');
+        const idx = localStock.findIndex(i => i.id === id);
+        if (idx >= 0) {
+            localStock[idx].quantity = newQty;
+            localStock[idx].current_qty = newQty;
+            localStock[idx].currentQty = newQty;
+            localStorage.setItem('dly_stock', JSON.stringify(localStock));
+            if (typeof state !== 'undefined') state.stock = localStock;
+        }
+
+        // 2. Atualização segura no Supabase
+        if (typeof dbClient !== 'undefined') {
+            try {
+                // Tenta atualizar a coluna standard 'quantity'
+                let { error } = await dbClient.from('stock').update({ 
                     quantity: newQty, 
-                    current_qty: newQty, 
                     updated_at: new Date().toISOString() 
                 }).eq('id', id);
+
+                // Se o banco usar 'current_qty', tenta como fallback
+                if (error) {
+                    await dbClient.from('stock').update({ 
+                        current_qty: newQty, 
+                        updated_at: new Date().toISOString() 
+                    }).eq('id', id);
+                }
+            } catch (e) {
+                console.warn('Erro ao sincronizar reposição no Supabase:', e);
             }
+        }
 
-            let localStock = JSON.parse(localStorage.getItem('dly_stock') || '[]');
-            const idx = localStock.findIndex(i => i.id === id);
-            if (idx >= 0) {
-                localStock[idx].quantity = newQty;
-                localStock[idx].current_qty = newQty;
-                localStock[idx].currentQty = newQty;
-            }
+        if (typeof closeModal === 'function') closeModal();
+        if (typeof showToast === 'function') showToast(`+${addedQty} adicionado! Novo total: ${newQty}`);
 
-            localStorage.setItem('dly_stock', JSON.stringify(localStock));
-            if (typeof DB !== 'undefined') DB.save('dly_stock', localStock);
-            if (typeof state !== 'undefined') state.stock = localStock;
-
-            if (typeof closeModal === 'function') closeModal();
-            if (typeof showToast === 'function') showToast(`+${addedQty} adicionado! Novo total: ${newQty}`);
-
-            renderStockList();
-            if (typeof CalculatorManager !== 'undefined' && CalculatorManager.refreshStockList) {
-                CalculatorManager.refreshStockList(true);
-            }
-        } catch (e) {
-            console.error('Erro ao repor estoque:', e);
-            if (typeof showToast === 'function') showToast('Erro ao atualizar quantidade.', 'error');
+        renderStockList();
+        if (typeof CalculatorManager !== 'undefined' && CalculatorManager.refreshStockList) {
+            CalculatorManager.refreshStockList(true);
         }
     },
 
