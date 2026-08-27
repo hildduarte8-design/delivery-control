@@ -1,12 +1,19 @@
 // js/sales.js - Vendas Manuais de Balcão (Múltiplos Itens, Clientes e Descontos)
 
+// Auxiliar de sanitização contra XSS
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(String(text || '')));
+    return div.innerHTML;
+}
+
 const SalesManager = {
     currentSaleItems: [],
 
     async openSaleModal() {
         this.currentSaleItems = [];
         
-        // Carrega produtos do cardápio e clientes do banco
+        // Carrega produtos do cardápio e clientes
         let products = window.currentAdminProducts || [];
         if (products.length === 0 && typeof dbClient !== 'undefined') {
             const { data } = await dbClient.from('products').select('*').eq('is_active', true);
@@ -14,22 +21,22 @@ const SalesManager = {
         }
 
         let customers = [];
-        if (typeof CustomersManager !== 'undefined' && CustomersManager.allCustomers) {
+        if (typeof CustomersManager !== 'undefined' && CustomersManager.allCustomers && CustomersManager.allCustomers.length > 0) {
             customers = CustomersManager.allCustomers;
         } else if (typeof dbClient !== 'undefined') {
-            const { data } = await dbClient.from('orders').select('client_name, phone, address');
+            const { data } = await dbClient.from('customers').select('name, phone, address');
             customers = data || [];
         }
 
         const customerOptions = customers.map(c => `
-            <option value="${c.name.replace(/"/g, '&quot;')}" data-phone="${c.phone || ''}" data-address="${c.address || ''}">
-                ${c.name} ${c.phone ? `(${c.phone})` : ''}
+            <option value="${escapeHtml(c.name)}" data-phone="${escapeHtml(c.phone || '')}" data-address="${escapeHtml(c.address || '')}">
+                ${escapeHtml(c.name)} ${c.phone ? `(${escapeHtml(c.phone)})` : ''}
             </option>
         `).join('');
 
         const productOptions = products.map(p => `
-            <option value="${p.id}" data-name="${p.name.replace(/"/g, '&quot;')}" data-price="${p.price}">
-                ${p.name} - R$ ${Number(p.price).toFixed(2)}
+            <option value="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}" data-price="${Number(p.price || 0)}">
+                ${escapeHtml(p.name)} - R$ ${Number(p.price || 0).toFixed(2)}
             </option>
         `).join('');
 
@@ -127,24 +134,32 @@ const SalesManager = {
 
         const opt = select.options[select.selectedIndex];
         const id = select.value;
-        const name = opt.getAttribute('data-name');
+        const name = opt.getAttribute('data-name') || '';
         const price = parseFloat(opt.getAttribute('data-price')) || 0;
-        const qty = parseInt(qtyInput.value) || 1;
+        const qty = Math.max(1, parseInt(qtyInput?.value) || 1);
 
-        this.currentSaleItems.push({
-            id,
-            name,
-            price,
-            qty,
-            total: price * qty
-        });
+        // Se o item já existir, incrementa a quantidade
+        const existingItem = this.currentSaleItems.find(i => i.id === id);
+        if (existingItem) {
+            existingItem.qty += qty;
+            existingItem.total = existingItem.price * existingItem.qty;
+        } else {
+            this.currentSaleItems.push({
+                uid: `item_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+                id,
+                name,
+                price,
+                qty,
+                total: price * qty
+            });
+        }
 
         this.renderSelectedItemsList();
         this.updateSaleTotals();
     },
 
-    removeItemFromSale(index) {
-        this.currentSaleItems.splice(index, 1);
+    removeItemFromSale(uid) {
+        this.currentSaleItems = this.currentSaleItems.filter(i => i.uid !== uid);
         this.renderSelectedItemsList();
         this.updateSaleTotals();
     },
@@ -158,15 +173,15 @@ const SalesManager = {
             return;
         }
 
-        container.innerHTML = this.currentSaleItems.map((item, idx) => `
+        container.innerHTML = this.currentSaleItems.map(item => `
             <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #1E293B; font-size:12px;">
                 <div>
-                    <strong style="color:#F1F5F9;">${item.qty}x ${item.name}</strong>
+                    <strong style="color:#F1F5F9;">${item.qty}x ${escapeHtml(item.name)}</strong>
                     <div style="font-size:10px; color:#94A3B8;">Unit: R$ ${item.price.toFixed(2)}</div>
                 </div>
                 <div style="display:flex; align-items:center; gap:8px;">
                     <span style="color:#10B981; font-weight:700;">R$ ${item.total.toFixed(2)}</span>
-                    <button class="btn btn-sm" onclick="SalesManager.removeItemFromSale(${idx})" style="background:#EF4444; color:#fff; padding:1px 6px; font-size:10px;">✕</button>
+                    <button class="btn btn-sm" onclick="SalesManager.removeItemFromSale('${escapeHtml(item.uid)}')" style="background:#EF4444; color:#fff; padding:1px 6px; font-size:10px;">✕</button>
                 </div>
             </div>
         `).join('');
@@ -192,12 +207,15 @@ const SalesManager = {
         const total = parseFloat(document.getElementById('sale_final_total')?.value) || 0;
 
         if (this.currentSaleItems.length === 0 && total <= 0) {
-            return alert('Adicione pelo menos um item ou informe o valor da venda!');
+            if (typeof showToast === 'function') showToast('Adicione pelo menos um item ou informe o valor!', 'error');
+            else alert('Adicione pelo menos um item ou informe o valor!');
+            return;
         }
 
         const subtotal = this.currentSaleItems.reduce((acc, i) => acc + i.total, 0);
 
         const orderData = {
+            id: `sale_${Date.now()}`,
             client_name,
             phone,
             address,
@@ -212,21 +230,31 @@ const SalesManager = {
             created_at: new Date().toISOString()
         };
 
+        let savedToCloud = false;
+
         try {
             if (typeof dbClient !== 'undefined') {
-                await dbClient.from('orders').insert([orderData]);
+                const { error } = await dbClient.from('orders').insert([orderData]);
+                if (!error) savedToCloud = true;
             }
-
-            if (typeof showToast === 'function') showToast('Venda manual registrada com sucesso!');
-            if (typeof closeModal === 'function') closeModal();
-
-            if (typeof renderDashboard === 'function') renderDashboard();
-            if (typeof OrdersManager !== 'undefined') OrdersManager.fetchOrders();
-
         } catch (e) {
-            console.error('Erro ao registrar venda:', e);
-            alert('Erro ao salvar venda.');
+            console.error('Erro ao salvar no Supabase:', e);
         }
+
+        // Atualização do cache e estado local
+        if (typeof state !== 'undefined') {
+            if (!Array.isArray(state.sales)) state.sales = [];
+            state.sales.unshift(orderData);
+            if (typeof DB !== 'undefined') DB.save('dly_sales', state.sales);
+        }
+
+        if (typeof showToast === 'function') {
+            showToast(savedToCloud ? 'Venda manual registrada com sucesso!' : 'Venda registrada localmente (offline)');
+        }
+        if (typeof closeModal === 'function') closeModal();
+
+        if (typeof renderDashboard === 'function') renderDashboard();
+        if (typeof OrdersManager !== 'undefined' && OrdersManager.fetchOrders) OrdersManager.fetchOrders();
     }
 };
 
