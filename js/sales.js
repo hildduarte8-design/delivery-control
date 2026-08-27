@@ -1,6 +1,5 @@
-// js/sales.js - Vendas Manuais de Balcão (Múltiplos Itens, Clientes e Descontos)
+// js/sales.js - Vendas Manuais de Balcão (Carregamento Dinâmico de Clientes e Produtos)
 
-// Auxiliar de sanitização contra XSS
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.appendChild(document.createTextNode(String(text || '')));
@@ -9,136 +8,168 @@ function escapeHtml(text) {
 
 const SalesManager = {
     currentSaleItems: [],
+    customersCache: [],
+    productsCache: [],
 
     async openSaleModal() {
         this.currentSaleItems = [];
-        
-        // 1. Carrega produtos do cardápio (Supabase -> Variável Global -> LocalStorage)
+
+        const modalBody = `
+            <div style="padding:2px;">
+                <!-- SELEÇÃO DE CLIENTE CADASTRADO -->
+                <div class="form-group" style="margin-bottom:10px;">
+                    <label style="font-size:12px; color:#CBD5E1;">Cliente Cadastrado (Opcional)</label>
+                    <select id="sale_customer_select" onchange="SalesManager.onSelectCustomer(this.value)" style="font-size:13px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155;">
+                        <option value="">🔄 Carregando clientes...</option>
+                    </select>
+                </div>
+
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:10px;">
+                    <div class="form-group" style="margin:0;">
+                        <label style="font-size:11px; color:#94A3B8;">Nome do Cliente</label>
+                        <input type="text" id="sale_client_name" placeholder="Ex: Maria Souza" style="font-size:12px; padding:6px;">
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label style="font-size:11px; color:#94A3B8;">WhatsApp</label>
+                        <input type="tel" id="sale_phone" placeholder="33999999999" style="font-size:12px; padding:6px;">
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label style="font-size:11px; color:#94A3B8;">Endereço de Entrega / Observação</label>
+                    <input type="text" id="sale_address" placeholder="Rua, Número, Bairro (ou Balcão)" style="font-size:12px; padding:6px;">
+                </div>
+
+                <!-- ADICIONAR ITENS DO CARDÁPIO -->
+                <div style="border-top:1px solid #334155; padding-top:10px; margin-top:10px;">
+                    <div style="font-size:12px; font-weight:700; color:#FF6B35; margin-bottom:8px;">🛍️ Adicionar Itens do Cardápio</div>
+                    <div style="display:flex; gap:6px; margin-bottom:10px;">
+                        <select id="sale_product_select" style="flex:1; font-size:12px; padding:6px; background:#1E293B; color:#F1F5F9; border:1px solid #475569;">
+                            <option value="">🔄 Carregando pratos...</option>
+                        </select>
+                        <input type="number" id="sale_product_qty" value="1" min="1" style="width:60px; font-size:12px; padding:6px; text-align:center;">
+                        <button class="btn btn-sm btn-success" onclick="SalesManager.addItemToSale()" style="width:auto; padding:0 12px; font-weight:700;">+ Add</button>
+                    </div>
+
+                    <!-- LISTA DE ITENS SELECIONADOS -->
+                    <div id="sale_selected_items_list" style="background:#0F172A; border:1px solid #334155; border-radius:8px; padding:8px; min-height:60px; margin-bottom:12px;">
+                        <div style="color:#94A3B8; font-size:11px; text-align:center; padding:15px;">Nenhum item adicionado ainda.</div>
+                    </div>
+                </div>
+
+                <!-- VALORES, DESCONTO E TOTAL -->
+                <div style="background:#1E293B; border-radius:8px; padding:10px; border:1px solid #334155;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#CBD5E1; margin-bottom:6px;">
+                        <span>Subtotal dos Itens:</span>
+                        <strong id="sale_subtotal_display" style="color:#F1F5F9;">R$ 0,00</strong>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; align-items:center;">
+                        <div>
+                            <label style="font-size:11px; color:#94A3B8;">Desconto (R$)</label>
+                            <input type="number" step="0.01" id="sale_discount_input" value="0.00" oninput="SalesManager.updateSaleTotals()" style="font-size:12px; padding:6px;">
+                        </div>
+                        <div>
+                            <label style="font-size:11px; color:#94A3B8;">Valor Final a Cobrar</label>
+                            <input type="number" step="0.01" id="sale_final_total" value="0.00" style="font-size:14px; font-weight:800; color:#10B981; padding:6px;">
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn btn-large" onclick="SalesManager.saveManualSale()" style="margin-top:14px; background:#FF6B35; color:#fff;">💾 Finalizar Venda Manual</button>
+            </div>
+        `;
+
+        if (typeof openModal === 'function') {
+            openModal('💰 Nova Venda / Entrada Manual', modalBody);
+        }
+
+        // Popula as listas assincronamente após renderizar o modal
+        setTimeout(async () => {
+            await this.loadCustomersDropdown();
+            await this.loadProductsDropdown();
+        }, 50);
+    },
+
+    async loadCustomersDropdown() {
+        const selectEl = document.getElementById('sale_customer_select');
+        if (!selectEl) return;
+
+        let customers = [];
+        try {
+            if (typeof dbClient !== 'undefined') {
+                const { data, error } = await dbClient.from('customers').select('*').order('name', { ascending: true });
+                if (!error && data && data.length > 0) customers = data;
+            }
+        } catch (e) {
+            console.warn('Erro ao buscar clientes no Supabase:', e);
+        }
+
+        if (customers.length === 0 && typeof CustomersManager !== 'undefined' && CustomersManager.allCustomers) {
+            customers = CustomersManager.allCustomers;
+        }
+
+        if (customers.length === 0 && typeof state !== 'undefined' && state.customers) {
+            customers = state.customers;
+        }
+
+        if (customers.length === 0) {
+            customers = JSON.parse(localStorage.getItem('dly_customers') || localStorage.getItem('customers') || '[]');
+        }
+
+        this.customersCache = customers;
+
+        let optionsHtml = '<option value="">-- Cliente Avulso / Balcão --</option>';
+        customers.forEach(c => {
+            const name = escapeHtml(c.name || 'Cliente');
+            const phone = escapeHtml(c.phone || c.whatsapp || '');
+            optionsHtml += `<option value="${escapeHtml(c.id || name)}" data-name="${name}" data-phone="${phone}" data-address="${escapeHtml(c.address || '')}">${name} ${phone ? '(' + phone + ')' : ''}</option>`;
+        });
+
+        selectEl.innerHTML = optionsHtml;
+    },
+
+    onSelectCustomer(val) {
+        if (!val || !this.customersCache) return;
+
+        const customer = this.customersCache.find(c => String(c.id) === String(val) || String(c.name) === String(val));
+        if (!customer) return;
+
+        const nameInput = document.getElementById('sale_client_name');
+        const phoneInput = document.getElementById('sale_phone');
+        const addressInput = document.getElementById('sale_address');
+
+        if (nameInput) nameInput.value = customer.name || '';
+        if (phoneInput) phoneInput.value = customer.phone || customer.whatsapp || '';
+        if (addressInput && customer.address) addressInput.value = customer.address;
+    },
+
+    async loadProductsDropdown() {
+        const selectEl = document.getElementById('sale_product_select');
+        if (!selectEl) return;
+
         let products = window.currentAdminProducts || [];
         if (products.length === 0 && typeof dbClient !== 'undefined') {
             try {
                 const { data } = await dbClient.from('products').select('*').eq('is_active', true);
                 products = data || [];
             } catch (e) {
-                console.warn('Erro ao carregar produtos do Supabase:', e);
+                console.warn('Erro ao buscar produtos:', e);
             }
         }
         if (products.length === 0) {
             products = JSON.parse(localStorage.getItem('dly_menu') || '[]');
         }
 
-        // 2. Carrega clientes (CustomersManager -> Supabase -> LocalStorage)
-        let customers = [];
-        if (typeof CustomersManager !== 'undefined' && CustomersManager.allCustomers && CustomersManager.allCustomers.length > 0) {
-            customers = CustomersManager.allCustomers;
-        } else if (typeof dbClient !== 'undefined') {
-            try {
-                const { data } = await dbClient.from('customers').select('name, phone, address');
-                customers = data || [];
-            } catch (e) {
-                console.warn('Erro ao carregar clientes do Supabase:', e);
-            }
-        }
-        if (customers.length === 0) {
-            customers = JSON.parse(localStorage.getItem('dly_customers') || '[]');
-        }
+        this.productsCache = products;
 
-        const customerOptions = customers.map(c => `
-            <option value="${escapeHtml(c.name)}" data-phone="${escapeHtml(c.phone || '')}" data-address="${escapeHtml(c.address || '')}">
-                ${escapeHtml(c.name)} ${c.phone ? `(${escapeHtml(c.phone)})` : ''}
-            </option>
-        `).join('');
+        let optionsHtml = '<option value="">-- Selecione o Prato/Item --</option>';
+        products.forEach(p => {
+            const price = Number(p.price || 0);
+            optionsHtml += `<option value="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}" data-price="${price}">${escapeHtml(p.name)} - R$ ${price.toFixed(2)}</option>`;
+        });
 
-        const productOptions = products.map(p => `
-            <option value="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}" data-price="${Number(p.price || 0)}">
-                ${escapeHtml(p.name)} - R$ ${Number(p.price || 0).toFixed(2)}
-            </option>
-        `).join('');
-
-        const modalBody = `
-            <!-- SELEÇÃO DE CLIENTE CADASTRADO -->
-            <div class="form-group" style="margin-bottom: 10px;">
-                <label style="font-size:12px; color:#CBD5E1;">Cliente Cadastrado (Opcional)</label>
-                <select id="sale_customer_select" onchange="SalesManager.onSelectCustomer(this)" style="font-size:13px; padding:8px;">
-                    <option value="">-- Cliente Avulso / Balcão --</option>
-                    ${customerOptions}
-                </select>
-            </div>
-
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:10px;">
-                <div class="form-group" style="margin:0;">
-                    <label style="font-size:11px; color:#94A3B8;">Nome do Cliente</label>
-                    <input type="text" id="sale_client_name" placeholder="Ex: Maria Souza" style="font-size:12px; padding:6px;">
-                </div>
-                <div class="form-group" style="margin:0;">
-                    <label style="font-size:11px; color:#94A3B8;">WhatsApp</label>
-                    <input type="tel" id="sale_phone" placeholder="33999999999" style="font-size:12px; padding:6px;">
-                </div>
-            </div>
-
-            <div class="form-group" style="margin-bottom:12px;">
-                <label style="font-size:11px; color:#94A3B8;">Endereço de Entrega / Observação</label>
-                <input type="text" id="sale_address" placeholder="Rua, Número, Bairro (ou Balcão)" style="font-size:12px; padding:6px;">
-            </div>
-
-            <!-- ADICIONAR ITENS DO CARDÁPIO -->
-            <div style="border-top:1px solid #334155; padding-top:10px; margin-top:10px;">
-                <div style="font-size:12px; font-weight:700; color:#FF6B35; margin-bottom:8px;">🛍️ Adicionar Itens do Cardápio</div>
-                <div style="display:flex; gap:6px; margin-bottom:10px;">
-                    <select id="sale_product_select" style="flex:1; font-size:12px; padding:6px;">
-                        <option value="">-- Selecione o Prato/Item --</option>
-                        ${productOptions}
-                    </select>
-                    <input type="number" id="sale_product_qty" value="1" min="1" style="width:60px; font-size:12px; padding:6px; text-align:center;">
-                    <button class="btn btn-sm btn-success" onclick="SalesManager.addItemToSale()" style="width:auto; padding:0 12px;">+ Add</button>
-                </div>
-
-                <!-- LISTA DE ITENS SELECIONADOS -->
-                <div id="sale_selected_items_list" style="background:#0F172A; border:1px solid #334155; border-radius:8px; padding:8px; min-height:60px; margin-bottom:12px;">
-                    <div style="color:#94A3B8; font-size:11px; text-align:center; padding:15px;">Nenhum item adicionado ainda.</div>
-                </div>
-            </div>
-
-            <!-- VALORES, DESCONTO E TOTAL -->
-            <div style="background:#1E293B; border-radius:8px; padding:10px; border:1px solid #334155;">
-                <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#CBD5E1; margin-bottom:6px;">
-                    <span>Subtotal dos Itens:</span>
-                    <strong id="sale_subtotal_display" style="color:#F1F5F9;">R$ 0,00</strong>
-                </div>
-
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; align-items:center;">
-                    <div>
-                        <label style="font-size:11px; color:#94A3B8;">Desconto (R$)</label>
-                        <input type="number" step="0.01" id="sale_discount_input" value="0.00" oninput="SalesManager.updateSaleTotals()" style="font-size:12px; padding:6px;">
-                    </div>
-                    <div>
-                        <label style="font-size:11px; color:#94A3B8;">Valor Final a Cobrar</label>
-                        <input type="number" step="0.01" id="sale_final_total" value="0.00" style="font-size:14px; font-weight:800; color:#10B981; padding:6px;">
-                    </div>
-                </div>
-            </div>
-
-            <button class="btn btn-large" onclick="SalesManager.saveManualSale()" style="margin-top:14px;">💾 Finalizar Venda Manual</button>
-        `;
-
-        if (typeof openModal === 'function') {
-            openModal('💰 Nova Venda / Entrada Manual', modalBody);
-        }
-    },
-
-    onSelectCustomer(selectEl) {
-        const selectedOption = selectEl.options[selectEl.selectedIndex];
-        const name = selectEl.value;
-        const phone = selectedOption.getAttribute('data-phone') || '';
-        const address = selectedOption.getAttribute('data-address') || '';
-
-        const nameInput = document.getElementById('sale_client_name');
-        const phoneInput = document.getElementById('sale_phone');
-        const addressInput = document.getElementById('sale_address');
-
-        if (nameInput) nameInput.value = name;
-        if (phoneInput) phoneInput.value = phone;
-        if (addressInput) addressInput.value = address;
+        selectEl.innerHTML = optionsHtml;
     },
 
     addItemToSale() {
@@ -259,7 +290,6 @@ const SalesManager = {
             console.error('Erro ao salvar no Supabase:', e);
         }
 
-        // Cache e atualização local
         let localSales = JSON.parse(localStorage.getItem('dly_sales') || '[]');
         localSales.unshift(orderData);
         localStorage.setItem('dly_sales', JSON.stringify(localSales));
@@ -281,7 +311,6 @@ const SalesManager = {
     }
 };
 
-// Renderiza a lista de vendas manuais na sub-aba do painel
 async function renderSalesList() {
     const container = document.getElementById('salesList');
     if (!container) return;
