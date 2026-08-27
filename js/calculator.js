@@ -1,6 +1,5 @@
 // js/calculator.js - Ficha Técnica Sincronizada com Estoque e Precificação Inteligente
 
-// Helper local de sanitização contra XSS
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.appendChild(document.createTextNode(String(text || '')));
@@ -13,7 +12,6 @@ const CalculatorManager = {
 
     async init() {
         this.ingredientRows = [];
-        // Carregamento silencioso no boot da aplicação (silent = true)
         await this.refreshStockList(true);
         
         const container = document.getElementById('ingredientsList');
@@ -37,17 +35,14 @@ const CalculatorManager = {
                 this.stockItemsCache = JSON.parse(localStorage.getItem('dly_stock') || '[]');
             }
 
-            // Atualiza os seletores de estoque abertos na tela
             document.querySelectorAll('.ing-stock-select').forEach(select => {
                 const currentValue = select.value;
                 select.innerHTML = '<option value="">-- Puxar Item do Estoque (Opcional) --</option>' + this.getStockOptionsHtml();
                 select.value = currentValue;
             });
 
-            // Recalcula custos com os novos dados de estoque
             this.calculateCost();
 
-            // Notifica o usuário apenas em chamadas manuais (ex: clique no botão sincronizar)
             if (!silent && typeof showToast === 'function') {
                 showToast('Insumos sincronizados com o estoque!');
             }
@@ -203,7 +198,6 @@ const CalculatorManager = {
 
             const display = card.querySelector('.ing-cost-display');
 
-            // Validação de compatibilidade de unidades
             const isMassPurchase = MASS_UNITS.includes(purchaseUnit);
             const isVolumePurchase = VOLUME_UNITS.includes(purchaseUnit);
             const isUnitPurchase = UNIT_UNITS.includes(purchaseUnit);
@@ -225,7 +219,6 @@ const CalculatorManager = {
                 return;
             }
 
-            // Converte para a unidade base (grama, ml ou unidade)
             let totalBasePurchaseQty = purchaseQty;
             if (purchaseUnit === 'kg' || purchaseUnit === 'l') totalBasePurchaseQty = purchaseQty * 1000;
 
@@ -300,22 +293,22 @@ const CalculatorManager = {
         });
 
         const recipePayload = {
+            id: `rec_${Date.now()}`,
             name,
             yield_qty: yieldQty,
             total_cost: totalCost,
             cost_per_portion: totalCost / yieldQty,
             ingredients: ingredientsData,
+            created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
         };
 
         try {
-            // 1. Tenta salvar no Supabase com conflito resolvido no nome da receita
             if (typeof dbClient !== 'undefined') {
-                const { error } = await dbClient.from('recipes').upsert([recipePayload], { onConflict: 'name' });
+                const { error } = await dbClient.from('recipes').upsert([recipePayload]);
                 if (error) console.error('Erro ao salvar no Supabase:', error);
             }
 
-            // 2. Grava no LocalStorage offline-first
             let localRecipes = [];
             if (typeof DB !== 'undefined') {
                 localRecipes = DB.load('dly_recipes', []);
@@ -327,7 +320,7 @@ const CalculatorManager = {
             if (idx >= 0) {
                 localRecipes[idx] = { ...localRecipes[idx], ...recipePayload };
             } else {
-                localRecipes.push(recipePayload);
+                localRecipes.unshift(recipePayload);
             }
 
             if (typeof DB !== 'undefined') DB.save('dly_recipes', localRecipes);
@@ -341,6 +334,27 @@ const CalculatorManager = {
             console.error('Erro ao salvar receita:', e);
             if (typeof showToast === 'function') showToast('Erro ao salvar ficha técnica.', 'error');
         }
+    },
+
+    async deleteRecipe(id, name) {
+        if (!confirm(`Deseja excluir a ficha técnica "${name}"?`)) return;
+
+        try {
+            if (typeof dbClient !== 'undefined') {
+                if (id) await dbClient.from('recipes').delete().eq('id', id);
+                else await dbClient.from('recipes').delete().eq('name', name);
+            }
+        } catch (e) {
+            console.error('Erro ao deletar receita no Supabase:', e);
+        }
+
+        let localRecipes = JSON.parse(localStorage.getItem('dly_recipes') || '[]');
+        localRecipes = localRecipes.filter(r => (id ? r.id !== id : r.name !== name));
+        localStorage.setItem('dly_recipes', JSON.stringify(localRecipes));
+        if (typeof state !== 'undefined') state.recipes = localRecipes;
+
+        if (typeof showToast === 'function') showToast('Ficha técnica removida!');
+        this.loadSavedRecipes();
     },
 
     async loadSavedRecipes() {
@@ -364,18 +378,25 @@ const CalculatorManager = {
                 return;
             }
 
-            container.innerHTML = recipes.map(r => `
-                <div class="card" style="margin-bottom:8px; padding:12px; background:#1E293B; border-left:4px solid #3B82F6;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <div>
-                            <strong style="color:#F1F5F9; font-size:14px; display:block;">🍲 ${escapeHtml(r.name)}</strong>
-                            <span style="font-size:11px; color:#94A3B8;">
-                                Rendimento: ${r.yield_qty || 1} porção(ões) • Custo/Un: <strong style="color:#10B981;">R$ ${Number(r.cost_per_portion || r.total_cost || 0).toFixed(2)}</strong>
-                            </span>
+            container.innerHTML = recipes.map(r => {
+                const safeName = escapeHtml(r.name);
+                const safeId = escapeHtml(r.id || '');
+                const costPortion = Number(r.cost_per_portion || r.total_cost || 0).toFixed(2);
+
+                return `
+                    <div class="card" style="margin-bottom:8px; padding:12px; background:#1E293B; border-left:4px solid #3B82F6;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <strong style="color:#F1F5F9; font-size:14px; display:block;">🍲 ${safeName}</strong>
+                                <span style="font-size:11px; color:#94A3B8;">
+                                    Rendimento: ${r.yield_qty || 1} porção(ões) • Custo/Un: <strong style="color:#10B981;">R$ ${costPortion}</strong>
+                                </span>
+                            </div>
+                            <button class="btn btn-sm btn-danger" onclick="CalculatorManager.deleteRecipe('${safeId}', '${safeName.replace(/'/g, "\\'")}')" style="padding:4px 8px; font-size:11px;" title="Excluir">🗑️</button>
                         </div>
                     </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
 
         } catch (e) {
             console.error('Erro ao carregar fichas salvas:', e);
@@ -383,6 +404,8 @@ const CalculatorManager = {
         }
     }
 };
+
+window.CalculatorManager = CalculatorManager;
 
 document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('ingredientsList')) {
