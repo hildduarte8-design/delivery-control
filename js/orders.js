@@ -1,10 +1,16 @@
 // js/orders.js - Gestão Completa de Pedidos ao Vivo com Supabase Realtime, Detalhes e Chat WhatsApp
 
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(String(text || '')));
+    return div.innerHTML;
+}
+
 const OrdersManager = {
     knownOrdersCount: 0,
     timerInterval: null,
     realtimeChannel: null,
-    allOrders: [], // Guarda os pedidos para cálculo de histórico e abertura de detalhes
+    allOrders: [],
 
     // Emite som de campainha de novo pedido
     playAlertSound() {
@@ -30,7 +36,7 @@ const OrdersManager = {
         }
     },
 
-    // Inicializa a escuta em Tempo Real (Supabase Realtime)
+    // Inicializa a escuta em Tempo Real (Supabase Realtime) sem duplicar canais
     initRealtime() {
         if (typeof dbClient === 'undefined' || this.realtimeChannel) return;
 
@@ -55,7 +61,6 @@ const OrdersManager = {
         const container = document.getElementById('live-orders-container');
         if (!container) return;
 
-        // Garante que o Realtime está escutando eventos do banco
         this.initRealtime();
 
         try {
@@ -70,12 +75,12 @@ const OrdersManager = {
                 container.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:30px; font-size:13px;">Nenhum pedido ao vivo no momento.</div>';
                 this.knownOrdersCount = 0;
                 this.allOrders = [];
+                this.stopLiveTimers();
                 return;
             }
 
             this.allOrders = orders;
 
-            // Toca a campainha quando um novo pedido entra no sistema
             if (this.knownOrdersCount > 0 && orders.length > this.knownOrdersCount) {
                 this.playAlertSound();
                 if (typeof showToast === 'function') showToast('🔔 NOVO PEDIDO RECEBIDO!', 'success');
@@ -83,8 +88,6 @@ const OrdersManager = {
             this.knownOrdersCount = orders.length;
 
             container.innerHTML = orders.map(o => this.renderOrderCard(o)).join('');
-
-            // Inicia ou atualiza o cronômetro dinâmico
             this.startLiveTimers();
 
         } catch (e) {
@@ -102,10 +105,9 @@ const OrdersManager = {
         }
 
         const itemsSummary = Array.isArray(items) && items.length > 0
-            ? items.slice(0, 2).map(i => `${i.qty}x ${i.name}`).join(', ') + (items.length > 2 ? '...' : '')
+            ? items.slice(0, 2).map(i => `${i.qty}x ${escapeHtml(i.name)}`).join(', ') + (items.length > 2 ? '...' : '')
             : 'Sem itens';
 
-        // Histórico de pedidos do cliente
         const clientOrdersCount = this.getClientOrdersCount(o.phone, o.client_name);
 
         let statusBadge = '🟢 Novo';
@@ -113,18 +115,20 @@ const OrdersManager = {
         else if (o.status === 'completed') statusBadge = '✅ Concluído';
         else if (o.status === 'cancelled') statusBadge = '❌ Cancelado';
 
-        const orderDataEscaped = encodeURIComponent(JSON.stringify(o));
+        const safeOrderId = escapeHtml(o.id);
+        const safeClientName = escapeHtml(o.client_name || 'Cliente');
+        const safePhone = escapeHtml(o.phone || '');
 
         return `
-            <div class="card" onclick="OrdersManager.openOrderDetails('${o.id}')" style="margin-bottom:12px; padding:14px; border-left:4px solid ${o.status === 'pending' ? '#F59E0B' : o.status === 'preparing' ? '#3B82F6' : o.status === 'completed' ? '#10B981' : '#EF4444'}; cursor:pointer; transition: transform 0.1s;">
+            <div class="card" onclick="OrdersManager.openOrderDetails('${safeOrderId}')" style="margin-bottom:12px; padding:14px; border-left:4px solid ${o.status === 'pending' ? '#F59E0B' : o.status === 'preparing' ? '#3B82F6' : o.status === 'completed' ? '#10B981' : '#EF4444'}; cursor:pointer; transition: transform 0.1s;">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                     <div>
                         <div style="display:flex; align-items:center; gap:6px;">
-                            <strong style="color:#F1F5F9; font-size:15px;">👤 ${o.client_name || 'Cliente'}</strong>
+                            <strong style="color:#F1F5F9; font-size:15px;">👤 ${safeClientName}</strong>
                             <span style="font-size:10px; background:#1E293B; color:#F59E0B; padding:2px 6px; border-radius:10px; font-weight:bold;">👑 ${clientOrdersCount}º pedido</span>
                         </div>
                         <div style="font-size:11px; color:#94A3B8; margin-top:2px;">⏰ ${dateFormatted} • ${o.order_type === 'delivery' ? '🛵 Entrega' : '🏪 Retirada'}</div>
-                        <div style="font-size:11px; color:#10B981; margin-top:2px; font-weight:600;">💳 ${o.reference || 'Pagamento na entrega'}</div>
+                        <div style="font-size:11px; color:#10B981; margin-top:2px; font-weight:600;">💳 ${escapeHtml(o.reference || 'Pagamento na entrega')}</div>
                     </div>
 
                     <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
@@ -142,17 +146,16 @@ const OrdersManager = {
                 <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px dashed #334155; padding-top:8px;">
                     <strong style="color:#FF6B35; font-size:16px;">Total: R$ ${Number(o.total || 0).toFixed(2)}</strong>
                     <div style="display:flex; gap:6px;" onclick="event.stopPropagation();">
-                        <button class="btn btn-sm btn-secondary" onclick="OrdersManager.printOrder('${orderDataEscaped}')" title="Imprimir Comanda">🖨️</button>
-                        <button class="btn btn-sm" style="background:#25D366; color:#fff;" onclick="OrdersManager.openWhatsAppChat('${o.phone}', '${o.client_name}')" title="WhatsApp">💬 Chat</button>
+                        <button class="btn btn-sm btn-secondary" onclick="OrdersManager.printOrder('${safeOrderId}')" title="Imprimir Comanda">🖨️</button>
+                        <button class="btn btn-sm" style="background:#25D366; color:#fff;" onclick="OrdersManager.openWhatsAppChat('${safePhone}', '${safeClientName}')" title="WhatsApp">💬 Chat</button>
                     </div>
                 </div>
             </div>
         `;
     },
 
-    // Modal com detalhes do pedido
     openOrderDetails(orderId) {
-        const o = this.allOrders.find(item => item.id === orderId);
+        const o = this.allOrders.find(item => String(item.id) === String(orderId));
         if (!o) return;
 
         let items = o.items;
@@ -164,44 +167,45 @@ const OrdersManager = {
             ? items.map(i => `
                 <div style="padding:8px 0; border-bottom:1px solid #1E293B; display:flex; justify-content:space-between; align-items:flex-start;">
                     <div>
-                        <div style="font-size:13px; font-weight:bold; color:#F1F5F9;">${i.qty}x ${i.name}</div>
-                        ${i.notes ? `<div style="font-size:11px; color:#F59E0B; margin-top:2px;">📌 Obs/Opcionais: ${i.notes}</div>` : ''}
-                        <div style="font-size:11px; color:#64748B;">Unitário: R$ ${Number(i.unit_price || 0).toFixed(2)}</div>
+                        <div style="font-size:13px; font-weight:bold; color:#F1F5F9;">${i.qty}x ${escapeHtml(i.name)}</div>
+                        ${i.notes ? `<div style="font-size:11px; color:#F59E0B; margin-top:2px;">📌 Obs/Opcionais: ${escapeHtml(i.notes)}</div>` : ''}
+                        <div style="font-size:11px; color:#64748B;">Unitário: R$ ${Number(i.unit_price || i.price || 0).toFixed(2)}</div>
                     </div>
-                    <div style="font-size:13px; font-weight:bold; color:#FF6B35;">R$ ${Number(i.total || 0).toFixed(2)}</div>
+                    <div style="font-size:13px; font-weight:bold; color:#FF6B35;">R$ ${Number(i.total || (i.qty * (i.unit_price || i.price || 0))).toFixed(2)}</div>
                 </div>
             `).join('')
             : '<div style="color:#94A3B8; font-size:12px;">Nenhum item listado.</div>';
 
         const clientOrdersCount = this.getClientOrdersCount(o.phone, o.client_name);
         const dateFormatted = new Date(o.created_at).toLocaleString('pt-BR');
-        const orderDataEscaped = encodeURIComponent(JSON.stringify(o));
-        const clientNameEscaped = (o.client_name || '').replace(/'/g, "\\'");
+
+        const safeOrderId = escapeHtml(o.id);
+        const safeClientName = escapeHtml(o.client_name || 'Cliente');
+        const safePhone = escapeHtml(o.phone || '');
+        const safeAddress = escapeHtml(o.address || 'A combinar');
+        const safeNumber = escapeHtml(o.number || 'S/N');
+        const safeReference = escapeHtml(o.reference || 'Não informada');
 
         const bodyHtml = `
-            <!-- Cabeçalho do Cliente -->
             <div style="background:#0F172A; padding:12px; border-radius:8px; margin-bottom:14px; border:1px solid #1E293B;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <strong style="font-size:16px; color:#F1F5F9;">👤 ${o.client_name || 'Cliente'}</strong>
+                    <strong style="font-size:16px; color:#F1F5F9;">👤 ${safeClientName}</strong>
                     <span style="font-size:11px; background:#1E293B; color:#F59E0B; padding:3px 8px; border-radius:12px; font-weight:bold;">
                         👑 ${clientOrdersCount}º Pedido na Loja
                     </span>
                 </div>
-                <div style="font-size:12px; color:#94A3B8; margin-top:4px;">📱 ${o.phone || 'Telefone não informado'}</div>
+                <div style="font-size:12px; color:#94A3B8; margin-top:4px;">📱 ${safePhone || 'Telefone não informado'}</div>
                 <div style="font-size:11px; color:#64748B; margin-top:2px;">⏰ Recebido em: ${dateFormatted}</div>
             </div>
 
-            <!-- Dados de Entrega / Retirada -->
             <div style="margin-bottom:14px; font-size:12px; color:#CBD5E1;">
                 <div style="font-weight:bold; color:#3B82F6; margin-bottom:4px;">📍 TIPO: ${o.order_type === 'delivery' ? '🛵 ENTREGA' : '🏪 RETIRADA NO BALCÃO'}</div>
                 ${o.order_type === 'delivery' ? `
-                    <div><strong>Endereço:</strong> ${o.address || 'A combinar'}, Nº ${o.number || 'S/N'}</div>
-                    ${o.reference ? `<div><strong>Referência / PGTO:</strong> ${o.reference}</div>` : ''}
+                    <div><strong>Endereço:</strong> ${safeAddress}, Nº ${safeNumber}</div>
                 ` : ''}
-                <div style="margin-top:4px;"><strong>Forma de Pagamento:</strong> <span style="color:#10B981; font-weight:bold;">${o.reference || 'Não informada'}</span></div>
+                <div style="margin-top:4px;"><strong>Forma de Pagamento / Ref:</strong> <span style="color:#10B981; font-weight:bold;">${safeReference}</span></div>
             </div>
 
-            <!-- Lista de Itens -->
             <div style="margin-bottom:14px;">
                 <div style="font-size:12px; font-weight:bold; color:#94A3B8; text-transform:uppercase; margin-bottom:6px;">📋 Itens Solicitados</div>
                 <div style="background:#0F172A; padding:10px; border-radius:8px; border:1px solid #1E293B;">
@@ -209,7 +213,6 @@ const OrdersManager = {
                 </div>
             </div>
 
-            <!-- Resumo Financeiro Detalhado -->
             <div style="background:#1E293B; padding:12px; border-radius:8px; margin-bottom:16px;">
                 <div style="display:flex; justify-content:space-between; font-size:12px; color:#94A3B8; margin-bottom:4px;">
                     <span>Subtotal dos Itens:</span>
@@ -225,23 +228,21 @@ const OrdersManager = {
                 </div>
             </div>
 
-            <!-- Ações de Status -->
             <div style="font-size:12px; font-weight:bold; color:#94A3B8; margin-bottom:8px;">⚡ Atualizar Status do Pedido:</div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px;">
-                <button class="btn btn-sm" style="background:#3B82F6; color:#fff; padding:10px;" onclick="OrdersManager.updateStatus('${o.id}', 'preparing', '${clientNameEscaped}', '${o.phone || ''}'); closeModal();">
+                <button class="btn btn-sm" style="background:#3B82F6; color:#fff; padding:10px;" onclick="OrdersManager.updateStatus('${safeOrderId}', 'preparing'); closeModal();">
                     👨‍🍳 Colocar em Preparo
                 </button>
-                <button class="btn btn-sm btn-success" style="padding:10px;" onclick="OrdersManager.updateStatus('${o.id}', 'completed', '${clientNameEscaped}', '${o.phone || ''}'); closeModal();">
+                <button class="btn btn-sm btn-success" style="padding:10px;" onclick="OrdersManager.updateStatus('${safeOrderId}', 'completed'); closeModal();">
                     ✅ Concluir Pedido
                 </button>
             </div>
 
-            <!-- Ações Rápidas -->
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                <button class="btn btn-sm" style="background:#25D366; color:#fff; padding:10px;" onclick="OrdersManager.openWhatsAppChat('${o.phone}', '${clientNameEscaped}')">
+                <button class="btn btn-sm" style="background:#25D366; color:#fff; padding:10px;" onclick="OrdersManager.openWhatsAppChat('${safePhone}', '${safeClientName}')">
                     💬 Conversar no Whats
                 </button>
-                <button class="btn btn-sm btn-secondary" style="padding:10px;" onclick="OrdersManager.printOrder('${orderDataEscaped}')">
+                <button class="btn btn-sm btn-secondary" style="padding:10px;" onclick="OrdersManager.printOrder('${safeOrderId}')">
                     🖨️ Imprimir Comanda
                 </button>
             </div>
@@ -263,7 +264,11 @@ const OrdersManager = {
     },
 
     openWhatsAppChat(phone, clientName) {
-        if (!phone) return alert('Cliente sem telefone cadastrado.');
+        if (!phone) {
+            if (typeof showToast === 'function') showToast('Cliente sem telefone cadastrado!', 'error');
+            else alert('Cliente sem telefone cadastrado.');
+            return;
+        }
         let cleanPhone = phone.replace(/\D/g, '');
         if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
 
@@ -274,8 +279,15 @@ const OrdersManager = {
         window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank');
     },
 
+    stopLiveTimers() {
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+            this.timerInterval = null;
+        }
+    },
+
     startLiveTimers() {
-        if (this.timerInterval) clearInterval(this.timerInterval);
+        this.stopLiveTimers();
 
         const updateFn = () => {
             const timerTags = document.querySelectorAll('.order-timer-tag');
@@ -323,9 +335,11 @@ const OrdersManager = {
         this.timerInterval = setInterval(updateFn, 1000);
     },
 
-    printOrder(orderDataEscaped) {
+    printOrder(orderId) {
         try {
-            const o = JSON.parse(decodeURIComponent(orderDataEscaped));
+            const o = this.allOrders.find(item => String(item.id) === String(orderId));
+            if (!o) return;
+
             const dateFormatted = new Date(o.created_at).toLocaleString('pt-BR');
             const storeName = typeof getStoreName === 'function' ? getStoreName() : 'Nosso Delivery';
 
@@ -334,18 +348,20 @@ const OrdersManager = {
                 try { items = JSON.parse(items); } catch(e) { items = []; }
             }
 
-            const itemsFormatted = Array.isArray(items) 
+            const itemsFormatted = Array.isArray(items) && items.length > 0
                 ? items.map(i => `<div style="display:flex; justify-content:space-between; font-size:13px; font-weight:bold; margin-bottom:4px;">
-                    <span>${i.qty}x ${i.name}</span>
-                    <span>R$ ${Number(i.total || 0).toFixed(2)}</span>
+                    <span>${i.qty}x ${escapeHtml(i.name)}</span>
+                    <span>R$ ${Number(i.total || (i.qty * (i.unit_price || i.price || 0))).toFixed(2)}</span>
                 </div>`).join('')
                 : '<div>Sem itens</div>';
 
             const printWindow = window.open('', '_blank', 'width=400,height=600');
+            if (!printWindow) return alert('Bloqueador de pop-ups ativado no seu navegador.');
+
             printWindow.document.write(`
                 <html>
                 <head>
-                    <title>Comanda - ${o.client_name || 'Cliente'}</title>
+                    <title>Comanda - ${escapeHtml(o.client_name || 'Cliente')}</title>
                     <style>
                         @page { margin: 0; }
                         body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: 300px; margin: 0 auto; padding: 10px; color: #000; background: #fff; }
@@ -357,16 +373,16 @@ const OrdersManager = {
                     </style>
                 </head>
                 <body>
-                    <div class="text-center title">${storeName.toUpperCase()}</div>
+                    <div class="text-center title">${escapeHtml(storeName.toUpperCase())}</div>
                     <div class="text-center info">*** COMANDA DE PRODUÇÃO ***</div>
                     <div class="line"></div>
 
                     <div class="info"><strong>DATA:</strong> ${dateFormatted}</div>
                     <div class="info"><strong>TIPO:</strong> ${o.order_type === 'delivery' ? '🛵 ENTREGA' : '🏪 RETIRADA'}</div>
-                    <div class="info"><strong>CLIENTE:</strong> ${o.client_name || 'Não informado'}</div>
-                    <div class="info"><strong>TEL:</strong> ${o.phone || 'S/N'}</div>
-                    ${o.order_type === 'delivery' ? `<div class="info"><strong>ENDEREÇO:</strong> ${o.address || ''}, Nº ${o.number || 'S/N'}</div>` : ''}
-                    <div class="info"><strong>PAGAMENTO:</strong> ${o.reference || 'Não informado'}</div>
+                    <div class="info"><strong>CLIENTE:</strong> ${escapeHtml(o.client_name || 'Não informado')}</div>
+                    <div class="info"><strong>TEL:</strong> ${escapeHtml(o.phone || 'S/N')}</div>
+                    ${o.order_type === 'delivery' ? `<div class="info"><strong>ENDEREÇO:</strong> ${escapeHtml(o.address || '')}, Nº ${escapeHtml(o.number || 'S/N')}</div>` : ''}
+                    <div class="info"><strong>PAGAMENTO:</strong> ${escapeHtml(o.reference || 'Não informado')}</div>
 
                     <div class="line"></div>
                     <div style="font-weight:bold; font-size:12px; margin-bottom:6px;">ITENS DO PEDIDO:</div>
@@ -389,12 +405,16 @@ const OrdersManager = {
             printWindow.document.close();
         } catch(e) {
             console.error('Erro ao gerar comanda:', e);
-            alert('Erro ao gerar a comanda para impressão.');
+            if (typeof showToast === 'function') showToast('Erro ao gerar comanda para impressão.', 'error');
         }
     },
 
-    async updateStatus(orderId, newStatus, clientName = '', phone = '') {
+    async updateStatus(orderId, newStatus) {
         try {
+            const o = this.allOrders.find(item => String(item.id) === String(orderId));
+            const clientName = o?.client_name || '';
+            const phone = o?.phone || '';
+
             if (typeof dbClient !== 'undefined') {
                 await dbClient.from('orders').update({ status: newStatus }).eq('id', orderId);
             }
@@ -424,7 +444,7 @@ const OrdersManager = {
             if (typeof showToast === 'function') showToast('Status do pedido atualizado!');
             this.fetchOrders();
 
-            if (typeof CustomersManager !== 'undefined') CustomersManager.fetchCustomers();
+            if (typeof CustomersManager !== 'undefined' && CustomersManager.fetchCustomers) CustomersManager.fetchCustomers();
             if (typeof renderDashboard === 'function') renderDashboard();
 
         } catch (e) {
@@ -433,7 +453,15 @@ const OrdersManager = {
     }
 };
 
-// Inicia a escuta em tempo real automaticamente quando o arquivo carrega
+// Gerenciamento de ciclo de vida e economia de bateria/CPU
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        OrdersManager.stopLiveTimers();
+    } else if (document.getElementById('live-orders-container')) {
+        OrdersManager.startLiveTimers();
+    }
+});
+
 document.addEventListener('DOMContentLoaded', () => {
     OrdersManager.initRealtime();
 });
