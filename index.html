@@ -384,6 +384,17 @@
         </div>
 
         <button class="btn btn-large" onclick="saveSettings()">💾 Salvar Identidade da Loja</button>
+
+        <!-- SEÇÃO DE BACKUP EM 1 CLIQUE -->
+        <div style="border-top: 1px dashed #334155; margin-top: 20px; padding-top: 16px;">
+            <div style="font-size: 13px; font-weight: 700; color: #CBD5E1; margin-bottom: 6px;">📥 Backup & Segurança dos Dados</div>
+            <p style="font-size: 11px; color: #94A3B8; margin-bottom: 12px; line-height: 1.4;">
+                Baixe um arquivo seguro contendo todos os dados do seu sistema (estoque, vendas, contas fixas, clientes e fichas técnicas) para salvar no computador ou celular.
+            </p>
+            <button type="button" class="btn btn-secondary btn-large" onclick="downloadSystemBackup()" style="background: #334155; color: #F1F5F9;">
+                📥 Baixar Backup Completo (.json)
+            </button>
+        </div>
     </div>
 </section>
 
@@ -530,7 +541,7 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        if (typeof AnalyticsManager !== 'undefined') {
+        if (typeof AnalyticsManager !== 'undefined' && AnalyticsManager.render) {
             AnalyticsManager.render();
         }
     });
