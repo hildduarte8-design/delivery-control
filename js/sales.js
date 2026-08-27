@@ -1,4 +1,4 @@
-// js/sales.js - Vendas Manuais de Balcão (Carregamento Dinâmico de Clientes e Produtos)
+// js/sales.js - Vendas Manuais de Balcão (Carregamento Direto e Fallback por Pedidos)
 
 function escapeHtml(text) {
     const div = document.createElement('div');
@@ -11,8 +11,106 @@ const SalesManager = {
     customersCache: [],
     productsCache: [],
 
+    // Busca clientes agregando do CustomersManager, do banco, do cache local e dos pedidos existentes
+    async getCustomersList() {
+        let list = [];
+
+        if (typeof CustomersManager !== 'undefined' && Array.isArray(CustomersManager.allCustomers) && CustomersManager.allCustomers.length > 0) {
+            list = CustomersManager.allCustomers;
+        }
+
+        if (list.length === 0 && typeof dbClient !== 'undefined') {
+            try {
+                const { data } = await dbClient.from('customers').select('*').order('name', { ascending: true });
+                if (data && data.length > 0) list = data;
+            } catch (e) {
+                console.warn('Erro ao buscar tabela customers:', e);
+            }
+        }
+
+        if (list.length === 0) {
+            list = JSON.parse(localStorage.getItem('dly_customers') || '[]');
+        }
+
+        // FALLBACK: Se não houver tabela de clientes, extrai dos pedidos já cadastrados
+        if (list.length === 0) {
+            let orders = [];
+            if (typeof state !== 'undefined' && Array.isArray(state.orders) && state.orders.length > 0) {
+                orders = state.orders;
+            } else {
+                orders = JSON.parse(localStorage.getItem('dly_orders') || '[]');
+            }
+
+            if (orders.length === 0 && typeof dbClient !== 'undefined') {
+                try {
+                    const { data } = await dbClient.from('orders').select('*');
+                    if (data) orders = data;
+                } catch (e) {}
+            }
+
+            const map = new Map();
+            orders.forEach(o => {
+                const name = o.customer_name || o.client_name || o.customerName;
+                const phone = o.customer_phone || o.phone || o.customerPhone || '';
+                const address = o.delivery_address || o.address || '';
+
+                if (name && name !== 'Cliente Balcão') {
+                    const key = phone ? phone : name.toLowerCase();
+                    if (!map.has(key)) {
+                        map.set(key, { id: key, name, phone, address });
+                    }
+                }
+            });
+
+            list = Array.from(map.values());
+        }
+
+        return list;
+    },
+
+    // Busca os produtos do cardápio
+    async getProductsList() {
+        let products = window.currentAdminProducts || [];
+
+        if (products.length === 0 && typeof state !== 'undefined' && Array.isArray(state.menu)) {
+            products = state.menu;
+        }
+
+        if (products.length === 0 && typeof dbClient !== 'undefined') {
+            try {
+                const { data } = await dbClient.from('products').select('*').eq('is_active', true);
+                if (data && data.length > 0) products = data;
+            } catch (e) {}
+        }
+
+        if (products.length === 0) {
+            products = JSON.parse(localStorage.getItem('dly_menu') || '[]');
+        }
+
+        return products;
+    },
+
     async openSaleModal() {
         this.currentSaleItems = [];
+
+        // Busca os dados antes de montar o HTML
+        const customers = await this.getCustomersList();
+        const products = await this.getProductsList();
+
+        this.customersCache = customers;
+        this.productsCache = products;
+
+        const customerOptions = customers.map(c => {
+            const name = escapeHtml(c.name || 'Cliente');
+            const phone = escapeHtml(c.phone || c.whatsapp || '');
+            const address = escapeHtml(c.address || c.delivery_address || '');
+            return `<option value="${escapeHtml(c.id || name)}" data-name="${name}" data-phone="${phone}" data-address="${address}">${name} ${phone ? '(' + phone + ')' : ''}</option>`;
+        }).join('');
+
+        const productOptions = products.map(p => {
+            const price = Number(p.price || 0);
+            return `<option value="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}" data-price="${price}">${escapeHtml(p.name)} - R$ ${price.toFixed(2)}</option>`;
+        }).join('');
 
         const modalBody = `
             <div style="padding:2px;">
@@ -20,7 +118,8 @@ const SalesManager = {
                 <div class="form-group" style="margin-bottom:10px;">
                     <label style="font-size:12px; color:#CBD5E1;">Cliente Cadastrado (Opcional)</label>
                     <select id="sale_customer_select" onchange="SalesManager.onSelectCustomer(this.value)" style="font-size:13px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155;">
-                        <option value="">🔄 Carregando clientes...</option>
+                        <option value="">-- Cliente Avulso / Balcão --</option>
+                        ${customerOptions}
                     </select>
                 </div>
 
@@ -45,7 +144,8 @@ const SalesManager = {
                     <div style="font-size:12px; font-weight:700; color:#FF6B35; margin-bottom:8px;">🛍️ Adicionar Itens do Cardápio</div>
                     <div style="display:flex; gap:6px; margin-bottom:10px;">
                         <select id="sale_product_select" style="flex:1; font-size:12px; padding:6px; background:#1E293B; color:#F1F5F9; border:1px solid #475569;">
-                            <option value="">🔄 Carregando pratos...</option>
+                            <option value="">-- Selecione o Prato/Item --</option>
+                            ${productOptions}
                         </select>
                         <input type="number" id="sale_product_qty" value="1" min="1" style="width:60px; font-size:12px; padding:6px; text-align:center;">
                         <button class="btn btn-sm btn-success" onclick="SalesManager.addItemToSale()" style="width:auto; padding:0 12px; font-weight:700;">+ Add</button>
@@ -83,50 +183,6 @@ const SalesManager = {
         if (typeof openModal === 'function') {
             openModal('💰 Nova Venda / Entrada Manual', modalBody);
         }
-
-        // Popula as listas assincronamente após renderizar o modal
-        setTimeout(async () => {
-            await this.loadCustomersDropdown();
-            await this.loadProductsDropdown();
-        }, 50);
-    },
-
-    async loadCustomersDropdown() {
-        const selectEl = document.getElementById('sale_customer_select');
-        if (!selectEl) return;
-
-        let customers = [];
-        try {
-            if (typeof dbClient !== 'undefined') {
-                const { data, error } = await dbClient.from('customers').select('*').order('name', { ascending: true });
-                if (!error && data && data.length > 0) customers = data;
-            }
-        } catch (e) {
-            console.warn('Erro ao buscar clientes no Supabase:', e);
-        }
-
-        if (customers.length === 0 && typeof CustomersManager !== 'undefined' && CustomersManager.allCustomers) {
-            customers = CustomersManager.allCustomers;
-        }
-
-        if (customers.length === 0 && typeof state !== 'undefined' && state.customers) {
-            customers = state.customers;
-        }
-
-        if (customers.length === 0) {
-            customers = JSON.parse(localStorage.getItem('dly_customers') || localStorage.getItem('customers') || '[]');
-        }
-
-        this.customersCache = customers;
-
-        let optionsHtml = '<option value="">-- Cliente Avulso / Balcão --</option>';
-        customers.forEach(c => {
-            const name = escapeHtml(c.name || 'Cliente');
-            const phone = escapeHtml(c.phone || c.whatsapp || '');
-            optionsHtml += `<option value="${escapeHtml(c.id || name)}" data-name="${name}" data-phone="${phone}" data-address="${escapeHtml(c.address || '')}">${name} ${phone ? '(' + phone + ')' : ''}</option>`;
-        });
-
-        selectEl.innerHTML = optionsHtml;
     },
 
     onSelectCustomer(val) {
@@ -141,35 +197,7 @@ const SalesManager = {
 
         if (nameInput) nameInput.value = customer.name || '';
         if (phoneInput) phoneInput.value = customer.phone || customer.whatsapp || '';
-        if (addressInput && customer.address) addressInput.value = customer.address;
-    },
-
-    async loadProductsDropdown() {
-        const selectEl = document.getElementById('sale_product_select');
-        if (!selectEl) return;
-
-        let products = window.currentAdminProducts || [];
-        if (products.length === 0 && typeof dbClient !== 'undefined') {
-            try {
-                const { data } = await dbClient.from('products').select('*').eq('is_active', true);
-                products = data || [];
-            } catch (e) {
-                console.warn('Erro ao buscar produtos:', e);
-            }
-        }
-        if (products.length === 0) {
-            products = JSON.parse(localStorage.getItem('dly_menu') || '[]');
-        }
-
-        this.productsCache = products;
-
-        let optionsHtml = '<option value="">-- Selecione o Prato/Item --</option>';
-        products.forEach(p => {
-            const price = Number(p.price || 0);
-            optionsHtml += `<option value="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}" data-price="${price}">${escapeHtml(p.name)} - R$ ${price.toFixed(2)}</option>`;
-        });
-
-        selectEl.innerHTML = optionsHtml;
+        if (addressInput) addressInput.value = customer.address || customer.delivery_address || '';
     },
 
     addItemToSale() {
@@ -318,8 +346,10 @@ async function renderSalesList() {
     let sales = [];
     try {
         if (typeof dbClient !== 'undefined') {
-            const { data, error } = await dbClient.from('orders').select('*').eq('source', 'Manual').order('created_at', { ascending: false });
-            if (!error && data) sales = data;
+            const { data, error } = await dbClient.from('orders').select('*').order('created_at', { ascending: false });
+            if (!error && data) {
+                sales = data.filter(s => s.source === 'Manual' || s.id.startsWith('sale_'));
+            }
         }
     } catch (e) {
         console.warn('Erro ao carregar vendas manuais:', e);
