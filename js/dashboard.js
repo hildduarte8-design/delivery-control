@@ -3,10 +3,7 @@ function getIFoodWeeklyCycle(referenceDate = new Date()) {
     const d = new Date(referenceDate);
     d.setHours(0, 0, 0, 0);
 
-    // JS getDay(): 0 = Dom, 1 = Seg, 2 = Ter, 3 = Qua, 4 = Qui, 5 = Sex, 6 = Sáb
     const dayOfWeek = d.getDay();
-
-    // Calcula quantos dias voltar para encontrar a última Quinta-feira (Início do Ciclo)
     const daysSinceThursday = (dayOfWeek + 3) % 7;
 
     const cycleStart = new Date(d);
@@ -20,8 +17,8 @@ function getIFoodWeeklyCycle(referenceDate = new Date()) {
     return { cycleStart, cycleEnd };
 }
 
-// Módulo do Analytics (Trata Formas de Pagamento e Correção de Preço dos Pratos)
-const AnalyticsManager = {
+// Módulo do Analytics (Seguro contra re-declaração)
+window.AnalyticsManager = window.AnalyticsManager || {
     currentFilter: 'all',
     cachedOrders: [],
 
@@ -44,7 +41,6 @@ const AnalyticsManager = {
         const now = new Date();
         const todayStr = now.toISOString().split('T')[0];
 
-        // Filtra pedidos ativos por período selecionado
         const filteredOrders = orders.filter(o => {
             if (o.status === 'cancelled') return false;
 
@@ -76,7 +72,6 @@ const AnalyticsManager = {
             const orderTotal = Number(o.total || o.amount || 0);
             totalRevenue += orderTotal;
 
-            // Busca flexível de forma de pagamento
             const method = String(o.payment_method || o.reference || o.paymentMethod || '').toLowerCase();
 
             if (method.includes('pix')) {
@@ -84,10 +79,9 @@ const AnalyticsManager = {
             } else if (method.includes('carta') || method.includes('cartão') || method.includes('credito') || method.includes('debito') || method.includes('card')) {
                 totalCard += orderTotal;
             } else {
-                totalCash += orderTotal; // Dinheiro, Dinheiro/Pix, Pagamento na entrega
+                totalCash += orderTotal;
             }
 
-            // Cálculo dos pratos e soma dos valores
             let items = o.items;
             if (typeof items === 'string') {
                 try { items = JSON.parse(items); } catch (e) { items = []; }
@@ -100,7 +94,6 @@ const AnalyticsManager = {
 
                     const name = item.name || 'Item do Cardápio';
 
-                    // Fallback de valor caso o item antigo não tenha preco gravado no JSON
                     let itemTotal = Number(item.total || 0);
                     if (itemTotal <= 0) {
                         const unitPrice = Number(item.price || item.unit_price || item.unitPrice || (orderTotal > 0 ? orderTotal / items.length : 0));
@@ -118,7 +111,6 @@ const AnalyticsManager = {
             }
         });
 
-        // Atualização dos cards na tela
         const elFaturamento = document.getElementById('dash_faturamento') || document.getElementById('analyticsRevenue');
         const elTotalPedidos = document.getElementById('dash_total_pedidos') || document.getElementById('analyticsOrdersCount');
         const elTicketMedio = document.getElementById('dash_ticket_medio') || document.getElementById('analyticsTicket');
@@ -137,7 +129,6 @@ const AnalyticsManager = {
         if (elCard) elCard.textContent = `R$ ${totalCard.toFixed(2)}`;
         if (elCash) elCash.textContent = `R$ ${totalCash.toFixed(2)}`;
 
-        // Renderização do ranking
         const rankingContainer = document.getElementById('dash_ranking_list') || document.getElementById('rankingContainer');
         if (rankingContainer) {
             const sortedRanking = Array.from(rankingMap.entries()).sort((a, b) => b[1].qty - a[1].qty);
@@ -160,6 +151,8 @@ const AnalyticsManager = {
         }
     }
 };
+
+var AnalyticsManager = window.AnalyticsManager;
 
 // js/dashboard.js - Painel Principal com Fechamento Semanal Estilo iFood (Quinta a Quarta)
 async function renderDashboard() {
@@ -196,7 +189,6 @@ async function renderDashboard() {
         const now = new Date();
         const todayStr = now.toISOString().split('T')[0];
 
-        // 1. Entradas de Hoje
         const todayOrders = orders.filter(o => {
             if (o.status === 'cancelled') return false;
             const orderDate = new Date(o.created_at || o.date).toISOString().split('T')[0];
@@ -204,7 +196,6 @@ async function renderDashboard() {
         });
         const todayIn = todayOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
 
-        // 2. Gastos de Hoje
         const todayExp = expenses.filter(e => {
             const expDate = new Date(e.created_at || e.date).toISOString().split('T')[0];
             return expDate === todayStr;
@@ -214,7 +205,6 @@ async function renderDashboard() {
         if (inToday) inToday.textContent = `R$ ${todayIn.toFixed(2)}`;
         if (outToday) outToday.textContent = `R$ ${todayOut.toFixed(2)}`;
 
-        // 3. Saldo Atual Geral
         const totalInGeral = orders
             .filter(o => o.status !== 'cancelled')
             .reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
@@ -229,13 +219,12 @@ async function renderDashboard() {
                 : 'Sem movimentações ainda';
         }
 
-        // 4. Saldo da Semana (Ciclo de Repasse: Quinta a Quarta)
         const { cycleStart, cycleEnd } = getIFoodWeeklyCycle(now);
 
         const weekOrders = orders.filter(o => {
             if (o.status === 'cancelled') return false;
             const d = new Date(o.created_at || o.date);
-            return d >= cycleStart && d <= now; // Soma da quinta passada até hoje
+            return d >= cycleStart && d <= now;
         });
 
         const weekExp = expenses.filter(e => {
@@ -247,7 +236,7 @@ async function renderDashboard() {
         const weekOutVal = weekExp.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
         const weekNet = weekInVal - weekOutVal;
 
-        const isWednesday = now.getDay() === 3; // 3 = Quarta-feira
+        const isWednesday = now.getDay() === 3;
 
         if (weekBalance) weekBalance.textContent = `R$ ${weekNet.toFixed(2)}`;
         if (weekRange) {
@@ -268,7 +257,6 @@ async function renderDashboard() {
             }
         }
 
-        // 5. Saldo do Mês
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         const monthOrders = orders.filter(o => o.status !== 'cancelled' && new Date(o.created_at || o.date) >= startOfMonth);
         const monthExp = expenses.filter(e => new Date(e.created_at || e.date) >= startOfMonth);
@@ -284,7 +272,6 @@ async function renderDashboard() {
             monthBadge.style.color = monthNet >= 0 ? '#10B981' : '#EF4444';
         }
 
-        // 6. Últimas Movimentações (5 mais recentes)
         if (movList) {
             const recentOrders = orders.slice(0, 5);
             if (recentOrders.length === 0) {
@@ -305,15 +292,13 @@ async function renderDashboard() {
             }
         }
 
-        // 7. Renderiza Analytics
-        AnalyticsManager.render(orders);
+        window.AnalyticsManager.render(orders);
 
     } catch (e) {
         console.error('Erro ao renderizar Dashboard:', e);
     }
 }
 
-window.AnalyticsManager = AnalyticsManager;
 window.renderDashboard = renderDashboard;
 
 document.addEventListener('DOMContentLoaded', () => {
