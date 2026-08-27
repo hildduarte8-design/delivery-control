@@ -13,19 +13,34 @@ const SalesManager = {
     async openSaleModal() {
         this.currentSaleItems = [];
         
-        // Carrega produtos do cardápio e clientes
+        // 1. Carrega produtos do cardápio (Supabase -> Variável Global -> LocalStorage)
         let products = window.currentAdminProducts || [];
         if (products.length === 0 && typeof dbClient !== 'undefined') {
-            const { data } = await dbClient.from('products').select('*').eq('is_active', true);
-            products = data || [];
+            try {
+                const { data } = await dbClient.from('products').select('*').eq('is_active', true);
+                products = data || [];
+            } catch (e) {
+                console.warn('Erro ao carregar produtos do Supabase:', e);
+            }
+        }
+        if (products.length === 0) {
+            products = JSON.parse(localStorage.getItem('dly_menu') || '[]');
         }
 
+        // 2. Carrega clientes (CustomersManager -> Supabase -> LocalStorage)
         let customers = [];
         if (typeof CustomersManager !== 'undefined' && CustomersManager.allCustomers && CustomersManager.allCustomers.length > 0) {
             customers = CustomersManager.allCustomers;
         } else if (typeof dbClient !== 'undefined') {
-            const { data } = await dbClient.from('customers').select('name, phone, address');
-            customers = data || [];
+            try {
+                const { data } = await dbClient.from('customers').select('name, phone, address');
+                customers = data || [];
+            } catch (e) {
+                console.warn('Erro ao carregar clientes do Supabase:', e);
+            }
+        }
+        if (customers.length === 0) {
+            customers = JSON.parse(localStorage.getItem('dly_customers') || '[]');
         }
 
         const customerOptions = customers.map(c => `
@@ -138,7 +153,6 @@ const SalesManager = {
         const price = parseFloat(opt.getAttribute('data-price')) || 0;
         const qty = Math.max(1, parseInt(qtyInput?.value) || 1);
 
-        // Se o item já existir, incrementa a quantidade
         const existingItem = this.currentSaleItems.find(i => i.id === id);
         if (existingItem) {
             existingItem.qty += qty;
@@ -217,8 +231,11 @@ const SalesManager = {
         const orderData = {
             id: `sale_${Date.now()}`,
             client_name,
+            customer_name: client_name,
             phone,
+            customer_phone: phone,
             address,
+            delivery_address: address,
             order_type: 'pickup',
             payment_method: 'Dinheiro/Pix',
             items: this.currentSaleItems,
@@ -227,6 +244,7 @@ const SalesManager = {
             discount: discount,
             total: total,
             status: 'completed',
+            source: 'Manual',
             created_at: new Date().toISOString()
         };
 
@@ -241,7 +259,11 @@ const SalesManager = {
             console.error('Erro ao salvar no Supabase:', e);
         }
 
-        // Atualização do cache e estado local
+        // Cache e atualização local
+        let localSales = JSON.parse(localStorage.getItem('dly_sales') || '[]');
+        localSales.unshift(orderData);
+        localStorage.setItem('dly_sales', JSON.stringify(localSales));
+
         if (typeof state !== 'undefined') {
             if (!Array.isArray(state.sales)) state.sales = [];
             state.sales.unshift(orderData);
@@ -253,9 +275,57 @@ const SalesManager = {
         }
         if (typeof closeModal === 'function') closeModal();
 
+        if (typeof renderSalesList === 'function') renderSalesList();
         if (typeof renderDashboard === 'function') renderDashboard();
         if (typeof OrdersManager !== 'undefined' && OrdersManager.fetchOrders) OrdersManager.fetchOrders();
     }
 };
 
+// Renderiza a lista de vendas manuais na sub-aba do painel
+async function renderSalesList() {
+    const container = document.getElementById('salesList');
+    if (!container) return;
+
+    let sales = [];
+    try {
+        if (typeof dbClient !== 'undefined') {
+            const { data, error } = await dbClient.from('orders').select('*').eq('source', 'Manual').order('created_at', { ascending: false });
+            if (!error && data) sales = data;
+        }
+    } catch (e) {
+        console.warn('Erro ao carregar vendas manuais:', e);
+    }
+
+    if (sales.length === 0) {
+        sales = JSON.parse(localStorage.getItem('dly_sales') || '[]');
+    }
+
+    if (sales.length === 0) {
+        container.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:20px; font-size:12px;">Nenhuma venda manual registrada ainda.</div>';
+        return;
+    }
+
+    container.innerHTML = sales.map(s => `
+        <div class="card" style="margin-bottom:8px; padding:12px; background:#1E293B; border-left:4px solid #10B981;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <strong style="color:#F1F5F9; font-size:13px; display:block;">👤 ${escapeHtml(s.client_name || s.customer_name || s.customerName || 'Cliente Balcão')}</strong>
+                    <span style="font-size:11px; color:#94A3B8;">
+                        ${new Date(s.created_at || s.createdAt).toLocaleDateString('pt-BR')} • ${s.items?.length || 0} item(ns)
+                    </span>
+                </div>
+                <strong style="color:#10B981; font-size:15px;">R$ ${Number(s.total || 0).toFixed(2)}</strong>
+            </div>
+        </div>
+    `).join('');
+}
+
+window.SalesManager = SalesManager;
 window.openSaleModal = () => SalesManager.openSaleModal();
+window.renderSalesList = renderSalesList;
+
+document.addEventListener('DOMContentLoaded', () => {
+    if (document.getElementById('salesList')) {
+        renderSalesList();
+    }
+});
