@@ -35,6 +35,22 @@ const MenuAdminManager = {
         }
     },
 
+    // Adiciona uma linha dinâmica de adicional (Nome + Preço)
+    addComplementRow(name = '', price = '') {
+        const list = document.getElementById('complements_list');
+        if (!list) return;
+
+        const row = document.createElement('div');
+        row.className = 'complement-row';
+        row.style.cssText = 'display:flex; gap:8px; align-items:center; margin-bottom:8px;';
+        row.innerHTML = `
+            <input type="text" class="comp-name" value="${escapeHtml(name)}" placeholder="Ex: Queijo Extra" style="flex:2; font-size:12px; padding:8px; background:#1E293B; color:#F1F5F9; border:1px solid #334155; border-radius:6px;">
+            <input type="number" step="0.01" class="comp-price" value="${price !== '' ? price : ''}" placeholder="R$ 0.00" style="flex:1; font-size:12px; padding:8px; background:#1E293B; color:#F1F5F9; border:1px solid #334155; border-radius:6px;">
+            <button type="button" onclick="this.parentElement.remove()" style="background:#EF4444; color:#fff; border:none; border-radius:6px; padding:8px 12px; cursor:pointer; font-size:12px;" title="Remover">🗑️</button>
+        `;
+        list.appendChild(row);
+    },
+
     async renderAdminProductsList() {
         const container = document.getElementById('admin-products-list');
         if (!container) return;
@@ -119,18 +135,21 @@ const MenuAdminManager = {
         const uniqueCategories = [...new Set([...defaultCategories, ...customCategories])];
         const categoryOptionsHtml = uniqueCategories.map(cat => `<option value="${escapeHtml(cat)}">`).join('');
 
-        // Formata os adicionais gravados para exibição no campo de texto
-        let complementsText = '';
+        // Monta a lista inicial de adicionais caso o produto já tenha alguns
+        let compsList = [];
         if (Array.isArray(p.complements)) {
-            complementsText = p.complements.map(c => `${c.name}: ${Number(c.price || 0).toFixed(2)}`).join('\n');
+            compsList = p.complements;
         } else if (typeof p.complements === 'string') {
-            try {
-                const parsed = JSON.parse(p.complements);
-                if (Array.isArray(parsed)) {
-                    complementsText = parsed.map(c => `${c.name}: ${Number(c.price || 0).toFixed(2)}`).join('\n');
-                }
-            } catch(e) { complementsText = p.complements; }
+            try { compsList = JSON.parse(p.complements); } catch(e){}
         }
+
+        let complementsRowsHtml = compsList.map(c => `
+            <div class="complement-row" style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+                <input type="text" class="comp-name" value="${escapeHtml(c.name || '')}" placeholder="Ex: Queijo Extra" style="flex:2; font-size:12px; padding:8px; background:#1E293B; color:#F1F5F9; border:1px solid #334155; border-radius:6px;">
+                <input type="number" step="0.01" class="comp-price" value="${c.price !== undefined ? c.price : ''}" placeholder="R$ 0.00" style="flex:1; font-size:12px; padding:8px; background:#1E293B; color:#F1F5F9; border:1px solid #334155; border-radius:6px;">
+                <button type="button" onclick="this.parentElement.remove()" style="background:#EF4444; color:#fff; border:none; border-radius:6px; padding:8px 12px; cursor:pointer; font-size:12px;" title="Remover">🗑️</button>
+            </div>
+        `).join('');
 
         const bodyHtml = `
             <div class="form-group">
@@ -159,11 +178,18 @@ const MenuAdminManager = {
                 <textarea id="prod_desc" rows="2" placeholder="Ex: Carne moída especial e tempero da casa">${escapeHtml(p.description || '')}</textarea>
             </div>
 
-            <!-- CAMPO DE ADICIONAIS / OPCIONAIS -->
-            <div class="form-group" style="background:#0F172A; padding:10px; border-radius:8px; border:1px solid #334155;">
-                <label style="color:#F59E0B; font-weight:bold;">➕ Adicionais / Opcionais do Prato</label>
-                <small style="display:block; color:#94A3B8; font-size:11px; margin-bottom:6px;">Digite um por linha no formato: <strong>Nome: Valor</strong></small>
-                <textarea id="prod_complements" rows="3" placeholder="Ex: Queijo Extra: 3.50&#10;Bacon Crocante: 4.00&#10;Molho Especial: 2.00" style="font-size:12px; font-family:monospace;">${escapeHtml(complementsText)}</textarea>
+            <!-- BLOCO ORGANIZADO DE ADICIONAIS COM CAMPOS SEPARADOS -->
+            <div class="form-group" style="background:#0F172A; padding:12px; border-radius:8px; border:1px solid #334155;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <div>
+                        <label style="color:#F59E0B; font-weight:bold; margin:0; display:block;">➕ Adicionais / Opcionais do Prato</label>
+                        <small style="color:#94A3B8; font-size:10px;">Defina o nome e o preço exato do item</small>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="MenuAdminManager.addComplementRow()" style="width:auto; font-size:11px; padding:5px 10px; background:#334155;">+ Adicionar Item</button>
+                </div>
+                <div id="complements_list">
+                    ${complementsRowsHtml}
+                </div>
             </div>
 
             <div class="form-group">
@@ -196,7 +222,6 @@ const MenuAdminManager = {
         const price = parseFloat(document.getElementById('prod_price')?.value) || 0;
         const discount_pct = parseInt(document.getElementById('prod_discount')?.value) || 0;
         const description = document.getElementById('prod_desc')?.value.trim() || '';
-        const complementsRaw = document.getElementById('prod_complements')?.value.trim() || '';
         let image_url = document.getElementById('prod_img')?.value.trim() || '';
         const is_active = document.getElementById('prod_active')?.checked ?? true;
         const is_cross_sell = document.getElementById('prod_cross')?.checked ?? false;
@@ -209,14 +234,16 @@ const MenuAdminManager = {
             return;
         }
 
-        // Converte o texto digitado dos adicionais em Array de Objetos [{name, price}]
-        const complements = complementsRaw ? complementsRaw.split('\n').filter(line => line.includes(':')).map(line => {
-            const parts = line.split(':');
-            return {
-                name: parts[0].trim(),
-                price: parseFloat(parts[1].trim().replace(',', '.')) || 0
-            };
-        }) : [];
+        // Captura todos os campos de adicionais individuais
+        const complementRows = document.querySelectorAll('#complements_list .complement-row');
+        const complements = [];
+        complementRows.forEach(row => {
+            const compName = row.querySelector('.comp-name')?.value.trim();
+            const compPrice = parseFloat(row.querySelector('.comp-price')?.value) || 0;
+            if (compName) {
+                complements.push({ name: compName, price: compPrice });
+            }
+        });
 
         try {
             if (fileInput && fileInput.files && fileInput.files.length > 0) {
