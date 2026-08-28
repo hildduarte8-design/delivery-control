@@ -17,142 +17,142 @@ function getIFoodWeeklyCycle(referenceDate = new Date()) {
     return { cycleStart, cycleEnd };
 }
 
-// Módulo do Analytics (Seguro contra re-declaração)
-window.AnalyticsManager = window.AnalyticsManager || {
-    currentFilter: 'all',
-    cachedOrders: [],
+// Módulo do Analytics anexado diretamente ao objeto global sem declarar variável
+if (!window.AnalyticsManager) {
+    window.AnalyticsManager = {
+        currentFilter: 'all',
+        cachedOrders: [],
 
-    setFilter(filterType) {
-        this.currentFilter = filterType;
-        this.render();
-    },
+        setFilter(filterType) {
+            this.currentFilter = filterType;
+            this.render();
+        },
 
-    render(ordersList = null) {
-        if (ordersList && Array.isArray(ordersList)) {
-            this.cachedOrders = ordersList;
-        }
-
-        let orders = this.cachedOrders;
-        if (!orders || orders.length === 0) {
-            if (typeof state !== 'undefined' && Array.isArray(state.orders)) orders = state.orders;
-            else orders = JSON.parse(localStorage.getItem('dly_orders') || localStorage.getItem('dly_sales') || '[]');
-        }
-
-        const now = new Date();
-        const todayStr = now.toISOString().split('T')[0];
-
-        const filteredOrders = orders.filter(o => {
-            if (o.status === 'cancelled') return false;
-
-            const orderDate = new Date(o.created_at || o.date || now);
-            const orderDateStr = orderDate.toISOString().split('T')[0];
-
-            if (this.currentFilter === 'today') return orderDateStr === todayStr;
-            if (this.currentFilter === '7days') {
-                const diffDays = Math.ceil(Math.abs(now - orderDate) / (1000 * 60 * 60 * 24));
-                return diffDays <= 7;
-            }
-            if (this.currentFilter === 'month') {
-                return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
-            }
-            return true;
-        });
-
-        let totalRevenue = 0;
-        let totalOrdersCount = filteredOrders.length;
-        let totalItemsQty = 0;
-
-        let totalPix = 0;
-        let totalCard = 0;
-        let totalCash = 0;
-
-        const rankingMap = new Map();
-
-        filteredOrders.forEach(o => {
-            const orderTotal = Number(o.total || o.amount || 0);
-            totalRevenue += orderTotal;
-
-            const method = String(o.payment_method || o.reference || o.paymentMethod || '').toLowerCase();
-
-            if (method.includes('pix')) {
-                totalPix += orderTotal;
-            } else if (method.includes('carta') || method.includes('cartão') || method.includes('credito') || method.includes('debito') || method.includes('card')) {
-                totalCard += orderTotal;
-            } else {
-                totalCash += orderTotal;
+        render(ordersList = null) {
+            if (ordersList && Array.isArray(ordersList)) {
+                this.cachedOrders = ordersList;
             }
 
-            let items = o.items;
-            if (typeof items === 'string') {
-                try { items = JSON.parse(items); } catch (e) { items = []; }
+            let orders = this.cachedOrders;
+            if (!orders || orders.length === 0) {
+                if (typeof state !== 'undefined' && Array.isArray(state.orders)) orders = state.orders;
+                else orders = JSON.parse(localStorage.getItem('dly_orders') || localStorage.getItem('dly_sales') || '[]');
             }
 
-            if (Array.isArray(items) && items.length > 0) {
-                items.forEach(item => {
-                    const qty = Number(item.qty || item.quantity || 1);
-                    totalItemsQty += qty;
+            const now = new Date();
+            const todayStr = now.toISOString().split('T')[0];
 
-                    const name = item.name || 'Item do Cardápio';
+            const filteredOrders = orders.filter(o => {
+                if (o.status === 'cancelled') return false;
 
-                    let itemTotal = Number(item.total || 0);
-                    if (itemTotal <= 0) {
-                        const unitPrice = Number(item.price || item.unit_price || item.unitPrice || (orderTotal > 0 ? orderTotal / items.length : 0));
-                        itemTotal = unitPrice * qty;
-                    }
+                const orderDate = new Date(o.created_at || o.date || now);
+                const orderDateStr = orderDate.toISOString().split('T')[0];
 
-                    if (!rankingMap.has(name)) {
-                        rankingMap.set(name, { qty: 0, revenue: 0 });
-                    }
+                if (this.currentFilter === 'today') return orderDateStr === todayStr;
+                if (this.currentFilter === '7days') {
+                    const diffDays = Math.ceil(Math.abs(now - orderDate) / (1000 * 60 * 60 * 24));
+                    return diffDays <= 7;
+                }
+                if (this.currentFilter === 'month') {
+                    return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
+                }
+                return true;
+            });
 
-                    const curr = rankingMap.get(name);
-                    curr.qty += qty;
-                    curr.revenue += itemTotal;
-                });
-            }
-        });
+            let totalRevenue = 0;
+            let totalOrdersCount = filteredOrders.length;
+            let totalItemsQty = 0;
 
-        const elFaturamento = document.getElementById('dash_faturamento') || document.getElementById('analyticsRevenue');
-        const elTotalPedidos = document.getElementById('dash_total_pedidos') || document.getElementById('analyticsOrdersCount');
-        const elTicketMedio = document.getElementById('dash_ticket_medio') || document.getElementById('analyticsTicket');
-        const elItensVendidos = document.getElementById('dash_itens_vendidos') || document.getElementById('analyticsItemsCount');
+            let totalPix = 0;
+            let totalCard = 0;
+            let totalCash = 0;
 
-        const elPix = document.getElementById('dash_pay_pix') || document.getElementById('payPixVal');
-        const elCard = document.getElementById('dash_pay_card') || document.getElementById('payCardVal');
-        const elCash = document.getElementById('dash_pay_cash') || document.getElementById('payCashVal');
+            const rankingMap = new Map();
 
-        if (elFaturamento) elFaturamento.textContent = `R$ ${totalRevenue.toFixed(2)}`;
-        if (elTotalPedidos) elTotalPedidos.textContent = totalOrdersCount;
-        if (elTicketMedio) elTicketMedio.textContent = `R$ ${(totalOrdersCount > 0 ? totalRevenue / totalOrdersCount : 0).toFixed(2)}`;
-        if (elItensVendidos) elItensVendidos.textContent = `${totalItemsQty} un`;
+            filteredOrders.forEach(o => {
+                const orderTotal = Number(o.total || o.amount || 0);
+                totalRevenue += orderTotal;
 
-        if (elPix) elPix.textContent = `R$ ${totalPix.toFixed(2)}`;
-        if (elCard) elCard.textContent = `R$ ${totalCard.toFixed(2)}`;
-        if (elCash) elCash.textContent = `R$ ${totalCash.toFixed(2)}`;
+                const method = String(o.payment_method || o.reference || o.paymentMethod || '').toLowerCase();
 
-        const rankingContainer = document.getElementById('dash_ranking_list') || document.getElementById('rankingContainer');
-        if (rankingContainer) {
-            const sortedRanking = Array.from(rankingMap.entries()).sort((a, b) => b[1].qty - a[1].qty);
+                if (method.includes('pix')) {
+                    totalPix += orderTotal;
+                } else if (method.includes('carta') || method.includes('cartão') || method.includes('credito') || method.includes('debito') || method.includes('card')) {
+                    totalCard += orderTotal;
+                } else {
+                    totalCash += orderTotal;
+                }
 
-            if (sortedRanking.length === 0) {
-                rankingContainer.innerHTML = '<div style="color:#94A3B8; font-size:12px; padding:15px; text-align:center;">Nenhum prato vendido ainda.</div>';
-            } else {
-                rankingContainer.innerHTML = sortedRanking.map(([name, data], idx) => {
-                    const trophy = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🏅';
-                    return `
-                        <div style="margin-bottom:10px; padding:8px; background:#0F172A; border-radius:6px; border:1px solid #1E293B;">
-                            <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; color:#F1F5F9;">
-                                <span>${trophy} <strong>${escapeHtml(name)}</strong></span>
-                                <strong style="color:#10B981;">${data.qty} un <span style="color:#94A3B8; font-size:11px; font-weight:normal;">(R$ ${data.revenue.toFixed(2)})</span></strong>
+                let items = o.items;
+                if (typeof items === 'string') {
+                    try { items = JSON.parse(items); } catch (e) { items = []; }
+                }
+
+                if (Array.isArray(items) && items.length > 0) {
+                    items.forEach(item => {
+                        const qty = Number(item.qty || item.quantity || 1);
+                        totalItemsQty += qty;
+
+                        const name = item.name || 'Item do Cardápio';
+
+                        let itemTotal = Number(item.total || 0);
+                        if (itemTotal <= 0) {
+                            const unitPrice = Number(item.price || item.unit_price || item.unitPrice || (orderTotal > 0 ? orderTotal / items.length : 0));
+                            itemTotal = unitPrice * qty;
+                        }
+
+                        if (!rankingMap.has(name)) {
+                            rankingMap.set(name, { qty: 0, revenue: 0 });
+                        }
+
+                        const curr = rankingMap.get(name);
+                        curr.qty += qty;
+                        curr.revenue += itemTotal;
+                    });
+                }
+            });
+
+            const elFaturamento = document.getElementById('dash_faturamento') || document.getElementById('analyticsRevenue');
+            const elTotalPedidos = document.getElementById('dash_total_pedidos') || document.getElementById('analyticsOrdersCount');
+            const elTicketMedio = document.getElementById('dash_ticket_medio') || document.getElementById('analyticsTicket');
+            const elItensVendidos = document.getElementById('dash_itens_vendidos') || document.getElementById('analyticsItemsCount');
+
+            const elPix = document.getElementById('dash_pay_pix') || document.getElementById('payPixVal');
+            const elCard = document.getElementById('dash_pay_card') || document.getElementById('payCardVal');
+            const elCash = document.getElementById('dash_pay_cash') || document.getElementById('payCashVal');
+
+            if (elFaturamento) elFaturamento.textContent = `R$ ${totalRevenue.toFixed(2)}`;
+            if (elTotalPedidos) elTotalPedidos.textContent = totalOrdersCount;
+            if (elTicketMedio) elTicketMedio.textContent = `R$ ${(totalOrdersCount > 0 ? totalRevenue / totalOrdersCount : 0).toFixed(2)}`;
+            if (elItensVendidos) elItensVendidos.textContent = `${totalItemsQty} un`;
+
+            if (elPix) elPix.textContent = `R$ ${totalPix.toFixed(2)}`;
+            if (elCard) elCard.textContent = `R$ ${totalCard.toFixed(2)}`;
+            if (elCash) elCash.textContent = `R$ ${totalCash.toFixed(2)}`;
+
+            const rankingContainer = document.getElementById('dash_ranking_list') || document.getElementById('rankingContainer');
+            if (rankingContainer) {
+                const sortedRanking = Array.from(rankingMap.entries()).sort((a, b) => b[1].qty - a[1].qty);
+
+                if (sortedRanking.length === 0) {
+                    rankingContainer.innerHTML = '<div style="color:#94A3B8; font-size:12px; padding:15px; text-align:center;">Nenhum prato vendido ainda.</div>';
+                } else {
+                    rankingContainer.innerHTML = sortedRanking.map(([name, data], idx) => {
+                        const trophy = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🏅';
+                        return `
+                            <div style="margin-bottom:10px; padding:8px; background:#0F172A; border-radius:6px; border:1px solid #1E293B;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; color:#F1F5F9;">
+                                    <span>${trophy} <strong>${escapeHtml(name)}</strong></span>
+                                    <strong style="color:#10B981;">${data.qty} un <span style="color:#94A3B8; font-size:11px; font-weight:normal;">(R$ ${data.revenue.toFixed(2)})</span></strong>
+                                </div>
                             </div>
-                        </div>
-                    `;
-                }).join('');
+                        `;
+                    }).join('');
+                }
             }
         }
-    }
-};
-
-var AnalyticsManager = window.AnalyticsManager;
+    };
+}
 
 // js/dashboard.js - Painel Principal com Fechamento Semanal Estilo iFood (Quinta a Quarta)
 async function renderDashboard() {
@@ -189,6 +189,7 @@ async function renderDashboard() {
         const now = new Date();
         const todayStr = now.toISOString().split('T')[0];
 
+        // 1. Entradas de Hoje
         const todayOrders = orders.filter(o => {
             if (o.status === 'cancelled') return false;
             const orderDate = new Date(o.created_at || o.date).toISOString().split('T')[0];
@@ -196,6 +197,7 @@ async function renderDashboard() {
         });
         const todayIn = todayOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
 
+        // 2. Gastos de Hoje
         const todayExp = expenses.filter(e => {
             const expDate = new Date(e.created_at || e.date).toISOString().split('T')[0];
             return expDate === todayStr;
@@ -205,6 +207,7 @@ async function renderDashboard() {
         if (inToday) inToday.textContent = `R$ ${todayIn.toFixed(2)}`;
         if (outToday) outToday.textContent = `R$ ${todayOut.toFixed(2)}`;
 
+        // 3. Saldo Atual Geral
         const totalInGeral = orders
             .filter(o => o.status !== 'cancelled')
             .reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
@@ -219,6 +222,7 @@ async function renderDashboard() {
                 : 'Sem movimentações ainda';
         }
 
+        // 4. Saldo da Semana (Ciclo de Repasse: Quinta a Quarta)
         const { cycleStart, cycleEnd } = getIFoodWeeklyCycle(now);
 
         const weekOrders = orders.filter(o => {
@@ -257,6 +261,7 @@ async function renderDashboard() {
             }
         }
 
+        // 5. Saldo do Mês
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         const monthOrders = orders.filter(o => o.status !== 'cancelled' && new Date(o.created_at || o.date) >= startOfMonth);
         const monthExp = expenses.filter(e => new Date(e.created_at || e.date) >= startOfMonth);
@@ -272,6 +277,7 @@ async function renderDashboard() {
             monthBadge.style.color = monthNet >= 0 ? '#10B981' : '#EF4444';
         }
 
+        // 6. Últimas Movimentações (5 mais recentes)
         if (movList) {
             const recentOrders = orders.slice(0, 5);
             if (recentOrders.length === 0) {
@@ -292,7 +298,10 @@ async function renderDashboard() {
             }
         }
 
-        window.AnalyticsManager.render(orders);
+        // 7. Renderiza Analytics
+        if (window.AnalyticsManager && typeof window.AnalyticsManager.render === 'function') {
+            window.AnalyticsManager.render(orders);
+        }
 
     } catch (e) {
         console.error('Erro ao renderizar Dashboard:', e);
