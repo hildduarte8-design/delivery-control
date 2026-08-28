@@ -1,4 +1,4 @@
-// js/pwa.js - Configuração Dinâmica do Manifest e Service Worker
+// js/pwa.js - Configuração Dinâmica do Manifest e Service Worker (Modo Leve e Silencioso)
 
 function setupManifest() {
     const manifest = {
@@ -37,21 +37,15 @@ function setupManifest() {
 function setupServiceWorker() {
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js')
-            .then(() => console.log('Service Worker PWA registrado!'))
-            .catch((err) => console.log('Erro no Service Worker:', err));
+            .then(() => console.log('⚡ Cardápio leve e otimizado (SW registrado)'))
+            .catch((err) => console.warn('Aviso no Service Worker:', err));
     }
 }
 
-// Captura do evento de instalação (instalação no celular)
-let deferredPrompt;
+// Bloqueia banners e popups automáticos de instalação no celular do cliente
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
-    deferredPrompt = e;
-
-    const welcomeBanner = document.getElementById('welcomeBanner');
-    if (welcomeBanner) {
-        welcomeBanner.style.display = 'block';
-    }
+    return false;
 });
 
 // Inicialização automática ao carregar a página
