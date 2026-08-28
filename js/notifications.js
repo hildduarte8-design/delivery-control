@@ -1,13 +1,12 @@
 // Central de Notificações do Delivery Control
 
-// 1. Coleta todos os alertas ativos do sistema (Estoque e Contas)
 function getActiveNotifications() {
     const alerts = [];
 
     // --- ALERTA DE ESTOQUE BAIXO ---
-    if (state.stock && Array.isArray(state.stock)) {
+    if (typeof state !== 'undefined' && state.stock && Array.isArray(state.stock)) {
         state.stock.forEach(item => {
-            const minQty = Number(item.minQty || 5); // limite mínimo padrão ou configurado
+            const minQty = Number(item.minQty || 5);
             const currentQty = Number(item.quantity || 0);
 
             if (currentQty <= 0) {
@@ -33,7 +32,7 @@ function getActiveNotifications() {
     }
 
     // --- ALERTA DE CONTAS FIXAS VENCENDO ---
-    if (state.expenses && state.expenses.fixed && Array.isArray(state.expenses.fixed)) {
+    if (typeof state !== 'undefined' && state.expenses && state.expenses.fixed && Array.isArray(state.expenses.fixed)) {
         const today = new Date().getDate();
         state.expenses.fixed.forEach(exp => {
             const dueDay = Number(exp.dueDay);
@@ -64,7 +63,6 @@ function getActiveNotifications() {
     return alerts;
 }
 
-// 2. Atualiza a bolinha vermelha (badge) do sino
 function updateNotificationBadge() {
     const badge = document.getElementById('notifBadge');
     if (!badge) return;
@@ -80,10 +78,8 @@ function updateNotificationBadge() {
     }
 }
 
-// 3. Abre a central de notificações quando clica no sino
 function openNotificationCenter() {
     const alerts = getActiveNotifications();
-
     let contentHtml = '';
 
     if (alerts.length === 0) {
@@ -116,62 +112,55 @@ function openNotificationCenter() {
         contentHtml += `</div>`;
     }
 
-    // Botão para ativar notificações no celular
     if ('Notification' in window && Notification.permission !== 'granted') {
         contentHtml += `
-            <button class="btn btn-sm" onclick="requestBrowserNotificationPermission()" style="margin-top:16px; background:#3B82F6;">
+            <button class="btn btn-sm" onclick="requestBrowserNotificationPermission()" style="margin-top:16px; background:#3B82F6; width:100%;">
                 🔔 Ativar Notificações no Celular
             </button>
         `;
     }
 
-    openModal('🔔 Notificações e Alertas', contentHtml);
+    if (typeof openModal === 'function') {
+        openModal('🔔 Notificações e Alertas', contentHtml);
+    }
 }
 
-// 4. Solicita permissão para notificações do navegador/celular
 function requestBrowserNotificationPermission() {
     if (!('Notification' in window)) {
-        showToast('Navegador não suporta notificações', 'error');
+        if (typeof showToast === 'function') showToast('Navegador não suporta notificações', 'error');
         return;
     }
 
     Notification.requestPermission().then(permission => {
         if (permission === 'granted') {
-            showToast('Notificações ativadas com sucesso!');
-            closeModal();
-            sendNativeNotification('Delivery Control 🚀', 'Notificações ativadas! Avisaremos sobre estoque e contas.');
+            if (typeof showToast === 'function') showToast('Notificações ativadas com sucesso!');
+            if (typeof closeModal === 'function') closeModal();
+            sendNativeNotification('Delivery Control 🚀', 'Notificações ativadas! Avisaremos sobre pedidos, estoque e contas.');
         } else {
-            showToast('Permissão de notificação negada', 'error');
+            if (typeof showToast === 'function') showToast('Permissão de notificação negada', 'error');
         }
     });
 }
 
-// 5. Dispara notificação nativa do sistema
 function sendNativeNotification(title, body) {
     if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification(title, {
-            body: body,
-            icon: 'icon-192.png'
-        });
-    }
-}
-
-// 6. Lembrete semanal de fechamento de caixa
-function checkWeeklyNotification() {
-    const today = new Date();
-    // Se for domingo (day 0) e ainda não alertou hoje
-    if (today.getDay() === 0) {
-        const lastCheck = localStorage.getItem('dly_last_weekly_check');
-        const todayStr = today.toISOString().split('T')[0];
-
-        if (lastCheck !== todayStr) {
-            localStorage.setItem('dly_last_weekly_check', todayStr);
-            sendNativeNotification('📊 Fechamento da Semana', 'Hoje é dia de conferir o saldo e fechar os gastos da semana!');
+        try {
+            new Notification(title, {
+                body: body,
+                icon: 'icon-192.png'
+            });
+        } catch(e) {
+            console.warn('Erro ao enviar notificação nativa:', e);
         }
     }
 }
 
-// Vincula o clique do botão do sino
+// Exporta as funções para o escopo global
+window.sendNativeNotification = sendNativeNotification;
+window.requestBrowserNotificationPermission = requestBrowserNotificationPermission;
+window.openNotificationCenter = openNotificationCenter;
+window.updateNotificationBadge = updateNotificationBadge;
+
 document.addEventListener('DOMContentLoaded', () => {
     const notifBtn = document.getElementById('notifBtn');
     if (notifBtn) {
