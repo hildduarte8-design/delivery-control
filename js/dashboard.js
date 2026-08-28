@@ -1,3 +1,10 @@
+// Helper para tratamento seguro de HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(String(text || '')));
+    return div.innerHTML;
+}
+
 // Helper: Calcula o intervalo do ciclo semanal estilo iFood (Quinta 00:00 a Quarta 23:59)
 function getIFoodWeeklyCycle(referenceDate = new Date()) {
     const d = new Date(referenceDate);
