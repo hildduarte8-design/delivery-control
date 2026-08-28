@@ -522,7 +522,7 @@ const MenuApp = {
         );
     },
 
-    async sendWhatsApp() {
+   async sendWhatsApp() {
         const nameEl = document.getElementById('cli-name');
         const phoneEl = document.getElementById('cli-phone');
         const addrEl = document.getElementById('cli-address');
@@ -557,6 +557,11 @@ const MenuApp = {
 
         if (!storePhone.startsWith('55')) storePhone = '55' + storePhone;
 
+        // 1. GERAÇÃO DE ID ÚNICO PARA CORRIGIR O ERRO DE NULL
+        const orderId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
+            ? crypto.randomUUID() 
+            : `ord_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+
         const orderItems = [];
         let itemsFormatted = '';
 
@@ -589,15 +594,18 @@ const MenuApp = {
 
         const fullReference = reference ? `${reference} | PGTO: ${paymentFormatted}` : `PGTO: ${paymentFormatted}`;
 
-        // CORREÇÃO CRÍTICA DO BUG DE NOTIFICAÇÃO E PAINEL AO VIVO:
-        // Gravamos explicitamente payment_method e forçamos status 'preparing' para entrar direto no Realtime
+        // 2. GRAVAÇÃO COMPLETA NO SUPABASE COM O ID INCLUSO
         try {
             if (typeof dbClient !== 'undefined') {
                 const { error: dbError } = await dbClient.from('orders').insert([{
+                    id: orderId,
                     client_name: name,
+                    customer_name: name,
                     phone: phone,
+                    customer_phone: phone,
                     order_type: this.orderType,
                     address: address,
+                    delivery_address: address,
                     number: number,
                     reference: fullReference,
                     payment_method: payment,
@@ -605,15 +613,17 @@ const MenuApp = {
                     subtotal: subtotal,
                     delivery_fee: freight,
                     total: totalFinal,
-                    status: 'preparing'
+                    status: 'preparing',
+                    source: 'Cardápio Digital',
+                    created_at: new Date().toISOString()
                 }]);
 
                 if (dbError) {
-                    console.error('Aviso ao salvar pedido no Supabase:', dbError.message);
+                    console.error('❌ Erro de gravação no Supabase:', dbError.message);
                 }
             }
         } catch (e) {
-            console.error('Erro ao salvar pedido no banco:', e);
+            console.error('Erro de conexão ao salvar pedido:', e);
         }
 
         const typeLabel = this.orderType === 'delivery' ? '🛵 *Entrega*' : '🏪 *Retirada no Balcão*';
@@ -630,6 +640,10 @@ const MenuApp = {
                             `💰 *TOTAL FINAL:* R$ ${subtotal.toFixed(2)}`;
         }
 
+        // 3. LINK DIRETO PARA O PAINEL DE PEDIDOS NA MENSAGEM
+        const currentOrigin = window.location.origin;
+        const adminOrderUrl = `${currentOrigin}/index.html?orderId=${orderId}`;
+
         const msg = `🛍️ *NOVO PEDIDO - ${storeCoords.storeName.toUpperCase()}*\n` +
                     `═══════════════════════\n\n` +
                     `📍 *TIPO:* ${typeLabel}\n` +
@@ -642,6 +656,7 @@ const MenuApp = {
                     `📋 *ITENS DO PEDIDO:*\n${itemsFormatted}\n` +
                     `═══════════════════════\n` +
                     `${totalsSection}\n\n` +
+                    `🔗 *Ver comanda no Painel:* ${adminOrderUrl}\n\n` +
                     `✨ _Obrigado pela preferência! Aguardo a confirmação._`;
 
         window.open(`https://api.whatsapp.com/send?phone=${storePhone}&text=${encodeURIComponent(msg)}`, '_blank');
