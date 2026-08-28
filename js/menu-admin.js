@@ -79,7 +79,7 @@ const MenuAdminManager = {
                             ${p.image_url ? `<img src="${escapeHtml(p.image_url)}" style="width:48px; height:48px; border-radius:8px; object-fit:cover;">` : '<span style="font-size:24px;">🍽️</span>'}
                             <div>
                                 <strong style="color:#F1F5F9; font-size:14px; display:block;">
-                                    ${safeName} ${p.is_cross_sell ? '<small style="color:#60A5FA;">[Cross-Sell]</small>' : ''}
+                                    ${safeName} ${p.is_cross_sell ? '<small style="color:#60A5FA;">[Peça Junto]</small>' : ''}
                                 </strong>
                                 <span style="font-size:11px; color:#94A3B8;">
                                     ${safeCat} • R$ ${finalPrice.toFixed(2)} 
@@ -105,7 +105,7 @@ const MenuAdminManager = {
     },
 
     async openProductModal(productId = null) {
-        let p = { name: '', description: '', price: '', category: 'Especialidades', discount_pct: 0, is_active: true, is_cross_sell: false, image_url: '' };
+        let p = { name: '', description: '', price: '', category: 'Especialidades', discount_pct: 0, is_active: true, is_cross_sell: false, image_url: '', complements: [] };
 
         if (productId && typeof dbClient !== 'undefined') {
             const { data } = await dbClient.from('products').select('*').eq('id', productId).single();
@@ -118,6 +118,19 @@ const MenuAdminManager = {
             : [];
         const uniqueCategories = [...new Set([...defaultCategories, ...customCategories])];
         const categoryOptionsHtml = uniqueCategories.map(cat => `<option value="${escapeHtml(cat)}">`).join('');
+
+        // Formata os adicionais gravados para exibição no campo de texto
+        let complementsText = '';
+        if (Array.isArray(p.complements)) {
+            complementsText = p.complements.map(c => `${c.name}: ${Number(c.price || 0).toFixed(2)}`).join('\n');
+        } else if (typeof p.complements === 'string') {
+            try {
+                const parsed = JSON.parse(p.complements);
+                if (Array.isArray(parsed)) {
+                    complementsText = parsed.map(c => `${c.name}: ${Number(c.price || 0).toFixed(2)}`).join('\n');
+                }
+            } catch(e) { complementsText = p.complements; }
+        }
 
         const bodyHtml = `
             <div class="form-group">
@@ -145,6 +158,14 @@ const MenuAdminManager = {
                 <label>Descrição / Ingredientes</label>
                 <textarea id="prod_desc" rows="2" placeholder="Ex: Carne moída especial e tempero da casa">${escapeHtml(p.description || '')}</textarea>
             </div>
+
+            <!-- CAMPO DE ADICIONAIS / OPCIONAIS -->
+            <div class="form-group" style="background:#0F172A; padding:10px; border-radius:8px; border:1px solid #334155;">
+                <label style="color:#F59E0B; font-weight:bold;">➕ Adicionais / Opcionais do Prato</label>
+                <small style="display:block; color:#94A3B8; font-size:11px; margin-bottom:6px;">Digite um por linha no formato: <strong>Nome: Valor</strong></small>
+                <textarea id="prod_complements" rows="3" placeholder="Ex: Queijo Extra: 3.50&#10;Bacon Crocante: 4.00&#10;Molho Especial: 2.00" style="font-size:12px; font-family:monospace;">${escapeHtml(complementsText)}</textarea>
+            </div>
+
             <div class="form-group">
                 <label>Foto do Prato (Galeria / PC)</label>
                 <input type="file" id="prod_file" accept="image/*" style="padding:8px; font-size:12px;">
@@ -158,7 +179,7 @@ const MenuAdminManager = {
                     <input type="checkbox" id="prod_active" ${p.is_active ? 'checked' : ''}> Item Ativo
                 </label>
                 <label style="font-size:12px; color:#CBD5E1; display:flex; align-items:center; gap:6px; cursor:pointer;">
-                    <input type="checkbox" id="prod_cross" ${p.is_cross_sell ? 'checked' : ''}> Sugerir no Carrinho (Cross-sell)
+                    <input type="checkbox" id="prod_cross" ${p.is_cross_sell ? 'checked' : ''}> Sugerir no Checkout (Peça Junto)
                 </label>
             </div>
             <button class="btn btn-large" id="btn_save_prod" onclick="MenuAdminManager.saveProduct('${escapeHtml(productId || '')}')">💾 Salvar Prato</button>
@@ -175,6 +196,7 @@ const MenuAdminManager = {
         const price = parseFloat(document.getElementById('prod_price')?.value) || 0;
         const discount_pct = parseInt(document.getElementById('prod_discount')?.value) || 0;
         const description = document.getElementById('prod_desc')?.value.trim() || '';
+        const complementsRaw = document.getElementById('prod_complements')?.value.trim() || '';
         let image_url = document.getElementById('prod_img')?.value.trim() || '';
         const is_active = document.getElementById('prod_active')?.checked ?? true;
         const is_cross_sell = document.getElementById('prod_cross')?.checked ?? false;
@@ -186,6 +208,15 @@ const MenuAdminManager = {
             else alert('Preencha o nome e um preço válido!');
             return;
         }
+
+        // Converte o texto digitado dos adicionais em Array de Objetos [{name, price}]
+        const complements = complementsRaw ? complementsRaw.split('\n').filter(line => line.includes(':')).map(line => {
+            const parts = line.split(':');
+            return {
+                name: parts[0].trim(),
+                price: parseFloat(parts[1].trim().replace(',', '.')) || 0
+            };
+        }) : [];
 
         try {
             if (fileInput && fileInput.files && fileInput.files.length > 0) {
@@ -199,7 +230,7 @@ const MenuAdminManager = {
                 }
             }
 
-            const payload = { name, category, price, discount_pct, description, image_url, is_active, is_cross_sell };
+            const payload = { name, category, price, discount_pct, description, image_url, is_active, is_cross_sell, complements };
 
             if (productId) {
                 await dbClient.from('products').update(payload).eq('id', productId);
