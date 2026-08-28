@@ -112,7 +112,7 @@ const SalesManager = {
             <div style="padding:2px;">
                 <div class="form-group" style="margin-bottom:10px;">
                     <label style="font-size:12px; color:#CBD5E1;">Cliente Cadastrado (Opcional)</label>
-                    <select id="sale_customer_select" onchange="SalesManager.onSelectCustomer(this.value)" style="font-size:13px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155;">
+                    <select id="sale_customer_select" onchange="SalesManager.onSelectCustomer(this.value)" style="font-size:13px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px;">
                         <option value="">-- Cliente Avulso / Balcão --</option>
                         ${customerOptions}
                     </select>
@@ -129,9 +129,19 @@ const SalesManager = {
                     </div>
                 </div>
 
-                <div class="form-group" style="margin-bottom:12px;">
+                <div class="form-group" style="margin-bottom:10px;">
                     <label style="font-size:11px; color:#94A3B8;">Endereço de Entrega / Observação</label>
                     <input type="text" id="sale_address" placeholder="Rua, Número, Bairro (ou Balcão)" style="font-size:12px; padding:6px;">
+                </div>
+
+                <!-- CAMPO DE SELEÇÃO DA FORMA DE PAGAMENTO -->
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label style="font-size:11px; color:#94A3B8;">Forma de Pagamento *</label>
+                    <select id="sale_payment_method" style="font-size:12px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px;">
+                        <option value="Pix">⚡ Pix</option>
+                        <option value="Cartão">💳 Cartão de Débito/Crédito</option>
+                        <option value="Dinheiro">💵 Dinheiro (Em espécie)</option>
+                    </select>
                 </div>
 
                 <div style="border-top:1px solid #334155; padding-top:10px; margin-top:10px;">
@@ -268,6 +278,7 @@ const SalesManager = {
         const client_name = document.getElementById('sale_client_name')?.value.trim() || 'Cliente Balcão';
         const phone = document.getElementById('sale_phone')?.value.trim() || '';
         const address = document.getElementById('sale_address')?.value.trim() || 'Venda no Balcão';
+        const payment_method = document.getElementById('sale_payment_method')?.value || 'Pix';
         const discount = parseFloat(document.getElementById('sale_discount_input')?.value) || 0;
         const total = parseFloat(document.getElementById('sale_final_total')?.value) || 0;
 
@@ -292,13 +303,13 @@ const SalesManager = {
             address,
             delivery_address: address,
             order_type: 'pickup',
-            payment_method: 'Dinheiro/Pix',
+            payment_method: payment_method,
             items: this.currentSaleItems,
             subtotal: subtotal > 0 ? subtotal : total,
             delivery_fee: 0,
             discount: discount,
             total: total,
-            status: 'preparing', // <-- ENTRA DIRETO EM PREPARO NA FILA AO VIVO
+            status: 'preparing', // ENTRA DIRETO EM PREPARO NA FILA AO VIVO
             source: 'Manual',
             created_at: new Date().toISOString()
         };
@@ -375,7 +386,7 @@ async function renderSalesList() {
                 <div>
                     <strong style="color:#F1F5F9; font-size:13px; display:block;">👤 ${escapeHtml(s.client_name || s.customer_name || s.customerName || 'Cliente Balcão')}</strong>
                     <span style="font-size:11px; color:#94A3B8;">
-                        ${new Date(s.created_at || s.createdAt).toLocaleDateString('pt-BR')} • ${s.items?.length || 0} item(ns)
+                        ${new Date(s.created_at || s.createdAt).toLocaleDateString('pt-BR')} • ${s.payment_method || 'Pix'} • ${s.items?.length || 0} item(ns)
                     </span>
                 </div>
                 <strong style="color:#10B981; font-size:15px;">R$ ${Number(s.total || 0).toFixed(2)}</strong>
