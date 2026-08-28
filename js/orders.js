@@ -7,15 +7,30 @@ function escapeHtml(text) {
 }
 
 const OrdersManager = {
-    knownOrdersCount: 0,
+    knownOrderIds: new Set(),
+    isFirstLoad: true,
     timerInterval: null,
     realtimeChannel: null,
     allOrders: [],
+    audioCtx: null,
+
+    // Desbloqueia a permissão de áudio do navegador após o primeiro clique do usuário
+    unlockAudio() {
+        if (!this.audioCtx) {
+            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (this.audioCtx.state === 'suspended') {
+            this.audioCtx.resume();
+        }
+    },
 
     // Emite som de campainha de novo pedido
     playAlertSound() {
         try {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            this.unlockAudio();
+            const ctx = this.audioCtx;
+            if (!ctx) return;
+
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
 
@@ -23,16 +38,16 @@ const OrdersManager = {
             osc.frequency.setValueAtTime(587.33, ctx.currentTime);
             osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15);
 
-            gain.gain.setValueAtTime(0.3, ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
+            gain.gain.setValueAtTime(0.4, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.8);
 
             osc.connect(gain);
             gain.connect(ctx.destination);
 
             osc.start();
-            osc.stop(ctx.currentTime + 0.6);
+            osc.stop(ctx.currentTime + 0.8);
         } catch (e) {
-            console.log('Alerta sonoro bloqueado pela interação do navegador.');
+            console.log('Alerta sonoro aguardando primeira interação do usuário.');
         }
     },
 
@@ -73,7 +88,6 @@ const OrdersManager = {
 
             if (error || !orders || orders.length === 0) {
                 container.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:30px; font-size:13px;">Nenhum pedido ao vivo no momento.</div>';
-                this.knownOrdersCount = 0;
                 this.allOrders = [];
                 this.stopLiveTimers();
                 return;
@@ -81,11 +95,35 @@ const OrdersManager = {
 
             this.allOrders = orders;
 
-            if (this.knownOrdersCount > 0 && orders.length > this.knownOrdersCount) {
+            // Detecta se há pedidos realmente NOVOS usando IDs individuais
+            const newOrdersDetected = [];
+
+            orders.forEach(o => {
+                const idStr = String(o.id);
+                if (!this.knownOrderIds.has(idStr)) {
+                    if (!this.isFirstLoad) {
+                        newOrdersDetected.push(o);
+                    }
+                    this.knownOrderIds.add(idStr);
+                }
+            });
+
+            if (this.isFirstLoad) {
+                this.isFirstLoad = false;
+            } else if (newOrdersDetected.length > 0) {
                 this.playAlertSound();
-                if (typeof showToast === 'function') showToast('🔔 NOVO PEDIDO RECEBIDO!', 'success');
+                const newestOrder = newOrdersDetected[0];
+                const clientName = newestOrder.client_name || newestOrder.customer_name || 'Cliente';
+                const totalVal = Number(newestOrder.total || 0).toFixed(2);
+
+                if (typeof showToast === 'function') {
+                    showToast(`🔔 NOVO PEDIDO RECEBIDO! (${clientName})`, 'success');
+                }
+
+                if (typeof sendNativeNotification === 'function') {
+                    sendNativeNotification('🛍️ NOVO PEDIDO RECEBIDO!', `Pedido de ${clientName} - R$ ${totalVal}`);
+                }
             }
-            this.knownOrdersCount = orders.length;
 
             container.innerHTML = orders.map(o => this.renderOrderCard(o)).join('');
             this.startLiveTimers();
@@ -128,7 +166,7 @@ const OrdersManager = {
                             <span style="font-size:10px; background:#1E293B; color:#F59E0B; padding:2px 6px; border-radius:10px; font-weight:bold;">👑 ${clientOrdersCount}º pedido</span>
                         </div>
                         <div style="font-size:11px; color:#94A3B8; margin-top:2px;">⏰ ${dateFormatted} • ${o.order_type === 'delivery' ? '🛵 Entrega' : '🏪 Retirada'}</div>
-                        <div style="font-size:11px; color:#10B981; margin-top:2px; font-weight:600;">💳 ${escapeHtml(o.reference || 'Pagamento na entrega')}</div>
+                        <div style="font-size:11px; color:#10B981; margin-top:2px; font-weight:600;">💳 ${escapeHtml(o.payment_method || o.reference || 'Pagamento na entrega')}</div>
                     </div>
 
                     <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
@@ -184,7 +222,7 @@ const OrdersManager = {
         const safePhone = escapeHtml(o.phone || '');
         const safeAddress = escapeHtml(o.address || 'A combinar');
         const safeNumber = escapeHtml(o.number || 'S/N');
-        const safeReference = escapeHtml(o.reference || 'Não informada');
+        const safeReference = escapeHtml(o.payment_method || o.reference || 'Não informada');
 
         const bodyHtml = `
             <div style="background:#0F172A; padding:12px; border-radius:8px; margin-bottom:14px; border:1px solid #1E293B;">
@@ -381,7 +419,7 @@ const OrdersManager = {
                     <div class="info"><strong>CLIENTE:</strong> ${escapeHtml(o.client_name || 'Não informado')}</div>
                     <div class="info"><strong>TEL:</strong> ${escapeHtml(o.phone || 'S/N')}</div>
                     ${o.order_type === 'delivery' ? `<div class="info"><strong>ENDEREÇO:</strong> ${escapeHtml(o.address || '')}, Nº ${escapeHtml(o.number || 'S/N')}</div>` : ''}
-                    <div class="info"><strong>PAGAMENTO:</strong> ${escapeHtml(o.reference || 'Não informado')}</div>
+                    <div class="info"><strong>PAGAMENTO:</strong> ${escapeHtml(o.payment_method || o.reference || 'Não informado')}</div>
 
                     <div class="line"></div>
                     <div style="font-weight:bold; font-size:12px; margin-bottom:6px;">ITENS DO PEDIDO:</div>
@@ -449,6 +487,10 @@ const OrdersManager = {
         }
     }
 };
+
+// Escuta cliques do usuário para destravar áudio do navegador
+document.addEventListener('click', () => OrdersManager.unlockAudio(), { once: true });
+document.addEventListener('touchstart', () => OrdersManager.unlockAudio(), { once: true });
 
 // Gerenciamento de ciclo de vida e economia de bateria/CPU
 document.addEventListener('visibilitychange', () => {
