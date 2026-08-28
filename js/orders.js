@@ -504,3 +504,21 @@ document.addEventListener('visibilitychange', () => {
 document.addEventListener('DOMContentLoaded', () => {
     OrdersManager.initRealtime();
 });
+
+// Verifica se a URL contém um parâmetro '?orderId=XYZ' e abre os detalhes do pedido
+document.addEventListener('DOMContentLoaded', () => {
+    OrdersManager.initRealtime();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetOrderId = urlParams.get('orderId');
+
+    if (targetOrderId) {
+        // Aguarda a busca dos pedidos terminar para abrir o modal
+        const checkExist = setInterval(() => {
+            if (OrdersManager.allOrders && OrdersManager.allOrders.length > 0) {
+                OrdersManager.openOrderDetails(targetOrderId);
+                clearInterval(checkExist);
+            }
+        }, 300);
+    }
+});
