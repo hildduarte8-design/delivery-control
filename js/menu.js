@@ -1,4 +1,4 @@
-// js/menu.js - Lógica Completa do Cardápio Digital com Suporte a Pagamentos, Troco, Pix e Impressão de Comprovante
+// js/menu.js - Lógica Completa do Cardápio Digital com Suporte a Pagamentos, Troco, Pix, Opcionais e Realtime
 
 const MenuApp = {
     orderType: 'delivery',
@@ -80,11 +80,22 @@ const MenuApp = {
                 const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
                 const prevQty = this.products[p.id]?.qty || 0;
 
+                // Processa opcionais do prato
+                let complements = [];
+                if (Array.isArray(p.complements)) complements = p.complements;
+                else if (typeof p.complements === 'string') {
+                    try { complements = JSON.parse(p.complements); } catch (e) {}
+                }
+
                 this.products[p.id] = { 
                     name: p.name, 
                     price: finalPrice, 
+                    originalPrice: originalPrice,
+                    discountPct: discount,
                     isCrossSell: p.is_cross_sell,
                     category: p.category || 'Geral',
+                    complements: complements,
+                    selectedComplements: this.products[p.id]?.selectedComplements || [],
                     qty: prevQty 
                 };
             });
@@ -138,7 +149,7 @@ const MenuApp = {
 
         let html = '';
         for (const [catName, products] of Object.entries(grouped)) {
-            html += `<div class="section-title" style="margin-top:16px;">📌 ${catName}</div>`;
+            html += `<div style="font-size:14px; font-weight:800; color:#F59E0B; margin:18px 0 10px 0; text-transform:uppercase; letter-spacing:0.5px;">📌 ${catName}</div>`;
             
             products.forEach(p => {
                 const discount = Number(p.discount_pct || 0);
@@ -146,38 +157,59 @@ const MenuApp = {
                 const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
                 const qty = this.products[p.id]?.qty || 0;
 
-                let priceHtml = `<div class="product-price">R$ ${finalPrice.toFixed(2)}</div>`;
+                // Lógica visual dos preços (De R$ XX por R$ YY em verde)
+                let priceHtml = `<span class="price-normal">R$ ${finalPrice.toFixed(2).replace('.', ',')}</span>`;
                 if (discount > 0) {
                     priceHtml = `
-                        <div class="price-tag-container">
-                            <div class="product-price">R$ ${finalPrice.toFixed(2)}</div>
-                            <div class="old-price">R$ ${originalPrice.toFixed(2)}</div>
-                            <div class="discount-badge">${discount}% OFF</div>
+                        <span style="font-size:11px; color:#94A3B8;">De </span>
+                        <span class="price-old">R$ ${originalPrice.toFixed(2).replace('.', ',')}</span>
+                        <span style="font-size:11px; color:#94A3B8;"> por </span>
+                        <span class="price-discount">R$ ${finalPrice.toFixed(2).replace('.', ',')}</span>
+                    `;
+                }
+
+                // Imagem com Badge de Porcentagem estilo Alabama
+                const imgHtml = p.image_url ? `
+                    <div class="menu-product-img-box" onclick="MenuApp.openLightbox('${p.image_url}', '${p.name.replace(/'/g, "\\'")}')">
+                        <img src="${p.image_url}" class="menu-product-img" alt="${p.name}">
+                        ${discount > 0 ? '<div class="promo-badge">%</div>' : ''}
+                    </div>
+                ` : `
+                    <div class="menu-product-img-box" style="background:#0F172A; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:32px;">
+                        🍽️
+                    </div>
+                `;
+
+                // Botão de Opcionais ou Controles de Qtd
+                const hasComplements = Array.isArray(p.complements) && p.complements.length > 0;
+                let actionBtnHtml = '';
+
+                if (hasComplements) {
+                    actionBtnHtml = `
+                        <button onclick="MenuApp.openComplementsModal('${p.id}')" style="background:#3B82F6; color:#fff; border:none; padding:6px 10px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">
+                            + Opções ${qty > 0 ? `(${qty})` : ''}
+                        </button>
+                    `;
+                } else {
+                    actionBtnHtml = `
+                        <div style="display:flex; align-items:center; gap:6px; background:#0F172A; padding:4px; border-radius:8px; border:1px solid #334155;">
+                            <button onclick="MenuApp.updateQty('${p.id}', -1)" style="width:26px; height:26px; background:#1E293B; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">-</button>
+                            <span id="qty-${p.id}" style="font-size:13px; font-weight:bold; color:#F1F5F9; min-width:18px; text-align:center;">${qty}</span>
+                            <button onclick="MenuApp.updateQty('${p.id}', 1)" style="width:26px; height:26px; background:#FF6B35; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">+</button>
                         </div>
                     `;
                 }
 
-                const imgHtml = p.image_url ? `
-                    <div class="img-zoom-wrapper" onclick="MenuApp.openLightbox('${p.image_url}', '${p.name.replace(/'/g, "\\'")}')" title="Toque para ampliar">
-                        <img src="${p.image_url}" style="width:60px; height:60px; border-radius:10px; object-fit:cover;">
-                        <span class="img-zoom-badge">🔍</span>
-                    </div>
-                ` : '<span style="font-size:32px;">🍽️</span>';
-
                 html += `
-                    <div class="product-card">
-                        <div style="display:flex; align-items:center; gap:12px; flex:1;">
-                            ${imgHtml}
-                            <div class="product-info">
-                                <h4>${p.name}</h4>
-                                <p>${p.description || ''}</p>
-                                ${priceHtml}
-                            </div>
+                    <div class="menu-product-card">
+                        ${imgHtml}
+                        <div class="menu-product-details">
+                            <div class="menu-product-title">${p.name}</div>
+                            <div class="menu-product-desc">${p.description || 'Sem descrição.'}</div>
+                            <div class="menu-product-price">${priceHtml}</div>
                         </div>
-                        <div class="qty-controls">
-                            <button class="qty-btn" onclick="MenuApp.updateQty('${p.id}', -1)">-</button>
-                            <span class="qty-value" id="qty-${p.id}">${qty}</span>
-                            <button class="qty-btn" onclick="MenuApp.updateQty('${p.id}', 1)">+</button>
+                        <div style="margin-left:8px;">
+                            ${actionBtnHtml}
                         </div>
                     </div>
                 `;
@@ -187,17 +219,97 @@ const MenuApp = {
         container.innerHTML = html;
     },
 
+    openComplementsModal(productId) {
+        const p = this.products[productId];
+        if (!p || !Array.isArray(p.complements)) return;
+
+        let compsHtml = p.complements.map((c, idx) => `
+            <label style="display:flex; justify-content:space-between; align-items:center; padding:10px; background:#0F172A; border-radius:8px; border:1px solid #334155; margin-bottom:8px; cursor:pointer;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" class="comp-checkbox" data-name="${c.name}" data-price="${c.price}" style="width:18px; height:18px;">
+                    <span style="font-size:13px; color:#F1F5F9;">${c.name}</span>
+                </div>
+                <strong style="color:#10B981; font-size:13px;">+ R$ ${Number(c.price).toFixed(2)}</strong>
+            </label>
+        `).join('');
+
+        const modalBody = `
+            <div style="margin-bottom:12px;">
+                <h3 style="color:#F1F5F9; font-size:16px; margin-bottom:4px;">${p.name}</h3>
+                <p style="color:#94A3B8; font-size:12px;">Escolha os adicionais desejados:</p>
+            </div>
+            <div id="modal_complements_list">${compsHtml}</div>
+            <button onclick="MenuApp.saveComplementsSelection('${productId}')" style="background:#FF6B35; color:#fff; width:100%; padding:12px; border:none; border-radius:8px; font-weight:bold; margin-top:10px; cursor:pointer;">
+                🛒 Adicionar ao Pedido
+            </button>
+        `;
+
+        const overlay = document.getElementById('checkout-modal');
+        if (overlay) {
+            let compContainer = document.getElementById('complements-modal-box');
+            if (!compContainer) {
+                compContainer = document.createElement('div');
+                compContainer.id = 'complements-modal-box';
+                compContainer.className = 'modal-overlay';
+                compContainer.style.zIndex = '99999';
+                document.body.appendChild(compContainer);
+            }
+            compContainer.innerHTML = `
+                <div class="modal-body" style="background:#1E293B; border:1px solid #334155; padding:16px; border-radius:12px; max-width:380px; width:100%;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                        <strong style="color:#FF6B35;">Opcionais do Prato</strong>
+                        <button onclick="document.getElementById('complements-modal-box').style.display='none'" style="background:none; border:none; color:#94A3B8; font-size:18px; cursor:pointer;">✕</button>
+                    </div>
+                    ${modalBody}
+                </div>
+            `;
+            compContainer.style.display = 'flex';
+        }
+    },
+
+    saveComplementsSelection(productId) {
+        const checkboxes = document.querySelectorAll('#modal_complements_list .comp-checkbox:checked');
+        const selected = [];
+        let extraTotal = 0;
+
+        checkboxes.forEach(cb => {
+            const name = cb.dataset.name;
+            const price = parseFloat(cb.dataset.price) || 0;
+            selected.push({ name, price });
+            extraTotal += price;
+        });
+
+        if (this.products[productId]) {
+            this.products[productId].qty += 1;
+            this.products[productId].selectedComplements = selected;
+        }
+
+        const box = document.getElementById('complements-modal-box');
+        if (box) box.style.display = 'none';
+
+        this.calculateTotals();
+        this.renderProductsList();
+    },
+
     openLightbox(imageUrl, title) {
         if (!imageUrl) return;
-        const modal = document.getElementById('image-lightbox');
+        let modal = document.getElementById('image-lightbox');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'image-lightbox';
+            modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:999999; display:none; flex-direction:column; align-items:center; justify-content:center; padding:20px;';
+            modal.innerHTML = `
+                <button onclick="MenuApp.closeLightbox()" style="position:absolute; top:20px; right:20px; background:none; border:none; color:#fff; font-size:30px; cursor:pointer;">✕</button>
+                <img id="lightbox-img" style="max-width:90%; max-height:80vh; border-radius:12px; object-fit:contain;">
+                <div id="lightbox-caption" style="color:#fff; font-size:16px; font-weight:bold; margin-top:12px;"></div>
+            `;
+            document.body.appendChild(modal);
+        }
         const img = document.getElementById('lightbox-img');
         const caption = document.getElementById('lightbox-caption');
-
-        if (modal && img) {
-            img.src = imageUrl;
-            if (caption) caption.textContent = title || '';
-            modal.style.display = 'flex';
-        }
+        if (img) img.src = imageUrl;
+        if (caption) caption.textContent = title || '';
+        modal.style.display = 'flex';
     },
 
     closeLightbox() {
@@ -232,7 +344,13 @@ const MenuApp = {
     },
 
     getSubtotal() {
-        return Object.values(this.products).reduce((acc, p) => acc + (p.price * p.qty), 0);
+        return Object.values(this.products).reduce((acc, p) => {
+            let itemPrice = p.price;
+            if (Array.isArray(p.selectedComplements)) {
+                itemPrice += p.selectedComplements.reduce((cAcc, c) => cAcc + Number(c.price || 0), 0);
+            }
+            return acc + (itemPrice * p.qty);
+        }, 0);
     },
 
     calculateTotals() {
@@ -301,13 +419,11 @@ const MenuApp = {
         if (this.getSubtotal() === 0) return;
         this.renderCrossSellOffers();
 
-        // Carrega a Chave Pix no campo do modal
         const localSettings = JSON.parse(localStorage.getItem('dly_settings') || '{}');
         const pixVal = this.storeData.pix_key || localSettings.pixKey || '';
         const pixInput = document.getElementById('store-pix-key');
         if (pixInput) pixInput.value = pixVal || 'Consulte a chave no WhatsApp';
 
-        // Dispara a exibição condicional inicial (Dinheiro/Pix)
         const paymentEl = document.getElementById('cli-payment');
         if (paymentEl) this.toggleChangeInput(paymentEl.value);
 
@@ -447,8 +563,19 @@ const MenuApp = {
         Object.keys(this.products).forEach(id => {
             const p = this.products[id];
             if (p.qty > 0) {
-                orderItems.push({ id, name: p.name, qty: p.qty, unit_price: p.price, total: p.price * p.qty });
-                itemsFormatted += `• *${p.qty}x ${p.name}* — R$ ${(p.price * p.qty).toFixed(2)}\n`;
+                let itemPrice = p.price;
+                let compsTxt = '';
+                if (Array.isArray(p.selectedComplements) && p.selectedComplements.length > 0) {
+                    const compsListTxt = p.selectedComplements.map(c => {
+                        itemPrice += Number(c.price || 0);
+                        return c.name;
+                    }).join(', ');
+                    compsTxt = ` (+ Opcionais: ${compsListTxt})`;
+                }
+
+                const itemTotal = itemPrice * p.qty;
+                orderItems.push({ id, name: p.name + compsTxt, qty: p.qty, unit_price: itemPrice, total: itemTotal });
+                itemsFormatted += `• *${p.qty}x ${p.name}*${compsTxt} — R$ ${itemTotal.toFixed(2)}\n`;
             }
         });
 
@@ -462,21 +589,28 @@ const MenuApp = {
 
         const fullReference = reference ? `${reference} | PGTO: ${paymentFormatted}` : `PGTO: ${paymentFormatted}`;
 
+        // CORREÇÃO CRÍTICA DO BUG DE NOTIFICAÇÃO E PAINEL AO VIVO:
+        // Gravamos explicitamente payment_method e forçamos status 'preparing' para entrar direto no Realtime
         try {
             if (typeof dbClient !== 'undefined') {
-                await dbClient.from('orders').insert([{
+                const { error: dbError } = await dbClient.from('orders').insert([{
                     client_name: name,
                     phone: phone,
                     order_type: this.orderType,
                     address: address,
                     number: number,
                     reference: fullReference,
+                    payment_method: payment,
                     items: orderItems,
                     subtotal: subtotal,
                     delivery_fee: freight,
                     total: totalFinal,
-                    status: 'pending'
+                    status: 'preparing'
                 }]);
+
+                if (dbError) {
+                    console.error('Aviso ao salvar pedido no Supabase:', dbError.message);
+                }
             }
         } catch (e) {
             console.error('Erro ao salvar pedido no banco:', e);
