@@ -1,4 +1,4 @@
-// js/orders.js - Gestão Completa de Pedidos ao Vivo com Supabase Realtime, Detalhes e Chat WhatsApp
+// js/orders.js - Gestão Completa de Pedidos ao Vivo com Supabase Realtime, Paginação por Data e Chat WhatsApp
 
 function escapeHtml(text) {
     const div = document.createElement('div');
@@ -13,6 +13,16 @@ const OrdersManager = {
     realtimeChannel: null,
     allOrders: [],
     audioCtx: null,
+    selectedDate: null, // Armazena a data selecionada (formato YYYY-MM-DD)
+
+    // Helper para converter data para o fuso local (YYYY-MM-DD) sem distorção de fuso horário
+    getLocalDateStr(dateInput) {
+        const d = new Date(dateInput);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    },
 
     // Desbloqueia a permissão de áudio do navegador após o primeiro clique do usuário
     unlockAudio() {
@@ -51,7 +61,7 @@ const OrdersManager = {
         }
     },
 
-    // Inicializa a escuta em Tempo Real (Supabase Realtime) sem duplicar canais
+    // Inicializa a escuta em Tempo Real (Supabase Realtime)
     initRealtime() {
         if (typeof dbClient === 'undefined' || this.realtimeChannel) return;
 
@@ -87,7 +97,7 @@ const OrdersManager = {
                 .order('created_at', { ascending: false });
 
             if (error || !orders || orders.length === 0) {
-                container.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:30px; font-size:13px;">Nenhum pedido ao vivo no momento.</div>';
+                container.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:30px; font-size:13px;">Nenhum pedido registrado no momento.</div>';
                 this.allOrders = [];
                 this.stopLiveTimers();
                 return;
@@ -97,7 +107,6 @@ const OrdersManager = {
 
             // Detecta se há pedidos realmente NOVOS usando IDs individuais
             const newOrdersDetected = [];
-
             orders.forEach(o => {
                 const idStr = String(o.id);
                 if (!this.knownOrderIds.has(idStr)) {
@@ -125,13 +134,92 @@ const OrdersManager = {
                 }
             }
 
-            container.innerHTML = orders.map(o => this.renderOrderCard(o)).join('');
-            this.startLiveTimers();
+            // Coleta todas as datas disponíveis nos pedidos
+            const uniqueDates = [...new Set(orders.map(o => this.getLocalDateStr(o.created_at)))];
+            
+            // Renderiza os botões de paginação por dia e depois os pedidos do dia selecionado
+            this.renderDatePaginationBar(uniqueDates);
+            this.renderFilteredOrders();
 
         } catch (e) {
             console.error('Erro ao carregar pedidos:', e);
             container.innerHTML = '<div style="color:#EF4444; text-align:center; padding:20px;">Erro ao carregar pedidos.</div>';
         }
+    },
+
+    // RENDERIZA A BARRA SUPERIOR DE DIAS (PAGINAÇÃO)
+    renderDatePaginationBar(groupedDates) {
+        const container = document.getElementById('live-orders-container');
+        if (!container) return;
+
+        let bar = document.getElementById('orders-date-pagination-bar');
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'orders-date-pagination-bar';
+            bar.style.cssText = 'display:flex; gap:8px; overflow-x:auto; padding:4px 0 14px 0; margin-bottom:12px; scrollbar-width:none;';
+            container.parentNode.insertBefore(bar, container);
+        }
+
+        const todayStr = this.getLocalDateStr(new Date());
+        if (!groupedDates.includes(todayStr)) {
+            groupedDates.unshift(todayStr);
+        }
+
+        // Ordena do dia mais recente para o mais antigo
+        groupedDates.sort((a, b) => new Date(b) - new Date(a));
+
+        if (!this.selectedDate || !groupedDates.includes(this.selectedDate)) {
+            this.selectedDate = todayStr;
+        }
+
+        bar.innerHTML = groupedDates.map(dateStr => {
+            const [y, m, d] = dateStr.split('-');
+            const isToday = dateStr === todayStr;
+            const displayLabel = isToday ? `Hoje (${d}/${m})` : `${d}/${m}/${y}`;
+            
+            // Conta quantos pedidos existem nesse dia
+            const countForDay = this.allOrders.filter(o => this.getLocalDateStr(o.created_at) === dateStr).length;
+
+            const isActive = this.selectedDate === dateStr;
+            const activeStyle = isActive 
+                ? 'background:#FF6B35; color:#fff; border-color:#FF6B35; box-shadow: 0 2px 8px rgba(255,107,53,0.3);' 
+                : 'background:#1E293B; color:#94A3B8; border-color:#334155;';
+
+            return `
+                <button onclick="OrdersManager.selectDatePage('${dateStr}')" style="${activeStyle} border:1px solid; padding:8px 16px; border-radius:20px; font-size:12px; font-weight:700; white-space:nowrap; cursor:pointer; transition:all 0.2s;">
+                    📅 ${displayLabel} <span style="font-size:10px; background:rgba(255,255,255,0.2); padding:2px 6px; border-radius:10px; margin-left:4px;">${countForDay}</span>
+                </button>
+            `;
+        }).join('');
+    },
+
+    selectDatePage(dateStr) {
+        this.selectedDate = dateStr;
+        
+        // Atualiza estilo dos botões
+        const groupedDates = [...new Set(this.allOrders.map(o => this.getLocalDateStr(o.created_at)))];
+        this.renderDatePaginationBar(groupedDates);
+        
+        // Renderiza lista filtrada
+        this.renderFilteredOrders();
+    },
+
+    renderFilteredOrders() {
+        const container = document.getElementById('live-orders-container');
+        if (!container) return;
+
+        const filtered = this.allOrders.filter(o => this.getLocalDateStr(o.created_at) === this.selectedDate);
+
+        if (filtered.length === 0) {
+            const [y, m, d] = (this.selectedDate || '').split('-');
+            const formatted = d ? `${d}/${m}/${y}` : 'esta data';
+            container.innerHTML = `<div style="color:#94A3B8; text-align:center; padding:40px 20px; background:#1E293B; border-radius:12px; border:1px solid #334155;">📭 Nenhum pedido registrado em <strong>${formatted}</strong>.</div>`;
+            this.stopLiveTimers();
+            return;
+        }
+
+        container.innerHTML = filtered.map(o => this.renderOrderCard(o)).join('');
+        this.startLiveTimers();
     },
 
     renderOrderCard(o) {
@@ -492,7 +580,7 @@ const OrdersManager = {
 document.addEventListener('click', () => OrdersManager.unlockAudio(), { once: true });
 document.addEventListener('touchstart', () => OrdersManager.unlockAudio(), { once: true });
 
-// Gerenciamento de ciclo de vida e economia de bateria/CPU
+// Gerenciamento de ciclo de vida
 document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
         OrdersManager.stopLiveTimers();
@@ -501,11 +589,7 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 
-document.addEventListener('DOMContentLoaded', () => {
-    OrdersManager.initRealtime();
-});
-
-// Verifica se a URL contém um parâmetro '?orderId=XYZ' e abre os detalhes do pedido
+// Abertura automática ao clicar no link do WhatsApp com parâmetro ?orderId=XYZ
 document.addEventListener('DOMContentLoaded', () => {
     OrdersManager.initRealtime();
 
@@ -513,7 +597,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const targetOrderId = urlParams.get('orderId');
 
     if (targetOrderId) {
-        // Aguarda a busca dos pedidos terminar para abrir o modal
         const checkExist = setInterval(() => {
             if (OrdersManager.allOrders && OrdersManager.allOrders.length > 0) {
                 OrdersManager.openOrderDetails(targetOrderId);
