@@ -1,8 +1,8 @@
-// js/orders.js - Gestão Completa de Pedidos ao Vivo com Supabase Realtime, Seletor de Data por Setas/Calendário e Chat WhatsApp
+// js/orders.js - Gestão Completa de Pedidos ao Vivo com Supabase Realtime, Seletor de Data e Chat WhatsApp
 
 function escapeHtml(text) {
     const div = document.createElement('div');
-    div.appendChild(document.createTextNode(String(text || '')));
+    div.appendChild(document.createTextNode(String(text ?? '')));
     return div.innerHTML;
 }
 
@@ -13,28 +13,52 @@ const OrdersManager = {
     realtimeChannel: null,
     allOrders: [],
     audioCtx: null,
-    selectedDate: null, // Armazena a data selecionada (formato YYYY-MM-DD)
+    selectedDate: null,
 
-    // Helper para converter data para o fuso local (YYYY-MM-DD) sem distorção de fuso horário
+    // Obtém o nome dinâmico da loja ou aplica o nome padrão
+    getStoreName() {
+        try {
+            const localSettings = JSON.parse(localStorage.getItem('dly_settings') || '{}');
+            return localSettings.storeName || 'Pastel e Batata Imperial';
+        } catch (e) {
+            return 'Pastel e Batata Imperial';
+        }
+    },
+
+    // Converter data para o fuso local (BRT - UTC-3) sem distorções no Safari / iOS
     getLocalDateStr(dateInput) {
-        const d = new Date(dateInput);
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
+        if (!dateInput) return '';
+        const iso = String(dateInput)
+            .replace(' ', 'T')
+            .replace(/([+-]\d{2}):?(\d{2})$/, '') + 'Z';
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return '';
+        
+        const brt = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+        const year = brt.getUTCFullYear();
+        const month = String(brt.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(brt.getUTCDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
     },
 
-    // Desbloqueia a permissão de áudio do navegador após o primeiro clique do usuário
+    // Desbloqueia permissão de áudio com tratamento de Promise seguro
     unlockAudio() {
-        if (!this.audioCtx) {
-            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        if (this.audioCtx.state === 'suspended') {
-            this.audioCtx.resume();
+        try {
+            if (!this.audioCtx) {
+                this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (this.audioCtx.state === 'suspended') {
+                this.audioCtx.resume().catch(err => {
+                    console.warn('AudioContext.resume() falhou ou aguarda interação:', err);
+                });
+            }
+        } catch (e) {
+            console.warn('Web Audio API indisponível:', e);
+            this.audioCtx = null;
         }
     },
 
-    // Emite som de campainha de novo pedido
+    // Emite som de campainha ao receber novo pedido
     playAlertSound() {
         try {
             this.unlockAudio();
@@ -61,7 +85,7 @@ const OrdersManager = {
         }
     },
 
-    // Inicializa a escuta em Tempo Real (Supabase Realtime)
+    // Inicializa a escuta em Tempo Real (Supabase Realtime) - Executado uma única vez
     initRealtime() {
         if (typeof dbClient === 'undefined' || this.realtimeChannel) return;
 
@@ -86,8 +110,6 @@ const OrdersManager = {
         const container = document.getElementById('live-orders-container');
         if (!container) return;
 
-        this.initRealtime();
-
         try {
             if (typeof dbClient === 'undefined') return;
 
@@ -106,7 +128,7 @@ const OrdersManager = {
 
             this.allOrders = orders;
 
-            // Detecta se há pedidos realmente NOVOS usando IDs individuais
+            // Detecta pedidos novos usando IDs individuais
             const newOrdersDetected = [];
             orders.forEach(o => {
                 const idStr = String(o.id);
@@ -124,7 +146,7 @@ const OrdersManager = {
                 this.playAlertSound();
                 const newestOrder = newOrdersDetected[0];
                 const clientName = newestOrder.client_name || newestOrder.customer_name || 'Cliente';
-                const totalVal = Number(newestOrder.total || 0).toFixed(2);
+                const totalVal = Number(newestOrder.total || 0).toFixed(2).replace('.', ',');
 
                 if (typeof showToast === 'function') {
                     showToast(`🔔 NOVO PEDIDO RECEBIDO! (${clientName})`, 'success');
@@ -135,10 +157,8 @@ const OrdersManager = {
                 }
             }
 
-            // Coleta todas as datas disponíveis nos pedidos
             const uniqueDates = [...new Set(orders.map(o => this.getLocalDateStr(o.created_at)))];
             
-            // Renderiza o seletor compacto de datas e os pedidos filtrados
             this.renderDatePaginationBar(uniqueDates);
             this.renderFilteredOrders();
 
@@ -148,7 +168,6 @@ const OrdersManager = {
         }
     },
 
-    // RENDERIZA O SELETOR DE DATA COMPACTO (SETAS + CALENDÁRIO)
     renderDatePaginationBar(groupedDates) {
         const container = document.getElementById('live-orders-container');
         if (!container) return;
@@ -169,19 +188,18 @@ const OrdersManager = {
             bar.style.display = 'flex';
         }
 
-        const todayStr = this.getLocalDateStr(new Date());
+        const todayStr = this.getLocalDateStr(new Date().toISOString());
         if (!this.selectedDate) this.selectedDate = todayStr;
 
-        // Cálculo de dia anterior e próximo dia
         const currentDateObj = new Date(this.selectedDate + 'T00:00:00');
         
         const prevDateObj = new Date(currentDateObj);
         prevDateObj.setDate(prevDateObj.getDate() - 1);
-        const prevDateStr = this.getLocalDateStr(prevDateObj);
+        const prevDateStr = this.getLocalDateStr(prevDateObj.toISOString());
 
         const nextDateObj = new Date(currentDateObj);
         nextDateObj.setDate(nextDateObj.getDate() + 1);
-        const nextDateStr = this.getLocalDateStr(nextDateObj);
+        const nextDateStr = this.getLocalDateStr(nextDateObj.toISOString());
 
         const isToday = this.selectedDate === todayStr;
         const [y, m, d] = this.selectedDate.split('-');
@@ -190,24 +208,20 @@ const OrdersManager = {
         const countForDay = this.allOrders.filter(o => this.getLocalDateStr(o.created_at) === this.selectedDate).length;
 
         bar.innerHTML = `
-            <!-- Botão Dia Anterior -->
-            <button onclick="OrdersManager.selectDatePage('${prevDateStr}')" style="background:#0F172A; color:#F1F5F9; border:1px solid #334155; padding:8px 14px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px;">
+            <button onclick="OrdersManager.selectDatePage('${prevDateStr}')" style="background:#0F172A; color:#F1F5F9; border:1px solid #334155; padding:8px 14px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px; min-height:44px; touch-action:manipulation;">
                 ◄
             </button>
 
-            <!-- Centro: Texto com Data + Input de Calendário Oculto sobre ele -->
             <div style="position:relative; text-align:center;">
                 <div style="font-size:13px; font-weight:800; color:#FF6B35; display:flex; align-items:center; gap:6px; cursor:pointer;">
                     📅 ${displayLabel}
                     <span style="font-size:10px; background:#334155; color:#F1F5F9; padding:2px 6px; border-radius:10px;">${countForDay} ${countForDay === 1 ? 'pedido' : 'pedidos'}</span>
                 </div>
-                <!-- Clique no texto abre o calendário nativo do celular/navegador -->
                 <input type="date" value="${this.selectedDate}" onchange="OrdersManager.selectDatePage(this.value)" 
                     style="position:absolute; inset:0; opacity:0; width:100%; height:100%; cursor:pointer;">
             </div>
 
-            <!-- Botão Próximo Dia -->
-            <button onclick="OrdersManager.selectDatePage('${nextDateStr}')" ${isToday ? 'disabled style="opacity:0.3; background:#0F172A; color:#F1F5F9; border:1px solid #334155; padding:8px 14px; border-radius:8px; font-size:14px;"' : 'style="background:#0F172A; color:#F1F5F9; border:1px solid #334155; padding:8px 14px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px;"'}>
+            <button onclick="OrdersManager.selectDatePage('${nextDateStr}')" ${isToday ? 'disabled style="opacity:0.3; background:#0F172A; color:#F1F5F9; border:1px solid #334155; padding:8px 14px; border-radius:8px; font-size:14px; min-height:44px;"' : 'style="background:#0F172A; color:#F1F5F9; border:1px solid #334155; padding:8px 14px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px; min-height:44px; touch-action:manipulation;"'}>
                 ►
             </button>
         `;
@@ -217,11 +231,8 @@ const OrdersManager = {
         if (!dateStr) return;
         this.selectedDate = dateStr;
         
-        // Atualiza estilo do seletor
         const groupedDates = [...new Set(this.allOrders.map(o => this.getLocalDateStr(o.created_at)))];
         this.renderDatePaginationBar(groupedDates);
-        
-        // Renderiza lista filtrada
         this.renderFilteredOrders();
     },
 
@@ -255,7 +266,7 @@ const OrdersManager = {
             ? items.slice(0, 2).map(i => `${i.qty}x ${escapeHtml(i.name)}`).join(', ') + (items.length > 2 ? '...' : '')
             : 'Sem itens';
 
-        const clientOrdersCount = this.getClientOrdersCount(o.phone, o.client_name);
+        const clientOrdersCount = this.getClientOrdersCount(o.phone || o.customer_phone, o.client_name || o.customer_name);
 
         let statusBadge = '🟢 Novo';
         if (o.status === 'preparing') statusBadge = '👨‍🍳 Em Preparo';
@@ -263,8 +274,9 @@ const OrdersManager = {
         else if (o.status === 'cancelled') statusBadge = '❌ Cancelado';
 
         const safeOrderId = escapeHtml(o.id);
-        const safeClientName = escapeHtml(o.client_name || 'Cliente');
-        const safePhone = escapeHtml(o.phone || '');
+        const safeClientName = escapeHtml(o.client_name || o.customer_name || 'Cliente');
+        const safePhone = escapeHtml(o.phone || o.customer_phone || '');
+        const totalFormatted = Number(o.total || 0).toFixed(2).replace('.', ',');
 
         return `
             <div class="card" onclick="OrdersManager.openOrderDetails('${safeOrderId}')" style="margin-bottom:12px; padding:14px; border-left:4px solid ${o.status === 'pending' ? '#F59E0B' : o.status === 'preparing' ? '#3B82F6' : o.status === 'completed' ? '#10B981' : '#EF4444'}; cursor:pointer; transition: transform 0.1s;">
@@ -291,7 +303,7 @@ const OrdersManager = {
                 </div>
 
                 <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px dashed #334155; padding-top:8px;">
-                    <strong style="color:#FF6B35; font-size:16px;">Total: R$ ${Number(o.total || 0).toFixed(2)}</strong>
+                    <strong style="color:#FF6B35; font-size:16px;">Total: R$ ${totalFormatted}</strong>
                     <div style="display:flex; gap:6px;" onclick="event.stopPropagation();">
                         <button class="btn btn-sm btn-secondary" onclick="OrdersManager.printOrder('${safeOrderId}')" title="Imprimir Comanda">🖨️</button>
                         <button class="btn btn-sm" style="background:#25D366; color:#fff;" onclick="OrdersManager.openWhatsAppChat('${safePhone}', '${safeClientName}')" title="WhatsApp">💬 Chat</button>
@@ -311,27 +323,35 @@ const OrdersManager = {
         }
 
         const itemsDetailHtml = Array.isArray(items) && items.length > 0
-            ? items.map(i => `
-                <div style="padding:8px 0; border-bottom:1px solid #1E293B; display:flex; justify-content:space-between; align-items:flex-start;">
-                    <div>
-                        <div style="font-size:13px; font-weight:bold; color:#F1F5F9;">${i.qty}x ${escapeHtml(i.name)}</div>
-                        ${i.notes ? `<div style="font-size:11px; color:#F59E0B; margin-top:2px;">📌 Obs/Opcionais: ${escapeHtml(i.notes)}</div>` : ''}
-                        <div style="font-size:11px; color:#64748B;">Unitário: R$ ${Number(i.unit_price || i.price || 0).toFixed(2)}</div>
+            ? items.map(i => {
+                const uPrice = Number(i.unit_price || i.price || 0).toFixed(2).replace('.', ',');
+                const iTotal = Number(i.total || (i.qty * (i.unit_price || i.price || 0))).toFixed(2).replace('.', ',');
+                return `
+                    <div style="padding:8px 0; border-bottom:1px solid #1E293B; display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <div style="font-size:13px; font-weight:bold; color:#F1F5F9;">${i.qty}x ${escapeHtml(i.name)}</div>
+                            ${i.notes ? `<div style="font-size:11px; color:#F59E0B; margin-top:2px;">📌 Obs/Opcionais: ${escapeHtml(i.notes)}</div>` : ''}
+                            <div style="font-size:11px; color:#64748B;">Unitário: R$ ${uPrice}</div>
+                        </div>
+                        <div style="font-size:13px; font-weight:bold; color:#FF6B35;">R$ ${iTotal}</div>
                     </div>
-                    <div style="font-size:13px; font-weight:bold; color:#FF6B35;">R$ ${Number(i.total || (i.qty * (i.unit_price || i.price || 0))).toFixed(2)}</div>
-                </div>
-            `).join('')
+                `;
+            }).join('')
             : '<div style="color:#94A3B8; font-size:12px;">Nenhum item listado.</div>';
 
-        const clientOrdersCount = this.getClientOrdersCount(o.phone, o.client_name);
+        const clientOrdersCount = this.getClientOrdersCount(o.phone || o.customer_phone, o.client_name || o.customer_name);
         const dateFormatted = new Date(o.created_at).toLocaleString('pt-BR');
 
         const safeOrderId = escapeHtml(o.id);
-        const safeClientName = escapeHtml(o.client_name || 'Cliente');
-        const safePhone = escapeHtml(o.phone || '');
-        const safeAddress = escapeHtml(o.address || 'A combinar');
+        const safeClientName = escapeHtml(o.client_name || o.customer_name || 'Cliente');
+        const safePhone = escapeHtml(o.phone || o.customer_phone || '');
+        const safeAddress = escapeHtml(o.address || o.delivery_address || 'A combinar');
         const safeNumber = escapeHtml(o.number || 'S/N');
         const safeReference = escapeHtml(o.payment_method || o.reference || 'Não informada');
+
+        const subtotalFormatted = Number(o.subtotal || 0).toFixed(2).replace('.', ',');
+        const feeFormatted = Number(o.delivery_fee || 0).toFixed(2).replace('.', ',');
+        const totalFormatted = Number(o.total || 0).toFixed(2).replace('.', ',');
 
         const bodyHtml = `
             <div style="background:#0F172A; padding:12px; border-radius:8px; margin-bottom:14px; border:1px solid #1E293B;">
@@ -363,33 +383,33 @@ const OrdersManager = {
             <div style="background:#1E293B; padding:12px; border-radius:8px; margin-bottom:16px;">
                 <div style="display:flex; justify-content:space-between; font-size:12px; color:#94A3B8; margin-bottom:4px;">
                     <span>Subtotal dos Itens:</span>
-                    <span>R$ ${Number(o.subtotal || 0).toFixed(2)}</span>
+                    <span>R$ ${subtotalFormatted}</span>
                 </div>
                 <div style="display:flex; justify-content:space-between; font-size:12px; color:#94A3B8; margin-bottom:6px;">
                     <span>Taxa de Entrega (Frete):</span>
-                    <span>R$ ${Number(o.delivery_fee || 0).toFixed(2)}</span>
+                    <span>R$ ${feeFormatted}</span>
                 </div>
                 <div style="display:flex; justify-content:space-between; font-size:15px; font-weight:800; color:#10B981; border-top:1px dashed #334155; padding-top:6px;">
                     <span>TOTAL DO PEDIDO:</span>
-                    <span>R$ ${Number(o.total || 0).toFixed(2)}</span>
+                    <span>R$ ${totalFormatted}</span>
                 </div>
             </div>
 
             <div style="font-size:12px; font-weight:bold; color:#94A3B8; margin-bottom:8px;">⚡ Atualizar Status do Pedido:</div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px;">
-                <button class="btn btn-sm" style="background:#3B82F6; color:#fff; padding:10px;" onclick="OrdersManager.updateStatus('${safeOrderId}', 'preparing'); closeModal();">
+                <button class="btn btn-sm" style="background:#3B82F6; color:#fff; padding:10px; min-height:44px; touch-action:manipulation;" onclick="OrdersManager.updateStatus('${safeOrderId}', 'preparing'); closeModal();">
                     👨‍🍳 Colocar em Preparo
                 </button>
-                <button class="btn btn-sm btn-success" style="padding:10px;" onclick="OrdersManager.updateStatus('${safeOrderId}', 'completed'); closeModal();">
+                <button class="btn btn-sm btn-success" style="padding:10px; min-height:44px; touch-action:manipulation;" onclick="OrdersManager.updateStatus('${safeOrderId}', 'completed'); closeModal();">
                     ✅ Concluir Pedido
                 </button>
             </div>
 
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                <button class="btn btn-sm" style="background:#25D366; color:#fff; padding:10px;" onclick="OrdersManager.openWhatsAppChat('${safePhone}', '${safeClientName}')">
+                <button class="btn btn-sm" style="background:#25D366; color:#fff; padding:10px; min-height:44px; touch-action:manipulation;" onclick="OrdersManager.openWhatsAppChat('${safePhone}', '${safeClientName}')">
                     💬 Conversar no Whats
                 </button>
-                <button class="btn btn-sm btn-secondary" style="padding:10px;" onclick="OrdersManager.printOrder('${safeOrderId}')">
+                <button class="btn btn-sm btn-secondary" style="padding:10px; min-height:44px; touch-action:manipulation;" onclick="OrdersManager.printOrder('${safeOrderId}')">
                     🖨️ Imprimir Comanda
                 </button>
             </div>
@@ -402,11 +422,12 @@ const OrdersManager = {
 
     getClientOrdersCount(phone, clientName) {
         if (!this.allOrders || this.allOrders.length === 0) return 1;
-        const cleanPhone = phone ? phone.replace(/\D/g, '') : '';
+        const cleanPhone = phone ? String(phone).replace(/\D/g, '') : '';
 
         return this.allOrders.filter(ord => {
-            const ordPhone = ord.phone ? ord.phone.replace(/\D/g, '') : '';
-            return (cleanPhone && ordPhone === cleanPhone) || (clientName && ord.client_name === clientName);
+            const ordPhone = (ord.phone || ord.customer_phone) ? String(ord.phone || ord.customer_phone).replace(/\D/g, '') : '';
+            const ordName = ord.client_name || ord.customer_name;
+            return (cleanPhone && ordPhone === cleanPhone) || (clientName && ordName === clientName);
         }).length;
     },
 
@@ -416,13 +437,14 @@ const OrdersManager = {
             else alert('Cliente sem telefone cadastrado.');
             return;
         }
-        let cleanPhone = phone.replace(/\D/g, '');
+        let cleanPhone = String(phone).replace(/\D/g, '');
         if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
 
+        const storeName = this.getStoreName();
         const firstName = clientName ? clientName.split(' ')[0] : 'Cliente';
-        const msg = `Olá, ${firstName}! Tudo bem? A equipe do *Pastel e Batata Imperial* já colocou a mão na massa e o seu pedido está em preparo! 🥟👑 Em instantes ele estará prontinho para você aproveitar.`;
+        const msg = `Olá, ${firstName}! Tudo bem? A equipe do *${storeName}* já colocou a mão na massa e o seu pedido está em preparo! 🥟👑 Em instantes ele estará prontinho para você aproveitar.`;
 
-        window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank');
+        window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
     },
 
     stopLiveTimers() {
@@ -440,7 +462,7 @@ const OrdersManager = {
             const now = new Date();
 
             timerTags.forEach(tag => {
-                const createdAt = new Date(tag.getAttribute('data-created'));
+                const createdAtStr = tag.getAttribute('data-created');
                 const status = tag.getAttribute('data-status');
 
                 if (status === 'completed' || status === 'cancelled') {
@@ -450,6 +472,9 @@ const OrdersManager = {
                     return;
                 }
 
+                const iso = String(createdAtStr).replace(' ', 'T').replace(/([+-]\d{2}):?(\d{2})$/, '') + 'Z';
+                const createdAt = new Date(iso);
+                
                 const diffMs = Math.max(0, now - createdAt);
                 const totalMins = Math.floor(diffMs / 60000);
                 const secs = Math.floor((diffMs % 60000) / 1000);
@@ -487,7 +512,7 @@ const OrdersManager = {
             if (!o) return;
 
             const dateFormatted = new Date(o.created_at).toLocaleString('pt-BR');
-            const storeName = 'Pastel e Batata Imperial';
+            const storeName = this.getStoreName();
 
             let items = o.items;
             if (typeof items === 'string') {
@@ -495,19 +520,34 @@ const OrdersManager = {
             }
 
             const itemsFormatted = Array.isArray(items) && items.length > 0
-                ? items.map(i => `<div style="display:flex; justify-content:space-between; font-size:13px; font-weight:bold; margin-bottom:4px;">
-                    <span>${i.qty}x ${escapeHtml(i.name)}</span>
-                    <span>R$ ${Number(i.total || (i.qty * (i.unit_price || i.price || 0))).toFixed(2)}</span>
-                </div>`).join('')
+                ? items.map(i => {
+                    const totalVal = Number(i.total || (i.qty * (i.unit_price || i.price || 0))).toFixed(2).replace('.', ',');
+                    return `
+                        <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:bold; margin-bottom:4px;">
+                            <span>${i.qty}x ${escapeHtml(i.name)}</span>
+                            <span>R$ ${totalVal}</span>
+                        </div>
+                    `;
+                }).join('')
                 : '<div>Sem itens</div>';
 
-            const printWindow = window.open('', '_blank', 'width=400,height=600');
+            const printWindow = window.open('', '_blank', 'width=400,height=600,noopener,noreferrer');
             if (!printWindow) return alert('Bloqueador de pop-ups ativado no seu navegador.');
+
+            const clientName = escapeHtml(o.client_name || o.customer_name || 'Não informado');
+            const phone = escapeHtml(o.phone || o.customer_phone || 'S/N');
+            const address = escapeHtml(o.address || o.delivery_address || '');
+            const number = escapeHtml(o.number || 'S/N');
+            const reference = escapeHtml(o.payment_method || o.reference || 'Não informado');
+
+            const subtotalVal = Number(o.subtotal || 0).toFixed(2).replace('.', ',');
+            const feeVal = Number(o.delivery_fee || 0).toFixed(2).replace('.', ',');
+            const totalVal = Number(o.total || 0).toFixed(2).replace('.', ',');
 
             printWindow.document.write(`
                 <html>
                 <head>
-                    <title>Comanda - ${escapeHtml(o.client_name || 'Cliente')}</title>
+                    <title>Comanda - ${clientName}</title>
                     <style>
                         @page { margin: 0; }
                         body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: 300px; margin: 0 auto; padding: 10px; color: #000; background: #fff; }
@@ -525,19 +565,19 @@ const OrdersManager = {
 
                     <div class="info"><strong>DATA:</strong> ${dateFormatted}</div>
                     <div class="info"><strong>TIPO:</strong> ${o.order_type === 'delivery' ? '🛵 ENTREGA' : '🏪 RETIRADA'}</div>
-                    <div class="info"><strong>CLIENTE:</strong> ${escapeHtml(o.client_name || 'Não informado')}</div>
-                    <div class="info"><strong>TEL:</strong> ${escapeHtml(o.phone || 'S/N')}</div>
-                    ${o.order_type === 'delivery' ? `<div class="info"><strong>ENDEREÇO:</strong> ${escapeHtml(o.address || '')}, Nº ${escapeHtml(o.number || 'S/N')}</div>` : ''}
-                    <div class="info"><strong>PAGAMENTO:</strong> ${escapeHtml(o.payment_method || o.reference || 'Não informado')}</div>
+                    <div class="info"><strong>CLIENTE:</strong> ${clientName}</div>
+                    <div class="info"><strong>TEL:</strong> ${phone}</div>
+                    ${o.order_type === 'delivery' ? `<div class="info"><strong>ENDEREÇO:</strong> ${address}, Nº ${number}</div>` : ''}
+                    <div class="info"><strong>PAGAMENTO:</strong> ${reference}</div>
 
                     <div class="line"></div>
                     <div style="font-weight:bold; font-size:12px; margin-bottom:6px;">ITENS DO PEDIDO:</div>
                     ${itemsFormatted}
 
                     <div class="line"></div>
-                    <div class="info">Subtotal: R$ ${Number(o.subtotal || 0).toFixed(2)}</div>
-                    <div class="info">Taxa Entrega: R$ ${Number(o.delivery_fee || 0).toFixed(2)}</div>
-                    <div class="total" style="margin-top:4px;">TOTAL: R$ ${Number(o.total || 0).toFixed(2)}</div>
+                    <div class="info">Subtotal: R$ ${subtotalVal}</div>
+                    <div class="info">Taxa Entrega: R$ ${feeVal}</div>
+                    <div class="total" style="margin-top:4px;">TOTAL: R$ ${totalVal}</div>
 
                     <div class="line"></div>
                     <div class="text-center info">Obrigado pela preferência!</div>
@@ -558,31 +598,32 @@ const OrdersManager = {
     async updateStatus(orderId, newStatus) {
         try {
             const o = this.allOrders.find(item => String(item.id) === String(orderId));
-            const clientName = o?.client_name || '';
-            const phone = o?.phone || '';
+            const clientName = o?.client_name || o?.customer_name || '';
+            const phone = o?.phone || o?.customer_phone || '';
+            const storeName = this.getStoreName();
 
             if (typeof dbClient !== 'undefined') {
                 await dbClient.from('orders').update({ status: newStatus }).eq('id', orderId);
             }
 
             if (newStatus === 'preparing' && phone) {
-                let cleanPhone = phone.replace(/\D/g, '');
+                let cleanPhone = String(phone).replace(/\D/g, '');
                 if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
 
                 const firstName = clientName ? clientName.split(' ')[0] : 'Cliente';
-                const msg = `Olá, ${firstName}! Tudo bem? A equipe do *Pastel e Batata Imperial* já colocou a mão na massa e o seu pedido está em preparo! 🥟👑 Em instantes ele estará prontinho para você aproveitar.`;
+                const msg = `Olá, ${firstName}! Tudo bem? A equipe do *${storeName}* já colocou a mão na massa e o seu pedido está em preparo! 🥟👑 Em instantes ele estará prontinho para você aproveitar.`;
 
-                window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank');
+                window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
             }
 
             if (newStatus === 'completed' && phone) {
-                let cleanPhone = phone.replace(/\D/g, '');
+                let cleanPhone = String(phone).replace(/\D/g, '');
                 if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
 
                 const firstName = clientName ? clientName.split(' ')[0] : 'Cliente';
-                const msg = `Olá, ${firstName}! 👑\n\nSeu pedido no *Pastel e Batata Imperial* foi finalizado e já está pronto / a caminho! 🛵😋\n\nAgradecemos imensamente a preferência e desejamos um excelente apetite!`;
+                const msg = `Olá, ${firstName}! 👑\n\nSeu pedido no *${storeName}* foi finalizado e já está pronto / a caminho! 🛵😋\n\nAgradecemos imensamente a preferência e desejamos um excelente apetite!`;
 
-                window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank');
+                window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
             }
 
             if (typeof showToast === 'function') showToast('Status do pedido atualizado!');
@@ -601,32 +642,45 @@ const OrdersManager = {
 document.addEventListener('click', () => OrdersManager.unlockAudio(), { once: true });
 document.addEventListener('touchstart', () => OrdersManager.unlockAudio(), { once: true });
 
-// Gerenciamento de ciclo de vida
+// Refetch de pedidos e recálculo ao voltar para a aba
 document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
         OrdersManager.stopLiveTimers();
     } else if (document.getElementById('live-orders-container')) {
         OrdersManager.startLiveTimers();
+        OrdersManager.fetchOrders();
     }
 });
 
-// Abertura automática ao clicar no link do WhatsApp com parâmetro ?orderId=XYZ
+// Inicialização única na carga do DOM
 document.addEventListener('DOMContentLoaded', () => {
     OrdersManager.initRealtime();
+    OrdersManager.fetchOrders();
 
     const urlParams = new URLSearchParams(window.location.search);
     const targetOrderId = urlParams.get('orderId');
 
     if (targetOrderId) {
+        let attempts = 0;
+        const MAX_ATTEMPTS = 30; // Timeout de segurança: 9s max
+
         const checkExist = setInterval(() => {
+            attempts++;
+
+            if (attempts >= MAX_ATTEMPTS) {
+                clearInterval(checkExist);
+                console.warn('Pedido não encontrado após timeout:', targetOrderId);
+                return;
+            }
+
             if (OrdersManager.allOrders && OrdersManager.allOrders.length > 0) {
                 const targetOrder = OrdersManager.allOrders.find(o => String(o.id) === String(targetOrderId));
+                clearInterval(checkExist);
                 if (targetOrder) {
                     const orderDate = OrdersManager.getLocalDateStr(targetOrder.created_at);
                     OrdersManager.selectDatePage(orderDate);
                     OrdersManager.openOrderDetails(targetOrderId);
                 }
-                clearInterval(checkExist);
             }
         }, 300);
     }
