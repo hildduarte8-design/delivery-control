@@ -99,6 +99,7 @@ const OrdersManager = {
             if (error || !orders || orders.length === 0) {
                 container.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:30px; font-size:13px;">Nenhum pedido registrado no momento.</div>';
                 this.allOrders = [];
+                this.renderDatePaginationBar([]);
                 this.stopLiveTimers();
                 return;
             }
@@ -153,11 +154,19 @@ const OrdersManager = {
         if (!container) return;
 
         let bar = document.getElementById('orders-date-pagination-bar');
+
+        if (!groupedDates || groupedDates.length === 0) {
+            if (bar) bar.style.display = 'none';
+            return;
+        }
+
         if (!bar) {
             bar = document.createElement('div');
             bar.id = 'orders-date-pagination-bar';
             bar.style.cssText = 'display:flex; gap:8px; overflow-x:auto; padding:4px 0 14px 0; margin-bottom:12px; scrollbar-width:none;';
             container.parentNode.insertBefore(bar, container);
+        } else {
+            bar.style.display = 'flex';
         }
 
         const todayStr = this.getLocalDateStr(new Date());
@@ -599,7 +608,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (targetOrderId) {
         const checkExist = setInterval(() => {
             if (OrdersManager.allOrders && OrdersManager.allOrders.length > 0) {
-                OrdersManager.openOrderDetails(targetOrderId);
+                const targetOrder = OrdersManager.allOrders.find(o => String(o.id) === String(targetOrderId));
+                if (targetOrder) {
+                    const orderDate = OrdersManager.getLocalDateStr(targetOrder.created_at);
+                    OrdersManager.selectDatePage(orderDate);
+                    OrdersManager.openOrderDetails(targetOrderId);
+                }
                 clearInterval(checkExist);
             }
         }, 300);
