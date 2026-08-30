@@ -1,4 +1,10 @@
-// js/menu.js - Lógica Completa do Cardápio Digital com Suporte a Pagamentos, Troco, Pix, Opcionais e Realtime
+// js/menu.js - Lógica Completa do Cardápio Digital (Segurança, XSS, Prevenção de Duplicidade e Ergonomia)
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(String(text ?? '')));
+    return div.innerHTML;
+}
 
 const MenuApp = {
     orderType: 'delivery',
@@ -63,7 +69,7 @@ const MenuApp = {
                 .order('created_at', { ascending: false });
 
             if (error) {
-                container.innerHTML = `<div style="text-align:center; color:#EF4444; padding:30px;">⚠️ Erro ao buscar produtos: ${error.message}</div>`;
+                container.innerHTML = `<div style="text-align:center; color:#EF4444; padding:30px;">⚠️ Erro ao buscar produtos: ${escapeHtml(error.message)}</div>`;
                 return;
             }
 
@@ -80,7 +86,6 @@ const MenuApp = {
                 const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
                 const prevQty = this.products[p.id]?.qty || 0;
 
-                // Processa opcionais do prato
                 let complements = [];
                 if (Array.isArray(p.complements)) complements = p.complements;
                 else if (typeof p.complements === 'string') {
@@ -104,7 +109,7 @@ const MenuApp = {
             this.renderProductsList();
 
         } catch (e) {
-            container.innerHTML = `<div style="text-align:center; color:#EF4444; padding:30px;">⚠️ Falha ao carregar cardápio: ${e.message}</div>`;
+            container.innerHTML = `<div style="text-align:center; color:#EF4444; padding:30px;">⚠️ Falha ao carregar cardápio: ${escapeHtml(e.message)}</div>`;
         }
     },
 
@@ -115,9 +120,9 @@ const MenuApp = {
         const categories = ['all', ...new Set(this.rawProductsList.map(p => p.category || 'Geral'))];
 
         categoryBar.innerHTML = categories.map(cat => {
-            const label = cat === 'all' ? 'Todos' : cat;
+            const label = cat === 'all' ? 'Todos' : escapeHtml(cat);
             const activeClass = this.selectedCategory === cat ? 'active' : '';
-            return `<button class="category-chip ${activeClass}" onclick="MenuApp.filterCategory('${cat}')">${label}</button>`;
+            return `<button class="category-chip ${activeClass}" onclick="MenuApp.filterCategory('${escapeHtml(cat)}')">${label}</button>`;
         }).join('');
     },
 
@@ -149,7 +154,7 @@ const MenuApp = {
 
         let html = '';
         for (const [catName, products] of Object.entries(grouped)) {
-            html += `<div style="font-size:14px; font-weight:800; color:#F59E0B; margin:18px 0 10px 0; text-transform:uppercase; letter-spacing:0.5px;">📌 ${catName}</div>`;
+            html += `<div style="font-size:14px; font-weight:800; color:#F59E0B; margin:18px 0 10px 0; text-transform:uppercase; letter-spacing:0.5px;">📌 ${escapeHtml(catName)}</div>`;
             
             products.forEach(p => {
                 const discount = Number(p.discount_pct || 0);
@@ -157,7 +162,6 @@ const MenuApp = {
                 const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
                 const qty = this.products[p.id]?.qty || 0;
 
-                // Lógica visual dos preços (De R$ XX por R$ YY em verde)
                 let priceHtml = `<span class="price-normal">R$ ${finalPrice.toFixed(2).replace('.', ',')}</span>`;
                 if (discount > 0) {
                     priceHtml = `
@@ -168,10 +172,13 @@ const MenuApp = {
                     `;
                 }
 
-                // Imagem com Badge de Porcentagem estilo Alabama
+                const safeName = escapeHtml(p.name);
+                const safeDesc = escapeHtml(p.description || 'Sem descrição.');
+                const safeImg = escapeHtml(p.image_url || '');
+
                 const imgHtml = p.image_url ? `
-                    <div class="menu-product-img-box" onclick="MenuApp.openLightbox('${p.image_url}', '${p.name.replace(/'/g, "\\'")}')">
-                        <img src="${p.image_url}" class="menu-product-img" alt="${p.name}">
+                    <div class="menu-product-img-box" onclick="MenuApp.openLightbox('${safeImg}', '${safeName}')">
+                        <img src="${safeImg}" class="menu-product-img" alt="${safeName}">
                         ${discount > 0 ? '<div class="promo-badge">%</div>' : ''}
                     </div>
                 ` : `
@@ -180,22 +187,22 @@ const MenuApp = {
                     </div>
                 `;
 
-                // Botão de Opcionais ou Controles de Qtd
                 const hasComplements = Array.isArray(p.complements) && p.complements.length > 0;
                 let actionBtnHtml = '';
 
                 if (hasComplements) {
                     actionBtnHtml = `
-                        <button onclick="MenuApp.openComplementsModal('${p.id}')" style="background:#3B82F6; color:#fff; border:none; padding:6px 10px; border-radius:6px; font-size:11px; font-weight:bold; cursor:pointer;">
+                        <button onclick="MenuApp.openComplementsModal('${escapeHtml(p.id)}')" style="background:#3B82F6; color:#fff; border:none; padding:10px 12px; border-radius:8px; font-size:12px; font-weight:bold; cursor:pointer; min-height:44px; touch-action:manipulation;">
                             + Opções ${qty > 0 ? `(${qty})` : ''}
                         </button>
                     `;
                 } else {
+                    // Botões com tamanho ergonômico de 44x44px
                     actionBtnHtml = `
                         <div style="display:flex; align-items:center; gap:6px; background:#0F172A; padding:4px; border-radius:8px; border:1px solid #334155;">
-                            <button onclick="MenuApp.updateQty('${p.id}', -1)" style="width:26px; height:26px; background:#1E293B; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">-</button>
-                            <span id="qty-${p.id}" style="font-size:13px; font-weight:bold; color:#F1F5F9; min-width:18px; text-align:center;">${qty}</span>
-                            <button onclick="MenuApp.updateQty('${p.id}', 1)" style="width:26px; height:26px; background:#FF6B35; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">+</button>
+                            <button onclick="MenuApp.updateQty('${escapeHtml(p.id)}', -1)" style="width:44px; height:44px; min-width:44px; min-height:44px; background:#1E293B; color:#fff; border:none; border-radius:6px; font-weight:bold; font-size:18px; cursor:pointer; touch-action:manipulation;">-</button>
+                            <span id="qty-${escapeHtml(p.id)}" style="font-size:14px; font-weight:bold; color:#F1F5F9; min-width:20px; text-align:center;">${qty}</span>
+                            <button onclick="MenuApp.updateQty('${escapeHtml(p.id)}', 1)" style="width:44px; height:44px; min-width:44px; min-height:44px; background:#FF6B35; color:#fff; border:none; border-radius:6px; font-weight:bold; font-size:18px; cursor:pointer; touch-action:manipulation;">+</button>
                         </div>
                     `;
                 }
@@ -204,8 +211,8 @@ const MenuApp = {
                     <div class="menu-product-card">
                         ${imgHtml}
                         <div class="menu-product-details">
-                            <div class="menu-product-title">${p.name}</div>
-                            <div class="menu-product-desc">${p.description || 'Sem descrição.'}</div>
+                            <div class="menu-product-title">${safeName}</div>
+                            <div class="menu-product-desc">${safeDesc}</div>
                             <div class="menu-product-price">${priceHtml}</div>
                         </div>
                         <div style="margin-left:8px;">
@@ -223,11 +230,11 @@ const MenuApp = {
         const p = this.products[productId];
         if (!p || !Array.isArray(p.complements)) return;
 
-        let compsHtml = p.complements.map((c, idx) => `
-            <label style="display:flex; justify-content:space-between; align-items:center; padding:10px; background:#0F172A; border-radius:8px; border:1px solid #334155; margin-bottom:8px; cursor:pointer;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <input type="checkbox" class="comp-checkbox" data-name="${c.name}" data-price="${c.price}" style="width:18px; height:18px;">
-                    <span style="font-size:13px; color:#F1F5F9;">${c.name}</span>
+        let compsHtml = p.complements.map((c) => `
+            <label style="display:flex; justify-content:space-between; align-items:center; padding:12px; background:#0F172A; border-radius:8px; border:1px solid #334155; margin-bottom:8px; cursor:pointer;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <input type="checkbox" class="comp-checkbox" data-name="${escapeHtml(c.name)}" data-price="${c.price}" style="width:20px; height:20px;">
+                    <span style="font-size:13px; color:#F1F5F9;">${escapeHtml(c.name)}</span>
                 </div>
                 <strong style="color:#10B981; font-size:13px;">+ R$ ${Number(c.price).toFixed(2)}</strong>
             </label>
@@ -235,11 +242,11 @@ const MenuApp = {
 
         const modalBody = `
             <div style="margin-bottom:12px;">
-                <h3 style="color:#F1F5F9; font-size:16px; margin-bottom:4px;">${p.name}</h3>
+                <h3 style="color:#F1F5F9; font-size:16px; margin-bottom:4px;">${escapeHtml(p.name)}</h3>
                 <p style="color:#94A3B8; font-size:12px;">Escolha os adicionais desejados:</p>
             </div>
             <div id="modal_complements_list">${compsHtml}</div>
-            <button onclick="MenuApp.saveComplementsSelection('${productId}')" style="background:#FF6B35; color:#fff; width:100%; padding:12px; border:none; border-radius:8px; font-weight:bold; margin-top:10px; cursor:pointer;">
+            <button onclick="MenuApp.saveComplementsSelection('${escapeHtml(productId)}')" style="background:#FF6B35; color:#fff; width:100%; padding:14px; border:none; border-radius:8px; font-weight:bold; margin-top:10px; cursor:pointer; font-size:14px; min-height:44px; touch-action:manipulation;">
                 🛒 Adicionar ao Pedido
             </button>
         `;
@@ -258,7 +265,7 @@ const MenuApp = {
                 <div class="modal-body" style="background:#1E293B; border:1px solid #334155; padding:16px; border-radius:12px; max-width:380px; width:100%;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
                         <strong style="color:#FF6B35;">Opcionais do Prato</strong>
-                        <button onclick="document.getElementById('complements-modal-box').style.display='none'" style="background:none; border:none; color:#94A3B8; font-size:18px; cursor:pointer;">✕</button>
+                        <button onclick="document.getElementById('complements-modal-box').style.display='none'" style="background:none; border:none; color:#94A3B8; font-size:22px; cursor:pointer; padding:4px;">✕</button>
                     </div>
                     ${modalBody}
                 </div>
@@ -270,13 +277,11 @@ const MenuApp = {
     saveComplementsSelection(productId) {
         const checkboxes = document.querySelectorAll('#modal_complements_list .comp-checkbox:checked');
         const selected = [];
-        let extraTotal = 0;
 
         checkboxes.forEach(cb => {
             const name = cb.dataset.name;
             const price = parseFloat(cb.dataset.price) || 0;
             selected.push({ name, price });
-            extraTotal += price;
         });
 
         if (this.products[productId]) {
@@ -403,9 +408,9 @@ const MenuApp = {
             const price = this.products[p.id].price;
             return `
                 <div class="cross-item-card">
-                    <div class="cross-item-name">${p.name}</div>
+                    <div class="cross-item-name">${escapeHtml(p.name)}</div>
                     <div class="cross-item-price">R$ ${price.toFixed(2)}</div>
-                    <button class="btn btn-sm" onclick="MenuApp.updateQty('${p.id}', 1); MenuApp.renderCrossSellOffers();" style="font-size:11px; padding:4px 8px; width:100%;">
+                    <button class="btn btn-sm" onclick="MenuApp.updateQty('${escapeHtml(p.id)}', 1); MenuApp.renderCrossSellOffers();" style="font-size:12px; padding:8px; width:100%; min-height:44px; touch-action:manipulation;">
                         + Adicionar
                     </button>
                 </div>
@@ -522,7 +527,60 @@ const MenuApp = {
         );
     },
 
-   async sendWhatsApp() {
+    async checkExistingCustomer(phoneVal) {
+        if (!phoneVal) return;
+        const cleanPhone = phoneVal.replace(/\D/g, '');
+        const badge = document.getElementById('welcome-customer-badge');
+        const msgText = document.getElementById('welcome-msg-text');
+
+        if (cleanPhone.length < 10) {
+            if (badge) badge.style.display = 'none';
+            return;
+        }
+
+        try {
+            if (typeof dbClient === 'undefined') return;
+
+            const { data, error } = await dbClient
+                .from('orders')
+                .select('customer_name, client_name, delivery_address, address, number, reference')
+                .or(`phone.eq.${cleanPhone},customer_phone.eq.${cleanPhone}`)
+                .order('created_at', { ascending: false })
+                .limit(1);
+
+            if (!error && data && data.length > 0) {
+                const lastOrder = data[0];
+                const savedName = lastOrder.customer_name || lastOrder.client_name || '';
+                const savedAddress = lastOrder.delivery_address || lastOrder.address || '';
+                const savedNumber = lastOrder.number || '';
+                const savedRef = lastOrder.reference || '';
+
+                const nameInput = document.getElementById('cli-name');
+                const addrInput = document.getElementById('cli-address');
+                const numInput = document.getElementById('cli-number');
+                const refInput = document.getElementById('cli-reference');
+
+                if (nameInput && savedName) nameInput.value = savedName;
+                if (addrInput && savedAddress) addrInput.value = savedAddress;
+                if (numInput && savedNumber) numInput.value = savedNumber;
+                if (refInput && savedRef) refInput.value = savedRef;
+
+                if (badge && msgText && savedName) {
+                    const firstName = escapeHtml(savedName.split(' ')[0]);
+                    msgText.innerHTML = `Que bom ter você de volta, <strong>${firstName}</strong>! Preenchemos seus dados automaticamente para facilitar.`;
+                    badge.style.display = 'block';
+                }
+            } else {
+                if (badge) badge.style.display = 'none';
+            }
+        } catch (e) {
+            console.warn('Erro ao consultar cadastro prévio por telefone:', e);
+        }
+    },
+
+    async sendWhatsApp() {
+        const submitBtn = document.querySelector('[onclick*="sendWhatsApp"]');
+
         const nameEl = document.getElementById('cli-name');
         const phoneEl = document.getElementById('cli-phone');
         const addrEl = document.getElementById('cli-address');
@@ -557,7 +615,12 @@ const MenuApp = {
 
         if (!storePhone.startsWith('55')) storePhone = '55' + storePhone;
 
-        // 1. GERAÇÃO DE ID ÚNICO PARA CORRIGIR O ERRO DE NULL
+        // Trava o botão contra clique duplo
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⌛ Gravando pedido...';
+        }
+
         const orderId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
             ? crypto.randomUUID() 
             : `ord_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
@@ -594,18 +657,18 @@ const MenuApp = {
 
         const fullReference = reference ? `${reference} | PGTO: ${paymentFormatted}` : `PGTO: ${paymentFormatted}`;
 
-        // 2. GRAVAÇÃO COMPLETA NO SUPABASE COM O ID INCLUSO
+        // GRAVAÇÃO COM VALIDAÇÃO RIGOROSA NO SUPABASE (Canônico)
         try {
             if (typeof dbClient !== 'undefined') {
                 const { error: dbError } = await dbClient.from('orders').insert([{
                     id: orderId,
-                    client_name: name,
                     customer_name: name,
-                    phone: phone,
+                    client_name: name,
                     customer_phone: phone,
+                    phone: phone,
                     order_type: this.orderType,
-                    address: address,
                     delivery_address: address,
+                    address: address,
                     number: number,
                     reference: fullReference,
                     payment_method: payment,
@@ -619,11 +682,17 @@ const MenuApp = {
                 }]);
 
                 if (dbError) {
-                    console.error('❌ Erro de gravação no Supabase:', dbError.message);
+                    throw new Error(dbError.message);
                 }
             }
         } catch (e) {
-            console.error('Erro de conexão ao salvar pedido:', e);
+            console.error('❌ Erro de gravação no Supabase:', e);
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '🚀 Finalizar Pedido';
+            }
+            alert(`⚠️ Não foi possível registrar seu pedido no sistema.\n\nVerifique sua conexão e tente novamente.\n\nDetalhes: ${e.message}`);
+            return; // Interrompe para não abrir o WhatsApp sem ter gravado
         }
 
         const typeLabel = this.orderType === 'delivery' ? '🛵 *Entrega*' : '🏪 *Retirada no Balcão*';
@@ -640,7 +709,6 @@ const MenuApp = {
                             `💰 *TOTAL FINAL:* R$ ${subtotal.toFixed(2)}`;
         }
 
-        // 3. LINK DIRETO PARA O PAINEL DE PEDIDOS NA MENSAGEM
         const currentOrigin = window.location.origin;
         const adminOrderUrl = `${currentOrigin}/index.html?orderId=${orderId}`;
 
@@ -659,7 +727,12 @@ const MenuApp = {
                     `🔗 *Ver comanda no Painel:* ${adminOrderUrl}\n\n` +
                     `✨ _Obrigado pela preferência! Aguardo a confirmação._`;
 
-        window.open(`https://api.whatsapp.com/send?phone=${storePhone}&text=${encodeURIComponent(msg)}`, '_blank');
+        window.open(`https://api.whatsapp.com/send?phone=${storePhone}&text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
+
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '🚀 Finalizar Pedido';
+        }
     },
 
     printReceipt() {
@@ -690,7 +763,7 @@ const MenuApp = {
 
         let itemsHtml = '';
         Object.values(this.products).forEach(p => {
-            if (p.qty > 0) itemsHtml += `<p>${p.qty}x ${p.name} - R$ ${(p.price * p.qty).toFixed(2)}</p>`;
+            if (p.qty > 0) itemsHtml += `<p>${p.qty}x ${escapeHtml(p.name)} - R$ ${(p.price * p.qty).toFixed(2)}</p>`;
         });
         const recItems = document.getElementById('rec-items');
         if (recItems) recItems.innerHTML = itemsHtml;
