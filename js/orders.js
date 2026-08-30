@@ -1,4 +1,4 @@
-// js/orders.js - Gestão Completa de Pedidos ao Vivo com Supabase Realtime, Paginação por Data e Chat WhatsApp
+// js/orders.js - Gestão Completa de Pedidos ao Vivo com Supabase Realtime, Seletor de Data por Setas/Calendário e Chat WhatsApp
 
 function escapeHtml(text) {
     const div = document.createElement('div');
@@ -138,7 +138,7 @@ const OrdersManager = {
             // Coleta todas as datas disponíveis nos pedidos
             const uniqueDates = [...new Set(orders.map(o => this.getLocalDateStr(o.created_at)))];
             
-            // Renderiza os botões de paginação por dia e depois os pedidos do dia selecionado
+            // Renderiza o seletor compacto de datas e os pedidos filtrados
             this.renderDatePaginationBar(uniqueDates);
             this.renderFilteredOrders();
 
@@ -148,14 +148,14 @@ const OrdersManager = {
         }
     },
 
-    // RENDERIZA A BARRA SUPERIOR DE DIAS (PAGINAÇÃO)
+    // RENDERIZA O SELETOR DE DATA COMPACTO (SETAS + CALENDÁRIO)
     renderDatePaginationBar(groupedDates) {
         const container = document.getElementById('live-orders-container');
         if (!container) return;
 
         let bar = document.getElementById('orders-date-pagination-bar');
 
-        if (!groupedDates || groupedDates.length === 0) {
+        if (!this.allOrders || this.allOrders.length === 0) {
             if (bar) bar.style.display = 'none';
             return;
         }
@@ -163,49 +163,61 @@ const OrdersManager = {
         if (!bar) {
             bar = document.createElement('div');
             bar.id = 'orders-date-pagination-bar';
-            bar.style.cssText = 'display:flex; gap:8px; overflow-x:auto; padding:4px 0 14px 0; margin-bottom:12px; scrollbar-width:none;';
+            bar.style.cssText = 'display:flex; align-items:center; justify-content:space-between; background:#1E293B; border:1px solid #334155; padding:8px 12px; border-radius:12px; margin-bottom:12px;';
             container.parentNode.insertBefore(bar, container);
         } else {
             bar.style.display = 'flex';
         }
 
         const todayStr = this.getLocalDateStr(new Date());
-        if (!groupedDates.includes(todayStr)) {
-            groupedDates.unshift(todayStr);
-        }
+        if (!this.selectedDate) this.selectedDate = todayStr;
 
-        // Ordena do dia mais recente para o mais antigo
-        groupedDates.sort((a, b) => new Date(b) - new Date(a));
+        // Cálculo de dia anterior e próximo dia
+        const currentDateObj = new Date(this.selectedDate + 'T00:00:00');
+        
+        const prevDateObj = new Date(currentDateObj);
+        prevDateObj.setDate(prevDateObj.getDate() - 1);
+        const prevDateStr = this.getLocalDateStr(prevDateObj);
 
-        if (!this.selectedDate || !groupedDates.includes(this.selectedDate)) {
-            this.selectedDate = todayStr;
-        }
+        const nextDateObj = new Date(currentDateObj);
+        nextDateObj.setDate(nextDateObj.getDate() + 1);
+        const nextDateStr = this.getLocalDateStr(nextDateObj);
 
-        bar.innerHTML = groupedDates.map(dateStr => {
-            const [y, m, d] = dateStr.split('-');
-            const isToday = dateStr === todayStr;
-            const displayLabel = isToday ? `Hoje (${d}/${m})` : `${d}/${m}/${y}`;
-            
-            // Conta quantos pedidos existem nesse dia
-            const countForDay = this.allOrders.filter(o => this.getLocalDateStr(o.created_at) === dateStr).length;
+        const isToday = this.selectedDate === todayStr;
+        const [y, m, d] = this.selectedDate.split('-');
+        const displayLabel = isToday ? `Hoje (${d}/${m})` : `${d}/${m}/${y}`;
+        
+        const countForDay = this.allOrders.filter(o => this.getLocalDateStr(o.created_at) === this.selectedDate).length;
 
-            const isActive = this.selectedDate === dateStr;
-            const activeStyle = isActive 
-                ? 'background:#FF6B35; color:#fff; border-color:#FF6B35; box-shadow: 0 2px 8px rgba(255,107,53,0.3);' 
-                : 'background:#1E293B; color:#94A3B8; border-color:#334155;';
+        bar.innerHTML = `
+            <!-- Botão Dia Anterior -->
+            <button onclick="OrdersManager.selectDatePage('${prevDateStr}')" style="background:#0F172A; color:#F1F5F9; border:1px solid #334155; padding:8px 14px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px;">
+                ◄
+            </button>
 
-            return `
-                <button onclick="OrdersManager.selectDatePage('${dateStr}')" style="${activeStyle} border:1px solid; padding:8px 16px; border-radius:20px; font-size:12px; font-weight:700; white-space:nowrap; cursor:pointer; transition:all 0.2s;">
-                    📅 ${displayLabel} <span style="font-size:10px; background:rgba(255,255,255,0.2); padding:2px 6px; border-radius:10px; margin-left:4px;">${countForDay}</span>
-                </button>
-            `;
-        }).join('');
+            <!-- Centro: Texto com Data + Input de Calendário Oculto sobre ele -->
+            <div style="position:relative; text-align:center;">
+                <div style="font-size:13px; font-weight:800; color:#FF6B35; display:flex; align-items:center; gap:6px; cursor:pointer;">
+                    📅 ${displayLabel}
+                    <span style="font-size:10px; background:#334155; color:#F1F5F9; padding:2px 6px; border-radius:10px;">${countForDay} ${countForDay === 1 ? 'pedido' : 'pedidos'}</span>
+                </div>
+                <!-- Clique no texto abre o calendário nativo do celular/navegador -->
+                <input type="date" value="${this.selectedDate}" onchange="OrdersManager.selectDatePage(this.value)" 
+                    style="position:absolute; inset:0; opacity:0; width:100%; height:100%; cursor:pointer;">
+            </div>
+
+            <!-- Botão Próximo Dia -->
+            <button onclick="OrdersManager.selectDatePage('${nextDateStr}')" ${isToday ? 'disabled style="opacity:0.3; background:#0F172A; color:#F1F5F9; border:1px solid #334155; padding:8px 14px; border-radius:8px; font-size:14px;"' : 'style="background:#0F172A; color:#F1F5F9; border:1px solid #334155; padding:8px 14px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px;"'}>
+                ►
+            </button>
+        `;
     },
 
     selectDatePage(dateStr) {
+        if (!dateStr) return;
         this.selectedDate = dateStr;
         
-        // Atualiza estilo dos botões
+        // Atualiza estilo do seletor
         const groupedDates = [...new Set(this.allOrders.map(o => this.getLocalDateStr(o.created_at)))];
         this.renderDatePaginationBar(groupedDates);
         
