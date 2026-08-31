@@ -2,8 +2,16 @@
 
 function escapeHtml(text) {
     const div = document.createElement('div');
-    div.appendChild(document.createTextNode(String(text || '')));
+    div.appendChild(document.createTextNode(String(text ?? '')));
     return div.innerHTML;
+}
+
+function parseDateSafe(dateInput) {
+    if (!dateInput) return new Date();
+    if (dateInput instanceof Date) return dateInput;
+    const isoStr = String(dateInput).replace(' ', 'T');
+    const d = new Date(isoStr);
+    return isNaN(d.getTime()) ? new Date() : d;
 }
 
 const SalesManager = {
@@ -28,7 +36,11 @@ const SalesManager = {
         }
 
         if (list.length === 0) {
-            list = JSON.parse(localStorage.getItem('dly_customers') || '[]');
+            try {
+                list = JSON.parse(localStorage.getItem('dly_customers') || '[]');
+            } catch (e) {
+                list = [];
+            }
         }
 
         if (list.length === 0) {
@@ -36,7 +48,11 @@ const SalesManager = {
             if (typeof state !== 'undefined' && Array.isArray(state.orders) && state.orders.length > 0) {
                 orders = state.orders;
             } else {
-                orders = JSON.parse(localStorage.getItem('dly_orders') || '[]');
+                try {
+                    orders = JSON.parse(localStorage.getItem('dly_orders') || '[]');
+                } catch (e) {
+                    orders = [];
+                }
             }
 
             if (orders.length === 0 && typeof dbClient !== 'undefined') {
@@ -81,7 +97,11 @@ const SalesManager = {
         }
 
         if (products.length === 0) {
-            products = JSON.parse(localStorage.getItem('dly_menu') || '[]');
+            try {
+                products = JSON.parse(localStorage.getItem('dly_menu') || '[]');
+            } catch (e) {
+                products = [];
+            }
         }
 
         return products;
@@ -105,7 +125,8 @@ const SalesManager = {
 
         const productOptions = products.map(p => {
             const price = Number(p.price || 0);
-            return `<option value="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}" data-price="${price}">${escapeHtml(p.name)} - R$ ${price.toFixed(2)}</option>`;
+            const priceFormatted = price.toFixed(2).replace('.', ',');
+            return `<option value="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}" data-price="${price}">${escapeHtml(p.name)} - R$ ${priceFormatted}</option>`;
         }).join('');
 
         const modalBody = `
@@ -121,17 +142,17 @@ const SalesManager = {
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:10px;">
                     <div class="form-group" style="margin:0;">
                         <label style="font-size:11px; color:#94A3B8;">Nome do Cliente</label>
-                        <input type="text" id="sale_client_name" placeholder="Ex: Maria Souza" style="font-size:12px; padding:6px;">
+                        <input type="text" id="sale_client_name" placeholder="Ex: Maria Souza" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px;">
                     </div>
                     <div class="form-group" style="margin:0;">
                         <label style="font-size:11px; color:#94A3B8;">WhatsApp</label>
-                        <input type="tel" id="sale_phone" placeholder="33999999999" style="font-size:12px; padding:6px;">
+                        <input type="tel" id="sale_phone" placeholder="33999999999" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px;">
                     </div>
                 </div>
 
                 <div class="form-group" style="margin-bottom:10px;">
                     <label style="font-size:11px; color:#94A3B8;">Endereço de Entrega / Observação</label>
-                    <input type="text" id="sale_address" placeholder="Rua, Número, Bairro (ou Balcão)" style="font-size:12px; padding:6px;">
+                    <input type="text" id="sale_address" placeholder="Rua, Número, Bairro (ou Balcão)" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%;">
                 </div>
 
                 <!-- CAMPO DE SELEÇÃO DA FORMA DE PAGAMENTO -->
@@ -147,12 +168,12 @@ const SalesManager = {
                 <div style="border-top:1px solid #334155; padding-top:10px; margin-top:10px;">
                     <div style="font-size:12px; font-weight:700; color:#FF6B35; margin-bottom:8px;">🛍️ Adicionar Itens do Cardápio</div>
                     <div style="display:flex; gap:6px; margin-bottom:10px;">
-                        <select id="sale_product_select" style="flex:1; font-size:12px; padding:6px; background:#1E293B; color:#F1F5F9; border:1px solid #475569;">
+                        <select id="sale_product_select" style="flex:1; font-size:12px; padding:8px; background:#1E293B; color:#F1F5F9; border:1px solid #475569; border-radius:6px;">
                             <option value="">-- Selecione o Prato/Item --</option>
                             ${productOptions}
                         </select>
-                        <input type="number" id="sale_product_qty" value="1" min="1" style="width:60px; font-size:12px; padding:6px; text-align:center;">
-                        <button class="btn btn-sm btn-success" onclick="SalesManager.addItemToSale()" style="width:auto; padding:0 12px; font-weight:700;">+ Add</button>
+                        <input type="number" id="sale_product_qty" value="1" min="1" style="width:60px; font-size:12px; padding:8px; text-align:center; background:#1E293B; color:#F1F5F9; border:1px solid #475569; border-radius:6px;">
+                        <button class="btn btn-sm btn-success" onclick="SalesManager.addItemToSale()" style="width:auto; padding:0 14px; font-weight:700; min-height:40px; touch-action:manipulation;">+ Add</button>
                     </div>
 
                     <div id="sale_selected_items_list" style="background:#0F172A; border:1px solid #334155; border-radius:8px; padding:8px; min-height:60px; margin-bottom:12px;">
@@ -169,16 +190,16 @@ const SalesManager = {
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; align-items:center;">
                         <div>
                             <label style="font-size:11px; color:#94A3B8;">Desconto (R$)</label>
-                            <input type="number" step="0.01" id="sale_discount_input" value="0.00" oninput="SalesManager.updateSaleTotals()" style="font-size:12px; padding:6px;">
+                            <input type="number" step="0.01" id="sale_discount_input" value="0.00" oninput="SalesManager.updateSaleTotals()" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%;">
                         </div>
                         <div>
                             <label style="font-size:11px; color:#94A3B8;">Valor Final a Cobrar</label>
-                            <input type="number" step="0.01" id="sale_final_total" value="0.00" style="font-size:14px; font-weight:800; color:#10B981; padding:6px;">
+                            <input type="number" step="0.01" id="sale_final_total" value="0.00" style="font-size:14px; font-weight:800; color:#10B981; padding:8px; background:#0F172A; border:1px solid #334155; border-radius:6px; width:100%;">
                         </div>
                     </div>
                 </div>
 
-                <button class="btn btn-large" onclick="SalesManager.saveManualSale()" style="margin-top:14px; background:#FF6B35; color:#fff;">💾 Lançar Pedido em Preparo</button>
+                <button class="btn btn-large" onclick="SalesManager.saveManualSale()" style="margin-top:14px; background:#FF6B35; color:#fff; width:100%; min-height:48px; touch-action:manipulation;">💾 Lançar Pedido em Preparo</button>
             </div>
         `;
 
@@ -214,7 +235,7 @@ const SalesManager = {
         const price = parseFloat(opt.getAttribute('data-price')) || 0;
         const qty = Math.max(1, parseInt(qtyInput?.value) || 1);
 
-        const existingItem = this.currentSaleItems.find(i => i.id === id);
+        const existingItem = this.currentSaleItems.find(i => String(i.id) === String(id));
         if (existingItem) {
             existingItem.qty += qty;
             existingItem.total = existingItem.price * existingItem.qty;
@@ -234,7 +255,7 @@ const SalesManager = {
     },
 
     removeItemFromSale(uid) {
-        this.currentSaleItems = this.currentSaleItems.filter(i => i.uid !== uid);
+        this.currentSaleItems = this.currentSaleItems.filter(i => String(i.uid) !== String(uid));
         this.renderSelectedItemsList();
         this.updateSaleTotals();
     },
@@ -248,18 +269,24 @@ const SalesManager = {
             return;
         }
 
-        container.innerHTML = this.currentSaleItems.map(item => `
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #1E293B; font-size:12px;">
-                <div>
-                    <strong style="color:#F1F5F9;">${item.qty}x ${escapeHtml(item.name)}</strong>
-                    <div style="font-size:10px; color:#94A3B8;">Unit: R$ ${item.price.toFixed(2)}</div>
+        container.innerHTML = this.currentSaleItems.map(item => {
+            const priceFormatted = item.price.toFixed(2).replace('.', ',');
+            const totalFormatted = item.total.toFixed(2).replace('.', ',');
+            const safeUid = escapeHtml(item.uid);
+
+            return `
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #1E293B; font-size:12px;">
+                    <div>
+                        <strong style="color:#F1F5F9;">${item.qty}x ${escapeHtml(item.name)}</strong>
+                        <div style="font-size:10px; color:#94A3B8;">Unit: R$ ${priceFormatted}</div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="color:#10B981; font-weight:700;">R$ ${totalFormatted}</span>
+                        <button class="btn btn-sm" onclick="SalesManager.removeItemFromSale('${safeUid}')" style="background:#EF4444; color:#fff; padding:4px 8px; min-height:32px; font-size:10px; touch-action:manipulation;">✕</button>
+                    </div>
                 </div>
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <span style="color:#10B981; font-weight:700;">R$ ${item.total.toFixed(2)}</span>
-                    <button class="btn btn-sm" onclick="SalesManager.removeItemFromSale('${escapeHtml(item.uid)}')" style="background:#EF4444; color:#fff; padding:1px 6px; font-size:10px;">✕</button>
-                </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
     },
 
     updateSaleTotals() {
@@ -270,7 +297,7 @@ const SalesManager = {
         const subtotalEl = document.getElementById('sale_subtotal_display');
         const finalTotalInput = document.getElementById('sale_final_total');
 
-        if (subtotalEl) subtotalEl.textContent = `R$ ${subtotal.toFixed(2)}`;
+        if (subtotalEl) subtotalEl.textContent = `R$ ${subtotal.toFixed(2).replace('.', ',')}`;
         if (finalTotalInput) finalTotalInput.value = finalTotal.toFixed(2);
     },
 
@@ -329,7 +356,13 @@ const SalesManager = {
             console.error('Erro ao salvar no Supabase:', e);
         }
 
-        let localSales = JSON.parse(localStorage.getItem('dly_sales') || '[]');
+        let localSales = [];
+        try {
+            localSales = JSON.parse(localStorage.getItem('dly_sales') || '[]');
+        } catch (e) {
+            localSales = [];
+        }
+
         localSales.unshift(orderData);
         localStorage.setItem('dly_sales', JSON.stringify(localSales));
 
@@ -372,7 +405,11 @@ async function renderSalesList() {
     }
 
     if (sales.length === 0) {
-        sales = JSON.parse(localStorage.getItem('dly_sales') || '[]');
+        try {
+            sales = JSON.parse(localStorage.getItem('dly_sales') || '[]');
+        } catch (e) {
+            sales = [];
+        }
     }
 
     if (sales.length === 0) {
@@ -380,19 +417,30 @@ async function renderSalesList() {
         return;
     }
 
-    container.innerHTML = sales.map(s => `
-        <div class="card" style="margin-bottom:8px; padding:12px; background:#1E293B; border-left:4px solid #10B981;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                    <strong style="color:#F1F5F9; font-size:13px; display:block;">👤 ${escapeHtml(s.client_name || s.customer_name || s.customerName || 'Cliente Balcão')}</strong>
-                    <span style="font-size:11px; color:#94A3B8;">
-                        ${new Date(s.created_at || s.createdAt).toLocaleDateString('pt-BR')} • ${s.payment_method || 'Pix'} • ${s.items?.length || 0} item(ns)
-                    </span>
+    container.innerHTML = sales.map(s => {
+        let itemsList = s.items;
+        if (typeof itemsList === 'string') {
+            try { itemsList = JSON.parse(itemsList); } catch (e) { itemsList = []; }
+        }
+        const itemsCount = Array.isArray(itemsList) ? itemsList.length : 0;
+
+        const totalFormatted = Number(s.total || 0).toFixed(2).replace('.', ',');
+        const dateStr = parseDateSafe(s.created_at || s.createdAt).toLocaleDateString('pt-BR');
+
+        return `
+            <div class="card" style="margin-bottom:8px; padding:12px; background:#1E293B; border-left:4px solid #10B981; border-radius:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <strong style="color:#F1F5F9; font-size:13px; display:block;">👤 ${escapeHtml(s.client_name || s.customer_name || s.customerName || 'Cliente Balcão')}</strong>
+                        <span style="font-size:11px; color:#94A3B8;">
+                            ${dateStr} • ${escapeHtml(s.payment_method || 'Pix')} • ${itemsCount} item(ns)
+                        </span>
+                    </div>
+                    <strong style="color:#10B981; font-size:15px;">R$ ${totalFormatted}</strong>
                 </div>
-                <strong style="color:#10B981; font-size:15px;">R$ ${Number(s.total || 0).toFixed(2)}</strong>
             </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 window.SalesManager = SalesManager;
