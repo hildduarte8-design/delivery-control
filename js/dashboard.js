@@ -1,13 +1,23 @@
-// Helper para tratamento seguro de HTML
+// js/analytics.js & js/dashboard.js - Painel Principal e Métricas de Vendas
+
 function escapeHtml(text) {
     const div = document.createElement('div');
-    div.appendChild(document.createTextNode(String(text || '')));
+    div.appendChild(document.createTextNode(String(text ?? '')));
     return div.innerHTML;
+}
+
+// Helper para converter datas do Supabase/Local sem falhas no iOS/Safari
+function parseDateSafe(dateInput) {
+    if (!dateInput) return new Date();
+    if (dateInput instanceof Date) return dateInput;
+    const isoStr = String(dateInput).replace(' ', 'T');
+    const d = new Date(isoStr);
+    return isNaN(d.getTime()) ? new Date() : d;
 }
 
 // Helper: Calcula o intervalo do ciclo semanal estilo iFood (Quinta 00:00 a Quarta 23:59)
 function getIFoodWeeklyCycle(referenceDate = new Date()) {
-    const d = new Date(referenceDate);
+    const d = parseDateSafe(referenceDate);
     d.setHours(0, 0, 0, 0);
 
     const dayOfWeek = d.getDay();
@@ -24,7 +34,7 @@ function getIFoodWeeklyCycle(referenceDate = new Date()) {
     return { cycleStart, cycleEnd };
 }
 
-// Módulo do Analytics anexado diretamente ao objeto global sem declarar variável
+// Módulo de Analytics
 if (!window.AnalyticsManager) {
     window.AnalyticsManager = {
         currentFilter: 'all',
@@ -43,17 +53,23 @@ if (!window.AnalyticsManager) {
             let orders = this.cachedOrders;
             if (!orders || orders.length === 0) {
                 if (typeof state !== 'undefined' && Array.isArray(state.orders)) orders = state.orders;
-                else orders = JSON.parse(localStorage.getItem('dly_orders') || localStorage.getItem('dly_sales') || '[]');
+                else {
+                    try {
+                        orders = JSON.parse(localStorage.getItem('dly_orders') || localStorage.getItem('dly_sales') || '[]');
+                    } catch (e) {
+                        orders = [];
+                    }
+                }
             }
 
             const now = new Date();
-            const todayStr = now.toISOString().split('T')[0];
+            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
             const filteredOrders = orders.filter(o => {
                 if (o.status === 'cancelled') return false;
 
-                const orderDate = new Date(o.created_at || o.date || now);
-                const orderDateStr = orderDate.toISOString().split('T')[0];
+                const orderDate = parseDateSafe(o.created_at || o.date);
+                const orderDateStr = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${String(orderDate.getDate()).padStart(2, '0')}`;
 
                 if (this.currentFilter === 'today') return orderDateStr === todayStr;
                 if (this.currentFilter === '7days') {
@@ -128,14 +144,16 @@ if (!window.AnalyticsManager) {
             const elCard = document.getElementById('dash_pay_card') || document.getElementById('payCardVal');
             const elCash = document.getElementById('dash_pay_cash') || document.getElementById('payCashVal');
 
-            if (elFaturamento) elFaturamento.textContent = `R$ ${totalRevenue.toFixed(2)}`;
+            const ticketMedioVal = totalOrdersCount > 0 ? totalRevenue / totalOrdersCount : 0;
+
+            if (elFaturamento) elFaturamento.textContent = `R$ ${totalRevenue.toFixed(2).replace('.', ',')}`;
             if (elTotalPedidos) elTotalPedidos.textContent = totalOrdersCount;
-            if (elTicketMedio) elTicketMedio.textContent = `R$ ${(totalOrdersCount > 0 ? totalRevenue / totalOrdersCount : 0).toFixed(2)}`;
+            if (elTicketMedio) elTicketMedio.textContent = `R$ ${ticketMedioVal.toFixed(2).replace('.', ',')}`;
             if (elItensVendidos) elItensVendidos.textContent = `${totalItemsQty} un`;
 
-            if (elPix) elPix.textContent = `R$ ${totalPix.toFixed(2)}`;
-            if (elCard) elCard.textContent = `R$ ${totalCard.toFixed(2)}`;
-            if (elCash) elCash.textContent = `R$ ${totalCash.toFixed(2)}`;
+            if (elPix) elPix.textContent = `R$ ${totalPix.toFixed(2).replace('.', ',')}`;
+            if (elCard) elCard.textContent = `R$ ${totalCard.toFixed(2).replace('.', ',')}`;
+            if (elCash) elCash.textContent = `R$ ${totalCash.toFixed(2).replace('.', ',')}`;
 
             const rankingContainer = document.getElementById('dash_ranking_list') || document.getElementById('rankingContainer');
             if (rankingContainer) {
@@ -146,11 +164,12 @@ if (!window.AnalyticsManager) {
                 } else {
                     rankingContainer.innerHTML = sortedRanking.map(([name, data], idx) => {
                         const trophy = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🏅';
+                        const revFormatted = data.revenue.toFixed(2).replace('.', ',');
                         return `
                             <div style="margin-bottom:10px; padding:8px; background:#0F172A; border-radius:6px; border:1px solid #1E293B;">
                                 <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; color:#F1F5F9;">
                                     <span>${trophy} <strong>${escapeHtml(name)}</strong></span>
-                                    <strong style="color:#10B981;">${data.qty} un <span style="color:#94A3B8; font-size:11px; font-weight:normal;">(R$ ${data.revenue.toFixed(2)})</span></strong>
+                                    <strong style="color:#10B981;">${data.qty} un <span style="color:#94A3B8; font-size:11px; font-weight:normal;">(R$ ${revFormatted})</span></strong>
                                 </div>
                             </div>
                         `;
@@ -161,7 +180,7 @@ if (!window.AnalyticsManager) {
     };
 }
 
-// js/dashboard.js - Painel Principal com Fechamento Semanal Estilo iFood (Quinta a Quarta)
+// Painel Principal com Fechamento Semanal Estilo iFood (Quinta a Quarta)
 async function renderDashboard() {
     const balanceValue = document.getElementById('balanceValue');
     const balanceTrend = document.getElementById('balanceTrend');
@@ -189,30 +208,32 @@ async function renderDashboard() {
             orders = ordersRes.data || [];
             expenses = expRes.data || [];
         } else if (typeof state !== 'undefined') {
-            orders = state.sales || [];
+            orders = state.sales || state.orders || [];
             expenses = [...(state.expenses?.fixed || []), ...(state.expenses?.logistics || [])];
         }
 
         const now = new Date();
-        const todayStr = now.toISOString().split('T')[0];
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
         // 1. Entradas de Hoje
         const todayOrders = orders.filter(o => {
             if (o.status === 'cancelled') return false;
-            const orderDate = new Date(o.created_at || o.date).toISOString().split('T')[0];
-            return orderDate === todayStr;
+            const orderDate = parseDateSafe(o.created_at || o.date);
+            const orderDateStr = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${String(orderDate.getDate()).padStart(2, '0')}`;
+            return orderDateStr === todayStr;
         });
         const todayIn = todayOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
 
         // 2. Gastos de Hoje
         const todayExp = expenses.filter(e => {
-            const expDate = new Date(e.created_at || e.date).toISOString().split('T')[0];
-            return expDate === todayStr;
+            const expDate = parseDateSafe(e.created_at || e.date);
+            const expDateStr = `${expDate.getFullYear()}-${String(expDate.getMonth() + 1).padStart(2, '0')}-${String(expDate.getDate()).padStart(2, '0')}`;
+            return expDateStr === todayStr;
         });
         const todayOut = todayExp.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
 
-        if (inToday) inToday.textContent = `R$ ${todayIn.toFixed(2)}`;
-        if (outToday) outToday.textContent = `R$ ${todayOut.toFixed(2)}`;
+        if (inToday) inToday.textContent = `R$ ${todayIn.toFixed(2).replace('.', ',')}`;
+        if (outToday) outToday.textContent = `R$ ${todayOut.toFixed(2).replace('.', ',')}`;
 
         // 3. Saldo Atual Geral
         const totalInGeral = orders
@@ -222,7 +243,7 @@ async function renderDashboard() {
             .reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
         const currentBalance = totalInGeral - totalOutGeral;
 
-        balanceValue.textContent = `R$ ${currentBalance.toFixed(2)}`;
+        balanceValue.textContent = `R$ ${currentBalance.toFixed(2).replace('.', ',')}`;
         if (balanceTrend) {
             balanceTrend.textContent = orders.length > 0 
                 ? `${orders.length} pedido(s) registrado(s)` 
@@ -234,12 +255,12 @@ async function renderDashboard() {
 
         const weekOrders = orders.filter(o => {
             if (o.status === 'cancelled') return false;
-            const d = new Date(o.created_at || o.date);
+            const d = parseDateSafe(o.created_at || o.date);
             return d >= cycleStart && d <= now;
         });
 
         const weekExp = expenses.filter(e => {
-            const d = new Date(e.created_at || e.date);
+            const d = parseDateSafe(e.created_at || e.date);
             return d >= cycleStart && d <= now;
         });
 
@@ -249,7 +270,7 @@ async function renderDashboard() {
 
         const isWednesday = now.getDay() === 3;
 
-        if (weekBalance) weekBalance.textContent = `R$ ${weekNet.toFixed(2)}`;
+        if (weekBalance) weekBalance.textContent = `R$ ${weekNet.toFixed(2).replace('.', ',')}`;
         if (weekRange) {
             const startStr = cycleStart.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
             const endStr = cycleEnd.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
@@ -270,13 +291,13 @@ async function renderDashboard() {
 
         // 5. Saldo do Mês
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const monthOrders = orders.filter(o => o.status !== 'cancelled' && new Date(o.created_at || o.date) >= startOfMonth);
-        const monthExp = expenses.filter(e => new Date(e.created_at || e.date) >= startOfMonth);
+        const monthOrders = orders.filter(o => o.status !== 'cancelled' && parseDateSafe(o.created_at || o.date) >= startOfMonth);
+        const monthExp = expenses.filter(e => parseDateSafe(e.created_at || e.date) >= startOfMonth);
         const monthInVal = monthOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
         const monthOutVal = monthExp.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
         const monthNet = monthInVal - monthOutVal;
 
-        if (monthBalance) monthBalance.textContent = `R$ ${monthNet.toFixed(2)}`;
+        if (monthBalance) monthBalance.textContent = `R$ ${monthNet.toFixed(2).replace('.', ',')}`;
         if (monthRange) monthRange.textContent = now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
         if (monthBadge) {
             monthBadge.textContent = monthNet >= 0 ? '🟢 Positivo' : '🔴 Deficit';
@@ -291,14 +312,15 @@ async function renderDashboard() {
                 movList.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:15px; font-size:12px;">Nenhuma movimentação recente</div>';
             } else {
                 movList.innerHTML = recentOrders.map(o => {
-                    const timeStr = new Date(o.created_at || o.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                    const timeStr = parseDateSafe(o.created_at || o.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                    const valFormatted = Number(o.total || o.amount || 0).toFixed(2).replace('.', ',');
                     return `
                         <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #1E293B;">
                             <div>
                                 <strong style="color:#F1F5F9; font-size:13px; display:block;">👤 ${escapeHtml(o.client_name || o.customer_name || 'Venda/Pedido')}</strong>
                                 <span style="font-size:11px; color:#94A3B8;">⏰ ${timeStr} • ${o.order_type === 'delivery' ? '🛵 Entrega' : '🏪 Balcão'}</span>
                             </div>
-                            <span style="font-size:14px; font-weight:bold; color:#10B981;">+ R$ ${Number(o.total || o.amount || 0).toFixed(2)}</span>
+                            <span style="font-size:14px; font-weight:bold; color:#10B981;">+ R$ ${valFormatted}</span>
                         </div>
                     `;
                 }).join('');
