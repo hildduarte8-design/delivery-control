@@ -31,11 +31,13 @@ function openModal(title, bodyHtml) {
     const overlay = document.getElementById('modalOverlay');
 
     if (titleEl) titleEl.textContent = title;
-    if (bodyEl) bodyEl.innerHTML = bodyHtml;
+    if (bodyEl) {
+        bodyEl.innerHTML = bodyHtml;
+        bodyEl.scrollTop = 0; // Garante que a rolagem do formulário comece sempre no topo
+    }
     if (overlay) {
         overlay.classList.add('active');
-        overlay.style.display = 'flex';
-        document.body.style.overflow = 'hidden'; // Evita rolagem da página ao fundo
+        document.body.classList.add('modal-open'); // Congela o fundo e impede a atualização por gesto
     }
 }
 
@@ -43,8 +45,7 @@ function closeModal() {
     const overlay = document.getElementById('modalOverlay');
     if (overlay) {
         overlay.classList.remove('active');
-        overlay.style.display = 'none';
-        document.body.style.overflow = ''; // Restaura a rolagem do fundo
+        document.body.classList.remove('modal-open'); // Libera a rolagem da página principal
     }
 }
 
