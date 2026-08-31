@@ -3,7 +3,7 @@
 const SUPABASE_URL = 'https://wdxqkagwuzekzxdhxbnp.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_raTvDULM2YDmTngVIOM11g_CZe6jZWj';
 
-const dbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const dbClient = typeof supabase !== 'undefined' ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // Gerenciador de Armazenamento Local (Offline First)
 const DB = {
@@ -24,6 +24,8 @@ const state = {
     stock: [], 
     recipes: [], 
     sales: [],
+    orders: [],
+    menu: [],
     expenses: { fixed: [], logistics: [] },
     settings: {}
 };
@@ -43,15 +45,24 @@ async function loadAll() {
     state.stock = DB.load('dly_stock', []);
     state.recipes = DB.load('dly_recipes', []);
     state.sales = DB.load('dly_sales', []);
+    state.orders = DB.load('dly_orders', []);
+    state.menu = DB.load('dly_menu', []);
     state.expenses = DB.load('dly_expenses', { fixed: [], logistics: [] });
     state.settings = DB.load('dly_settings', { storeName: 'Delivery Control', phone: '', password: '' });
 
     // 2. Sincronização em nuvem com o Supabase
+    if (!dbClient) {
+        console.warn('Cliente Supabase não inicializado. Operando estritamente offline.');
+        return;
+    }
+
     try {
-        const [stockRes, recipeRes, salesRes, expRes, cfgRes] = await Promise.all([
+        const [stockRes, recipeRes, salesRes, ordersRes, productsRes, expRes, cfgRes] = await Promise.all([
             dbClient.from('stock').select('*'),
             dbClient.from('recipes').select('*'),
             dbClient.from('sales').select('*'),
+            dbClient.from('orders').select('*'),
+            dbClient.from('products').select('*'),
             dbClient.from('expenses').select('*'),
             dbClient.from('store_settings').select('*').eq('id', 1).maybeSingle()
         ]);
@@ -72,6 +83,18 @@ async function loadAll() {
         if (salesRes.data) {
             state.sales = salesRes.data;
             DB.save('dly_sales', state.sales);
+        }
+
+        // Pedidos ao vivo
+        if (ordersRes.data) {
+            state.orders = ordersRes.data;
+            DB.save('dly_orders', state.orders);
+        }
+
+        // Cardápio / Produtos
+        if (productsRes.data) {
+            state.menu = productsRes.data;
+            DB.save('dly_menu', state.menu);
         }
 
         // Despesas (Fixas e Logística)
