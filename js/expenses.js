@@ -2,11 +2,19 @@
 
 function escapeHtml(text) {
     const div = document.createElement('div');
-    div.appendChild(document.createTextNode(String(text || '')));
+    div.appendChild(document.createTextNode(String(text ?? '')));
     return div.innerHTML;
 }
 
 const ExpensesManager = {
+    // Helper para interpretar datas sem erro de fuso ou sintaxe
+    parseDateSafe(dateInput) {
+        if (!dateInput) return null;
+        if (dateInput instanceof Date) return dateInput;
+        const d = new Date(String(dateInput).replace(' ', 'T'));
+        return isNaN(d.getTime()) ? null : d;
+    },
+
     // Carrega despesas do Supabase ou LocalStorage
     async fetchExpenses() {
         try {
@@ -20,6 +28,7 @@ const ExpensesManager = {
                         state.expenses = { fixed, logistics };
                         if (typeof DB !== 'undefined') DB.save('dly_expenses', state.expenses);
                     }
+                    localStorage.setItem('dly_expenses', JSON.stringify({ fixed, logistics }));
                     return { fixed, logistics };
                 }
             }
@@ -30,7 +39,11 @@ const ExpensesManager = {
         if (typeof state !== 'undefined' && state.expenses) {
             return state.expenses;
         }
-        return JSON.parse(localStorage.getItem('dly_expenses') || '{"fixed":[],"logistics":[]}');
+        try {
+            return JSON.parse(localStorage.getItem('dly_expenses') || '{"fixed":[],"logistics":[]}');
+        } catch (e) {
+            return { fixed: [], logistics: [] };
+        }
     },
 
     // Salva ou Edita Conta Fixa
@@ -41,6 +54,7 @@ const ExpensesManager = {
 
         if (!desc || amt <= 0) {
             if (typeof showToast === 'function') showToast('Preencha a descrição e um valor válido!', 'error');
+            else alert('Preencha a descrição e um valor válido!');
             return;
         }
 
@@ -57,7 +71,8 @@ const ExpensesManager = {
 
         try {
             if (typeof dbClient !== 'undefined') {
-                await dbClient.from('expenses').upsert([payload]);
+                const { error } = await dbClient.from('expenses').upsert([payload]);
+                if (error) console.error('Erro no Supabase ao salvar conta fixa:', error.message);
             }
         } catch (e) {
             console.error('Erro ao salvar conta fixa:', e);
@@ -67,7 +82,7 @@ const ExpensesManager = {
         if (!state.expenses) state.expenses = { fixed: [], logistics: [] };
         if (!state.expenses.fixed) state.expenses.fixed = [];
 
-        const index = state.expenses.fixed.findIndex(e => e.id === id);
+        const index = state.expenses.fixed.findIndex(e => String(e.id) === String(id));
         if (index >= 0) {
             state.expenses.fixed[index] = { ...state.expenses.fixed[index], ...payload };
         } else {
@@ -91,6 +106,7 @@ const ExpensesManager = {
 
         if (!desc || amt <= 0) {
             if (typeof showToast === 'function') showToast('Preencha a descrição e um valor válido!', 'error');
+            else alert('Preencha a descrição e um valor válido!');
             return;
         }
 
@@ -106,7 +122,8 @@ const ExpensesManager = {
 
         try {
             if (typeof dbClient !== 'undefined') {
-                await dbClient.from('expenses').upsert([payload]);
+                const { error } = await dbClient.from('expenses').upsert([payload]);
+                if (error) console.error('Erro no Supabase ao salvar logística:', error.message);
             }
         } catch (e) {
             console.error('Erro ao salvar gasto de logística:', e);
@@ -116,7 +133,7 @@ const ExpensesManager = {
         if (!state.expenses) state.expenses = { fixed: [], logistics: [] };
         if (!state.expenses.logistics) state.expenses.logistics = [];
 
-        const index = state.expenses.logistics.findIndex(e => e.id === id);
+        const index = state.expenses.logistics.findIndex(e => String(e.id) === String(id));
         if (index >= 0) {
             state.expenses.logistics[index] = { ...state.expenses.logistics[index], ...payload };
         } else {
@@ -146,7 +163,7 @@ const ExpensesManager = {
         }
 
         if (typeof state !== 'undefined' && state.expenses && state.expenses[type]) {
-            state.expenses[type] = state.expenses[type].filter(e => e.id !== id);
+            state.expenses[type] = state.expenses[type].filter(e => String(e.id) !== String(id));
             if (typeof DB !== 'undefined') DB.save('dly_expenses', state.expenses);
             localStorage.setItem('dly_expenses', JSON.stringify(state.expenses));
         }
@@ -163,8 +180,10 @@ const ExpensesManager = {
 function openFixedExpenseModal(id = null) {
     let exp = null;
     if (id && typeof state !== 'undefined' && state.expenses?.fixed) {
-        exp = state.expenses.fixed.find(e => e.id === id);
+        exp = state.expenses.fixed.find(e => String(e.id) === String(id));
     }
+
+    const safeId = id ? escapeHtml(id) : null;
 
     const modalBody = `
         <div class="form-group">
@@ -183,8 +202,8 @@ function openFixedExpenseModal(id = null) {
             </div>
         </div>
 
-        <button class="btn btn-large" onclick="ExpensesManager.saveFixedExpense(${id ? `'${id}'` : 'null'})" style="margin-top:12px;">
-            💾 ${id ? 'Atualizar' : 'Salvar'} Conta Fixa
+        <button class="btn btn-large" onclick="ExpensesManager.saveFixedExpense(${safeId ? `'${safeId}'` : 'null'})" style="margin-top:12px; width:100%; min-height:44px; touch-action:manipulation;">
+            💾 ${safeId ? 'Atualizar' : 'Salvar'} Conta Fixa
         </button>
     `;
 
@@ -197,8 +216,10 @@ function openFixedExpenseModal(id = null) {
 function openLogisticsModal(id = null) {
     let exp = null;
     if (id && typeof state !== 'undefined' && state.expenses?.logistics) {
-        exp = state.expenses.logistics.find(e => e.id === id);
+        exp = state.expenses.logistics.find(e => String(e.id) === String(id));
     }
+
+    const safeId = id ? escapeHtml(id) : null;
 
     const modalBody = `
         <div class="form-group">
@@ -209,8 +230,8 @@ function openLogisticsModal(id = null) {
             <label>Valor (R$) *</label>
             <input type="number" step="0.01" id="log_amt" value="${exp?.amount || ''}" placeholder="0.00">
         </div>
-        <button class="btn btn-large" onclick="ExpensesManager.saveLogisticsExpense(${id ? `'${id}'` : 'null'})" style="margin-top:12px;">
-            💾 ${id ? 'Atualizar' : 'Salvar'} Gasto
+        <button class="btn btn-large" onclick="ExpensesManager.saveLogisticsExpense(${safeId ? `'${safeId}'` : 'null'})" style="margin-top:12px; width:100%; min-height:44px; touch-action:manipulation;">
+            💾 ${safeId ? 'Atualizar' : 'Salvar'} Gasto
         </button>
     `;
 
@@ -241,9 +262,10 @@ async function renderExpenses() {
     }
 
     listEl.innerHTML = fixedList.map(exp => {
-        const amt = Number(exp.amount || 0).toFixed(2);
+        const amtFormatted = Number(exp.amount || 0).toFixed(2).replace('.', ',');
         const dueDay = exp.due_day || exp.dueDay || 1;
         const safeDesc = escapeHtml(exp.description);
+        const safeId = escapeHtml(exp.id);
 
         return `
             <div class="card" style="margin-bottom:8px; padding:12px; background:#1E293B; display:flex; justify-content:space-between; align-items:center;">
@@ -252,9 +274,9 @@ async function renderExpenses() {
                     <span style="font-size:11px; color:#94A3B8;">Vence dia ${dueDay}</span>
                 </div>
                 <div style="display:flex; align-items:center; gap:8px;">
-                    <strong style="color:#EF4444; font-size:14px; margin-right:4px;">R$ ${amt}</strong>
-                    <button class="btn btn-sm" onclick="openFixedExpenseModal('${escapeHtml(exp.id)}')" style="background:#3B82F6; color:#fff; padding:4px 8px; font-size:11px;" title="Editar">✏️</button>
-                    <button class="btn btn-sm" onclick="ExpensesManager.deleteExpense('${escapeHtml(exp.id)}', 'fixed')" style="background:#EF4444; color:#fff; padding:4px 8px; font-size:11px;" title="Excluir">🗑️</button>
+                    <strong style="color:#EF4444; font-size:14px; margin-right:4px;">R$ ${amtFormatted}</strong>
+                    <button class="btn btn-sm" onclick="openFixedExpenseModal('${safeId}')" style="background:#3B82F6; color:#fff; padding:6px 10px; min-height:36px; font-size:11px; touch-action:manipulation;" title="Editar">✏️</button>
+                    <button class="btn btn-sm" onclick="ExpensesManager.deleteExpense('${safeId}', 'fixed')" style="background:#EF4444; color:#fff; padding:6px 10px; min-height:36px; font-size:11px; touch-action:manipulation;" title="Excluir">🗑️</button>
                 </div>
             </div>
         `;
@@ -283,9 +305,12 @@ async function renderLogisticsList() {
     }
 
     listEl.innerHTML = logisticsList.map(exp => {
-        const amt = Number(exp.amount || 0).toFixed(2);
+        const amtFormatted = Number(exp.amount || 0).toFixed(2).replace('.', ',');
         const safeDesc = escapeHtml(exp.description);
-        const dateStr = exp.created_at ? new Date(exp.created_at).toLocaleDateString('pt-BR') : '';
+        const safeId = escapeHtml(exp.id);
+        
+        const dateObj = ExpensesManager.parseDateSafe(exp.created_at);
+        const dateStr = dateObj ? dateObj.toLocaleDateString('pt-BR') : '';
 
         return `
             <div class="card" style="margin-bottom:8px; padding:12px; background:#1E293B; display:flex; justify-content:space-between; align-items:center;">
@@ -294,9 +319,9 @@ async function renderLogisticsList() {
                     ${dateStr ? `<span style="font-size:11px; color:#94A3B8;">${dateStr}</span>` : ''}
                 </div>
                 <div style="display:flex; align-items:center; gap:8px;">
-                    <strong style="color:#EF4444; font-size:14px; margin-right:4px;">R$ ${amt}</strong>
-                    <button class="btn btn-sm" onclick="openLogisticsModal('${escapeHtml(exp.id)}')" style="background:#3B82F6; color:#fff; padding:4px 8px; font-size:11px;" title="Editar">✏️</button>
-                    <button class="btn btn-sm" onclick="ExpensesManager.deleteExpense('${escapeHtml(exp.id)}', 'logistics')" style="background:#EF4444; color:#fff; padding:4px 8px; font-size:11px;" title="Excluir">🗑️</button>
+                    <strong style="color:#EF4444; font-size:14px; margin-right:4px;">R$ ${amtFormatted}</strong>
+                    <button class="btn btn-sm" onclick="openLogisticsModal('${safeId}')" style="background:#3B82F6; color:#fff; padding:6px 10px; min-height:36px; font-size:11px; touch-action:manipulation;" title="Editar">✏️</button>
+                    <button class="btn btn-sm" onclick="ExpensesManager.deleteExpense('${safeId}', 'logistics')" style="background:#EF4444; color:#fff; padding:6px 10px; min-height:36px; font-size:11px; touch-action:manipulation;" title="Excluir">🗑️</button>
                 </div>
             </div>
         `;
