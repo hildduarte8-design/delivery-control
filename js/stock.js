@@ -1,9 +1,8 @@
 // js/stock.js - Gestão Unificada e Persistente de Insumos / Estoque
 
-// Auxiliar local de sanitização contra XSS
 function escapeHtml(text) {
     const div = document.createElement('div');
-    div.appendChild(document.createTextNode(String(text || '')));
+    div.appendChild(document.createTextNode(String(text ?? '')));
     return div.innerHTML;
 }
 
@@ -15,15 +14,16 @@ const StockManager = {
         const unit = document.getElementById('stk_unit')?.value || 'un';
 
         const unitCost = packageQty > 0 ? totalPrice / packageQty : 0;
+        const formattedCost = unitCost.toFixed(2).replace('.', ',');
 
         const labelEl = document.getElementById('stk_unit_label');
         const previewEl = document.getElementById('stk_unit_cost_preview');
 
         if (labelEl) labelEl.textContent = unit;
-        if (previewEl) previewEl.textContent = `R$ ${unitCost.toFixed(2)}`;
+        if (previewEl) previewEl.textContent = `R$ ${formattedCost}`;
     },
 
-    // Busca insumos (prioriza Supabase; se retornar sucesso — mesmo vazio —, sincroniza o cache)
+    // Busca insumos (prioriza Supabase; se retornar sucesso, sincroniza o cache)
     async fetchStock() {
         try {
             if (typeof dbClient !== 'undefined') {
@@ -42,13 +42,17 @@ const StockManager = {
         if (typeof DB !== 'undefined') {
             return DB.load('dly_stock', []);
         }
-        return JSON.parse(localStorage.getItem('dly_stock') || '[]');
+        try {
+            return JSON.parse(localStorage.getItem('dly_stock') || '[]');
+        } catch (e) {
+            return [];
+        }
     },
 
     // Abre o modal de edição preenchendo os dados do insumo
     async openEditStockModal(id) {
         const items = await this.fetchStock();
-        const item = items.find(i => i.id === id);
+        const item = items.find(i => String(i.id) === String(id));
         if (!item) return;
 
         const template = document.getElementById('stockModalTemplate');
@@ -69,9 +73,10 @@ const StockManager = {
 
             this.calculateUnitCostPreview();
 
-            const saveBtn = document.querySelector('#modalBody button.btn-large');
+            const saveBtn = document.querySelector('#modalBody button.btn-large') || document.querySelector('#modal-body button.btn-large');
             if (saveBtn) {
-                saveBtn.setAttribute('onclick', `StockManager.saveStockItem('${id}')`);
+                const safeId = escapeHtml(id);
+                saveBtn.setAttribute('onclick', `StockManager.saveStockItem('${safeId}')`);
                 saveBtn.textContent = '💾 Salvar Alterações do Insumo';
             }
         }, 50);
@@ -79,11 +84,15 @@ const StockManager = {
 
     // Modal para entrada rápida de estoque (somar quantidade ao comprar mais)
     quickAddStockModal(id, name, currentQty, unit) {
+        const safeId = escapeHtml(id);
+        const safeName = escapeHtml(name);
+        const safeUnit = escapeHtml(unit);
+
         const bodyHtml = `
             <div style="padding:10px;">
                 <p style="font-size:13px; color:#CBD5E1; margin-bottom:12px;">
-                    Insumo: <strong style="color:#F59E0B;">${escapeHtml(name)}</strong><br>
-                    Estoque Atual: <strong>${currentQty} ${escapeHtml(unit)}</strong>
+                    Insumo: <strong style="color:#F59E0B;">${safeName}</strong><br>
+                    Estoque Atual: <strong>${currentQty} ${safeUnit}</strong>
                 </p>
 
                 <div class="form-group" style="margin-bottom:14px;">
@@ -91,7 +100,7 @@ const StockManager = {
                     <input type="number" id="add_qty_input" step="0.001" placeholder="Ex: 2.5 ou 10" autofocus style="font-size:16px; font-weight:700; text-align:center;">
                 </div>
 
-                <button class="btn btn-large btn-success" onclick="StockManager.applyQuickAdd('${id}', ${currentQty})">
+                <button class="btn btn-large btn-success" onclick="StockManager.applyQuickAdd('${safeId}', ${currentQty})" style="width:100%; min-height:44px; touch-action:manipulation;">
                     ✅ Confirmar Entrada no Estoque
                 </button>
             </div>
@@ -109,14 +118,15 @@ const StockManager = {
 
         if (addedQty <= 0) {
             if (typeof showToast === 'function') showToast('Informe uma quantidade válida!', 'error');
+            else alert('Informe uma quantidade válida!');
             return;
         }
 
-        const newQty = currentQty + addedQty;
+        const newQty = Number((currentQty + addedQty).toFixed(3));
 
         // 1. Atualização imediata no Cache local (UI responde na hora)
         let localStock = JSON.parse(localStorage.getItem('dly_stock') || '[]');
-        const idx = localStock.findIndex(i => i.id === id);
+        const idx = localStock.findIndex(i => String(i.id) === String(id));
         if (idx >= 0) {
             localStock[idx].quantity = newQty;
             localStock[idx].current_qty = newQty;
@@ -128,13 +138,11 @@ const StockManager = {
         // 2. Atualização segura no Supabase
         if (typeof dbClient !== 'undefined') {
             try {
-                // Tenta atualizar a coluna standard 'quantity'
                 let { error } = await dbClient.from('stock').update({ 
                     quantity: newQty, 
                     updated_at: new Date().toISOString() 
                 }).eq('id', id);
 
-                // Se o banco usar 'current_qty', tenta como fallback
                 if (error) {
                     await dbClient.from('stock').update({ 
                         current_qty: newQty, 
@@ -192,7 +200,7 @@ const StockManager = {
         try {
             if (typeof dbClient !== 'undefined') {
                 const { error } = await dbClient.from('stock').upsert([itemPayload]);
-                if (error) console.error('Erro ao salvar no Supabase:', error);
+                if (error) console.error('Erro ao salvar no Supabase:', error.message);
             }
         } catch (e) {
             console.error('Erro ao salvar no Supabase:', e);
@@ -200,7 +208,7 @@ const StockManager = {
 
         // 2. Grava no Cache Local
         let localStock = JSON.parse(localStorage.getItem('dly_stock') || '[]');
-        const index = localStock.findIndex(i => i.id === itemId || i.name === name);
+        const index = localStock.findIndex(i => String(i.id) === String(itemId) || i.name === name);
 
         if (index >= 0) {
             localStock[index] = { ...localStock[index], ...itemPayload };
@@ -235,7 +243,7 @@ const StockManager = {
         }
 
         let localStock = JSON.parse(localStorage.getItem('dly_stock') || '[]');
-        localStock = localStock.filter(i => i.id !== id);
+        localStock = localStock.filter(i => String(i.id) !== String(id));
 
         localStorage.setItem('dly_stock', JSON.stringify(localStock));
         if (typeof DB !== 'undefined') DB.save('dly_stock', localStock);
@@ -280,6 +288,7 @@ async function renderStockList() {
         const safeId = escapeHtml(item.id || '');
         const safeName = escapeHtml(item.name || '');
         const safeUnit = escapeHtml(item.unit || 'un');
+        const formattedCost = unitCost.toFixed(2).replace('.', ',');
 
         return `
             <div class="card" style="margin-bottom:10px; padding:12px; background:#1E293B; border-left:4px solid ${isLow ? '#EF4444' : '#10B981'}; border-radius:8px;">
@@ -289,7 +298,7 @@ async function renderStockList() {
                             ${safeName} ${isLow ? '<small style="color:#EF4444; font-size:10px; font-weight:700;">(Abaixo do Mínimo)</small>' : ''}
                         </strong>
                         <span style="font-size:11px; color:#94A3B8;">
-                            Emb: ${packageQty} ${safeUnit} • Custo: <strong style="color:#10B981;">R$ ${unitCost.toFixed(2)}/${safeUnit}</strong>
+                            Emb: ${packageQty} ${safeUnit} • Custo: <strong style="color:#10B981;">R$ ${formattedCost}/${safeUnit}</strong>
                         </span>
                     </div>
                     <div style="text-align:right;">
@@ -301,13 +310,13 @@ async function renderStockList() {
 
                 <!-- BARRINHA DE AÇÕES -->
                 <div style="display:flex; gap:6px; justify-content:flex-end; border-top:1px dashed #334155; padding-top:8px; margin-top:6px;">
-                    <button class="btn btn-sm" onclick="StockManager.quickAddStockModal('${safeId}', '${safeName.replace(/'/g, "\\'")}', ${currentQty}, '${safeUnit}')" style="background:#10B981; color:#fff; padding:4px 10px; font-size:11px;">
+                    <button class="btn btn-sm" onclick="StockManager.quickAddStockModal('${safeId}', '${safeName.replace(/'/g, "\\'")}', ${currentQty}, '${safeUnit}')" style="background:#10B981; color:#fff; padding:6px 10px; min-height:36px; font-size:11px; touch-action:manipulation;">
                         ➕ Repor
                     </button>
-                    <button class="btn btn-sm btn-secondary" onclick="StockManager.openEditStockModal('${safeId}')" style="padding:4px 10px; font-size:11px;">
+                    <button class="btn btn-sm btn-secondary" onclick="StockManager.openEditStockModal('${safeId}')" style="padding:6px 10px; min-height:36px; font-size:11px; touch-action:manipulation;">
                         ✏️ Editar
                     </button>
-                    <button class="btn btn-sm btn-danger" onclick="StockManager.deleteStockItem('${safeId}')" style="padding:4px 8px; font-size:11px;" title="Excluir">
+                    <button class="btn btn-sm btn-danger" onclick="StockManager.deleteStockItem('${safeId}')" style="padding:6px 10px; min-height:36px; font-size:11px; touch-action:manipulation;" title="Excluir">
                         🗑️
                     </button>
                 </div>
