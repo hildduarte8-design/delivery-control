@@ -250,18 +250,33 @@
                 </div>
             </div>
 
-            <!-- FORMA DE PAGAMENTO -->
-            <div class="form-group" style="margin-bottom: 10px;">
-                <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Forma de Pagamento *</label>
-                <select id="cli-payment" onchange="MenuApp.toggleChangeInput(this.value)" style="padding: 10px 12px; font-size: 13px; width: 100%; background: #1E293B; color: #F1F5F9; border: 1px solid #334155; border-radius: 8px;">
-                    <option value="Pix">⚡ Pix</option>
-                    <option value="Cartão">💳 Cartão (Máquina na entrega/retirada)</option>
-                    <option value="Dinheiro">💵 Dinheiro (Em espécie)</option>
-                </select>
+            <!-- FORMA DE PAGAMENTO SELEÇÃO RÁPIDA (UX/UI IFOOD) -->
+            <div class="form-group" style="margin-bottom: 14px;">
+                <label style="font-size: 12px; color: #94A3B8; margin-bottom: 6px; display: block; font-weight: 600;">
+                    Forma de Pagamento * <span style="font-size: 11px; color: #64748B; font-weight: normal;">(Toque para escolher)</span>
+                </label>
+                
+                <div class="payment-options-grid" id="paymentOptions">
+                    <button type="button" class="payment-card active" onclick="MenuApp.selectPayment('Pix', this)">
+                        <span class="pay-icon">⚡</span>
+                        <span class="pay-label">Pix</span>
+                    </button>
+                    <button type="button" class="payment-card" onclick="MenuApp.selectPayment('Cartão', this)">
+                        <span class="pay-icon">💳</span>
+                        <span class="pay-label">Cartão</span>
+                    </button>
+                    <button type="button" class="payment-card" onclick="MenuApp.selectPayment('Dinheiro', this)">
+                        <span class="pay-icon">💵</span>
+                        <span class="pay-label">Dinheiro</span>
+                    </button>
+                </div>
+
+                <!-- Campo oculto lido na hora de enviar o pedido -->
+                <input type="hidden" id="cli-payment" value="Pix">
             </div>
 
             <!-- CAMPO PIX -->
-            <div id="pix-info-group" style="display: none; margin-bottom: 12px; background: #0F172A; padding: 12px; border-radius: 8px; border: 1px solid #10B981;">
+            <div id="pix-info-group" style="margin-bottom: 12px; background: #0F172A; padding: 12px; border-radius: 8px; border: 1px solid #10B981;">
                 <div style="font-size: 11px; color: #10B981; font-weight: bold; margin-bottom: 6px;">⚡ Chave Pix da Loja:</div>
                 <div style="display: flex; gap: 8px; align-items: center;">
                     <input type="text" id="store-pix-key" value="Carregando..." readonly style="padding: 8px; font-size: 12px; font-weight: bold; background: #1E293B; color: #F1F5F9; border: 1px solid #334155; border-radius: 6px; flex: 1;">
