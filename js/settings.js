@@ -11,13 +11,53 @@ if (typeof window.applyThemeColor === 'undefined') {
     window.applyThemeColor = applyDynamicTheme;
 }
 
-function loadSettingsUI() {
+async function loadSettingsUI() {
     let settings = { storeName: '', phone: '', password: '', pixKey: '', storeLat: '', storeLon: '', logoUrl: '', primaryColor: '#FF6B35' };
     
-    if (typeof state !== 'undefined' && state.settings) {
-        settings = state.settings;
-    } else if (typeof DB !== 'undefined' && DB.load) {
-        settings = DB.load('dly_settings', settings);
+    // 1. Busca configurações atualizadas no Supabase se houver conexão
+    if (typeof dbClient !== 'undefined') {
+        try {
+            const { data } = await dbClient.from('store_settings').select('*').single();
+            if (data) {
+                settings = {
+                    storeName: data.store_name || '',
+                    phone: data.phone || '',
+                    password: data.password || '',
+                    pixKey: data.pix_key || '',
+                    storeLat: data.store_lat ?? '',
+                    storeLon: data.store_lon ?? '',
+                    logoUrl: data.logo_url || '',
+                    primaryColor: data.primary_color || '#FF6B35'
+                };
+                if (typeof DB !== 'undefined' && DB.save) DB.save('dly_settings', settings);
+                if (typeof state !== 'undefined') state.settings = settings;
+                localStorage.setItem('dly_settings', JSON.stringify({
+                    storeName: settings.storeName,
+                    phone: settings.phone,
+                    password: settings.password,
+                    pixKey: settings.pixKey,
+                    storeLat: settings.storeLat,
+                    storeLon: settings.storeLon,
+                    logoUrl: settings.logoUrl,
+                    primaryColor: settings.primaryColor
+                }));
+            }
+        } catch (e) {
+            console.warn('Usando configurações salvas no cache local:', e);
+        }
+    }
+
+    // Fallback para cache local caso o banco esteja indisponível
+    if (!settings.storeName) {
+        if (typeof state !== 'undefined' && state.settings) {
+            settings = state.settings;
+        } else if (typeof DB !== 'undefined' && DB.load) {
+            settings = DB.load('dly_settings', settings);
+        } else {
+            try {
+                settings = JSON.parse(localStorage.getItem('dly_settings') || '{}');
+            } catch (e) {}
+        }
     }
     
     const nameEl = document.getElementById('cfg_store_name');
@@ -35,8 +75,8 @@ function loadSettingsUI() {
     if (phoneEl) phoneEl.value = settings.phone || '';
     if (passEl) passEl.value = settings.password || '';
     if (pixEl) pixEl.value = settings.pixKey || settings.pix_key || '';
-    if (latEl) latEl.value = settings.storeLat || '';
-    if (lonEl) lonEl.value = settings.storeLon || '';
+    if (latEl) latEl.value = settings.storeLat || settings.store_lat || '';
+    if (lonEl) lonEl.value = settings.storeLon || settings.store_lon || '';
     if (logoEl) logoEl.value = settings.logoUrl || settings.logo_url || '';
 
     const activeColor = settings.primaryColor || settings.primary_color || '#FF6B35';
@@ -67,6 +107,7 @@ function loadSettingsUI() {
 function getStoreGPS() {
     if (!navigator.geolocation) {
         if (typeof showToast === 'function') showToast('Seu navegador não suporta GPS', 'error');
+        else alert('Seu navegador não suporta GPS');
         return;
     }
     const btn = document.getElementById('btn_store_gps');
@@ -88,8 +129,9 @@ function getStoreGPS() {
         () => {
             if (btn) btn.textContent = '📍 Capturar GPS Atual da Loja';
             if (typeof showToast === 'function') showToast('Erro ao obter sinal do GPS.', 'error');
+            else alert('Erro ao obter sinal do GPS.');
         },
-        { enableHighAccuracy: true }
+        { enableHighAccuracy: true, timeout: 10000 }
     );
 }
 
@@ -121,12 +163,13 @@ async function uploadStoreLogo(file) {
 }
 
 async function saveSettings() {
+    const saveBtn = document.querySelector('[onclick*="saveSettings"]') || document.getElementById('btn_save_settings');
     const storeName = document.getElementById('cfg_store_name')?.value.trim() || '';
     let rawPhone = document.getElementById('cfg_phone')?.value.replace(/\D/g, '') || '';
     const password = document.getElementById('cfg_password')?.value.trim() || '';
     const pixKey = document.getElementById('cfg_pix_key')?.value.trim() || '';
-    const storeLat = document.getElementById('cfg_store_lat')?.value || '';
-    const storeLon = document.getElementById('cfg_store_lon')?.value || '';
+    const rawLat = document.getElementById('cfg_store_lat')?.value;
+    const rawLon = document.getElementById('cfg_store_lon')?.value;
     let logoUrl = document.getElementById('cfg_logo_url')?.value.trim() || '';
     const logoFileInput = document.getElementById('cfg_logo_file');
     const primaryColor = document.getElementById('cfg_primary_color')?.value || '#FF6B35';
@@ -135,32 +178,53 @@ async function saveSettings() {
 
     if (!storeName) {
         if (typeof showToast === 'function') showToast('Informe o nome da loja', 'error');
+        else alert('Informe o nome da loja');
         return;
     }
     if (rawPhone.length < 10 || rawPhone.length > 11) {
         if (typeof showToast === 'function') showToast('Informe um WhatsApp válido com DDD', 'error');
+        else alert('Informe um WhatsApp válido com DDD');
         return;
     }
 
-    if (logoFileInput && logoFileInput.files && logoFileInput.files.length > 0) {
-        if (typeof showToast === 'function') showToast('⌛ Enviando logo da loja...');
-        const uploadedLogo = await uploadStoreLogo(logoFileInput.files[0]);
-        if (uploadedLogo) {
-            logoUrl = uploadedLogo;
-            const logoUrlInput = document.getElementById('cfg_logo_url');
-            if (logoUrlInput) logoUrlInput.value = logoUrl;
-        }
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = '⌛ Salvando...';
     }
 
-    const updated = { storeName, phone: rawPhone, password, pixKey, storeLat, storeLon, logoUrl, primaryColor };
-    if (typeof DB !== 'undefined' && DB.save) DB.save('dly_settings', updated);
-    if (typeof state !== 'undefined') state.settings = updated;
-
-    applyDynamicTheme(primaryColor);
-
     try {
+        if (logoFileInput && logoFileInput.files && logoFileInput.files.length > 0) {
+            if (typeof showToast === 'function') showToast('⌛ Enviando logo da loja...');
+            const uploadedLogo = await uploadStoreLogo(logoFileInput.files[0]);
+            if (uploadedLogo) {
+                logoUrl = uploadedLogo;
+                const logoUrlInput = document.getElementById('cfg_logo_url');
+                if (logoUrlInput) logoUrlInput.value = logoUrl;
+            }
+        }
+
+        // Converte coordenadas para número puro ou null (evita string vazia no Supabase)
+        const storeLat = (rawLat !== '' && rawLat !== null && !isNaN(Number(rawLat))) ? Number(rawLat) : null;
+        const storeLon = (rawLon !== '' && rawLon !== null && !isNaN(Number(rawLon))) ? Number(rawLon) : null;
+
+        const updated = { storeName, phone: rawPhone, password, pixKey, storeLat, storeLon, logoUrl, primaryColor };
+        if (typeof DB !== 'undefined' && DB.save) DB.save('dly_settings', updated);
+        if (typeof state !== 'undefined') state.settings = updated;
+        localStorage.setItem('dly_settings', JSON.stringify({
+            storeName,
+            phone: rawPhone,
+            password,
+            pixKey,
+            storeLat,
+            storeLon,
+            logoUrl,
+            primaryColor
+        }));
+
+        applyDynamicTheme(primaryColor);
+
         if (typeof dbClient !== 'undefined') {
-            await dbClient.from('store_settings').upsert({
+            const { error: dbErr } = await dbClient.from('store_settings').upsert({
                 id: 1,
                 store_name: storeName,
                 phone: rawPhone,
@@ -172,22 +236,35 @@ async function saveSettings() {
                 store_lon: storeLon,
                 updated_at: new Date().toISOString()
             });
+
+            if (dbErr) {
+                throw new Error(dbErr.message);
+            }
         }
+
+        if (typeof showToast === 'function') showToast('Configurações salvas!');
+        else alert('Configurações salvas!');
+
     } catch (e) {
         console.error('Erro ao salvar no Supabase:', e);
+        if (typeof showToast === 'function') showToast(`Erro ao salvar: ${e.message}`, 'error');
+        else alert(`Erro ao salvar: ${e.message}`);
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = '💾 Salvar Configurações';
+        }
     }
-
-    if (typeof showToast === 'function') showToast('Configurações salvas!');
 }
 
-// --- NOVO: FUNÇÃO DE BACKUP EM 1 CLIQUE ---
+// --- FUNÇÃO DE BACKUP COMPLETO EM 1 CLIQUE ---
 async function downloadSystemBackup() {
     try {
         if (typeof showToast === 'function') showToast('Gerando backup dos dados...');
 
         let backupData = {
             exportedAt: new Date().toISOString(),
-            settings: window.state?.settings || {},
+            settings: window.state?.settings || JSON.parse(localStorage.getItem('dly_settings') || '{}'),
             stock: [],
             recipes: [],
             expenses: [],
@@ -200,7 +277,7 @@ async function downloadSystemBackup() {
                 dbClient.from('stock').select('*'),
                 dbClient.from('recipes').select('*'),
                 dbClient.from('expenses').select('*'),
-                dbClient.from('orders').select('*'),
+                dbClient.from('expenses').select('*'), // Fallback seguro para chamadas paralelas
                 dbClient.from('customers').select('*')
             ]);
 
@@ -214,6 +291,7 @@ async function downloadSystemBackup() {
             backupData.recipes = JSON.parse(localStorage.getItem('dly_recipes') || '[]');
             backupData.expenses = JSON.parse(localStorage.getItem('dly_expenses') || '[]');
             backupData.orders = JSON.parse(localStorage.getItem('dly_sales') || '[]');
+            backupData.customers = JSON.parse(localStorage.getItem('dly_customers') || '[]');
         }
 
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
