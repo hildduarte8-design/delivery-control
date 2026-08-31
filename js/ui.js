@@ -10,10 +10,13 @@ function switchTab(tabId) {
     const btn = document.querySelector(`.bottom-nav button[data-tab="${tabId}"]`);
     if (btn) btn.classList.add('active');
     
+    // Fecha o menu flutuante (FAB) se estiver aberto
+    document.getElementById('fabMenu')?.classList.remove('active');
+
     // Executa o carregamento de dados da aba selecionada
     if (tabId === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
-    if (tabId === 'orders' && typeof OrdersManager !== 'undefined') OrdersManager.fetchOrders();
-    if (tabId === 'menu' && typeof MenuAdminManager !== 'undefined') MenuAdminManager.renderAdminProductsList();
+    if (tabId === 'orders' && typeof OrdersManager !== 'undefined' && OrdersManager.fetchOrders) OrdersManager.fetchOrders();
+    if (tabId === 'menu' && typeof MenuAdminManager !== 'undefined' && MenuAdminManager.renderAdminProductsList) MenuAdminManager.renderAdminProductsList();
     if (tabId === 'financial') {
         if (typeof renderStockList === 'function') renderStockList();
         if (typeof renderFixedList === 'function') renderFixedList();
@@ -32,7 +35,7 @@ function openModal(title, bodyHtml) {
     if (overlay) {
         overlay.classList.add('active');
         overlay.style.display = 'flex';
-        document.body.style.overflow = 'hidden'; // Evita rolagem do fundo
+        document.body.style.overflow = 'hidden'; // Evita rolagem da página ao fundo
     }
 }
 
@@ -41,7 +44,7 @@ function closeModal() {
     if (overlay) {
         overlay.classList.remove('active');
         overlay.style.display = 'none';
-        document.body.style.overflow = ''; // Restaura a rolagem
+        document.body.style.overflow = ''; // Restaura a rolagem do fundo
     }
 }
 
@@ -116,7 +119,7 @@ document.addEventListener('click', (e) => {
 
     const targetSub = subBtn.dataset.sub;
 
-    // 1. Troca a cor do botão ativo
+    // 1. Troca o destaque do botão ativo
     subtabsContainer.querySelectorAll('button').forEach(b => b.classList.remove('active'));
     subBtn.classList.add('active');
 
@@ -130,13 +133,13 @@ document.addEventListener('click', (e) => {
     });
 
     // 3. Executa a busca/renderização de dados correspondente à sub-aba aberta
-    if (targetSub === 'live-orders' && typeof OrdersManager !== 'undefined') {
+    if (targetSub === 'live-orders' && typeof OrdersManager !== 'undefined' && OrdersManager.fetchOrders) {
         OrdersManager.fetchOrders();
     }
     if (targetSub === 'manual-sales' && typeof renderSalesList === 'function') {
         renderSalesList();
     }
-    if (targetSub === 'customers' && typeof CustomersManager !== 'undefined') {
+    if (targetSub === 'customers' && typeof CustomersManager !== 'undefined' && CustomersManager.fetchCustomers) {
         CustomersManager.fetchCustomers();
     }
     if (targetSub === 'insumos' && typeof renderStockList === 'function') {
@@ -147,6 +150,9 @@ document.addEventListener('click', (e) => {
     }
     if (targetSub === 'logistics' && typeof renderLogisticsList === 'function') {
         renderLogisticsList();
+    }
+    if (targetSub === 'recipes' && typeof CalculatorManager !== 'undefined' && CalculatorManager.loadSavedRecipes) {
+        CalculatorManager.loadSavedRecipes();
     }
 });
 
