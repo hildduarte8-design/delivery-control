@@ -25,19 +25,22 @@ const OrdersManager = {
         }
     },
 
-    // Converter data para o fuso local (BRT - UTC-3) sem distorções no Safari / iOS
+    // Helper seguro para interpretar datas do Supabase sem quebrar no Safari/iOS
+    parseDateSafe(dateInput) {
+        if (!dateInput) return new Date();
+        if (dateInput instanceof Date) return dateInput;
+        return new Date(String(dateInput).replace(' ', 'T'));
+    },
+
+    // Converter data para o formato YYYY-MM-DD local sem erros de sintaxe
     getLocalDateStr(dateInput) {
         if (!dateInput) return '';
-        const iso = String(dateInput)
-            .replace(' ', 'T')
-            .replace(/([+-]\d{2}):?(\d{2})$/, '') + 'Z';
-        const d = new Date(iso);
+        const d = this.parseDateSafe(dateInput);
         if (isNaN(d.getTime())) return '';
-        
-        const brt = new Date(d.getTime() - 3 * 60 * 60 * 1000);
-        const year = brt.getUTCFullYear();
-        const month = String(brt.getUTCMonth() + 1).padStart(2, '0');
-        const day = String(brt.getUTCDate()).padStart(2, '0');
+
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
     },
 
@@ -49,7 +52,7 @@ const OrdersManager = {
             }
             if (this.audioCtx.state === 'suspended') {
                 this.audioCtx.resume().catch(err => {
-                    console.warn('AudioContext.resume() falhou ou aguarda interação:', err);
+                    console.warn('AudioContext.resume() aguarda interação do usuário:', err);
                 });
             }
         } catch (e) {
@@ -85,7 +88,7 @@ const OrdersManager = {
         }
     },
 
-    // Inicializa a escuta em Tempo Real (Supabase Realtime) - Executado uma única vez
+    // Inicializa a escuta em Tempo Real (Supabase Realtime)
     initRealtime() {
         if (typeof dbClient === 'undefined' || this.realtimeChannel) return;
 
@@ -164,7 +167,7 @@ const OrdersManager = {
 
         } catch (e) {
             console.error('Erro ao carregar pedidos:', e);
-            container.innerHTML = '<div style="color:#EF4444; text-align:center; padding:20px;">Erro ao carregar pedidos.</div>';
+            container.innerHTML = `<div style="color:#EF4444; text-align:center; padding:20px;">Erro ao carregar pedidos: ${escapeHtml(e.message)}</div>`;
         }
     },
 
@@ -188,21 +191,22 @@ const OrdersManager = {
             bar.style.display = 'flex';
         }
 
-        const todayStr = this.getLocalDateStr(new Date().toISOString());
+        const todayStr = this.getLocalDateStr(new Date());
         if (!this.selectedDate) this.selectedDate = todayStr;
 
-        const currentDateObj = new Date(this.selectedDate + 'T00:00:00');
+        const currentDateObj = this.parseDateSafe(this.selectedDate + 'T00:00:00');
         
         const prevDateObj = new Date(currentDateObj);
         prevDateObj.setDate(prevDateObj.getDate() - 1);
-        const prevDateStr = this.getLocalDateStr(prevDateObj.toISOString());
+        const prevDateStr = this.getLocalDateStr(prevDateObj);
 
         const nextDateObj = new Date(currentDateObj);
         nextDateObj.setDate(nextDateObj.getDate() + 1);
-        const nextDateStr = this.getLocalDateStr(nextDateObj.toISOString());
+        const nextDateStr = this.getLocalDateStr(nextDateObj);
 
         const isToday = this.selectedDate === todayStr;
-        const [y, m, d] = this.selectedDate.split('-');
+        const parts = this.selectedDate.split('-');
+        const y = parts[0] || '', m = parts[1] || '', d = parts[2] || '';
         const displayLabel = isToday ? `Hoje (${d}/${m})` : `${d}/${m}/${y}`;
         
         const countForDay = this.allOrders.filter(o => this.getLocalDateStr(o.created_at) === this.selectedDate).length;
@@ -243,7 +247,8 @@ const OrdersManager = {
         const filtered = this.allOrders.filter(o => this.getLocalDateStr(o.created_at) === this.selectedDate);
 
         if (filtered.length === 0) {
-            const [y, m, d] = (this.selectedDate || '').split('-');
+            const parts = (this.selectedDate || '').split('-');
+            const y = parts[0] || '', m = parts[1] || '', d = parts[2] || '';
             const formatted = d ? `${d}/${m}/${y}` : 'esta data';
             container.innerHTML = `<div style="color:#94A3B8; text-align:center; padding:40px 20px; background:#1E293B; border-radius:12px; border:1px solid #334155;">📭 Nenhum pedido registrado em <strong>${formatted}</strong>.</div>`;
             this.stopLiveTimers();
@@ -255,7 +260,7 @@ const OrdersManager = {
     },
 
     renderOrderCard(o) {
-        const dateFormatted = new Date(o.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const dateFormatted = this.parseDateSafe(o.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         
         let items = o.items;
         if (typeof items === 'string') {
@@ -340,7 +345,7 @@ const OrdersManager = {
             : '<div style="color:#94A3B8; font-size:12px;">Nenhum item listado.</div>';
 
         const clientOrdersCount = this.getClientOrdersCount(o.phone || o.customer_phone, o.client_name || o.customer_name);
-        const dateFormatted = new Date(o.created_at).toLocaleString('pt-BR');
+        const dateFormatted = this.parseDateSafe(o.created_at).toLocaleString('pt-BR');
 
         const safeOrderId = escapeHtml(o.id);
         const safeClientName = escapeHtml(o.client_name || o.customer_name || 'Cliente');
@@ -472,9 +477,7 @@ const OrdersManager = {
                     return;
                 }
 
-                const iso = String(createdAtStr).replace(' ', 'T').replace(/([+-]\d{2}):?(\d{2})$/, '') + 'Z';
-                const createdAt = new Date(iso);
-                
+                const createdAt = this.parseDateSafe(createdAtStr);
                 const diffMs = Math.max(0, now - createdAt);
                 const totalMins = Math.floor(diffMs / 60000);
                 const secs = Math.floor((diffMs % 60000) / 1000);
@@ -511,7 +514,7 @@ const OrdersManager = {
             const o = this.allOrders.find(item => String(item.id) === String(orderId));
             if (!o) return;
 
-            const dateFormatted = new Date(o.created_at).toLocaleString('pt-BR');
+            const dateFormatted = this.parseDateSafe(o.created_at).toLocaleString('pt-BR');
             const storeName = this.getStoreName();
 
             let items = o.items;
@@ -662,7 +665,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (targetOrderId) {
         let attempts = 0;
-        const MAX_ATTEMPTS = 30; // Timeout de segurança: 9s max
+        const MAX_ATTEMPTS = 30;
 
         const checkExist = setInterval(() => {
             attempts++;
