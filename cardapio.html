@@ -171,112 +171,116 @@
     </button>
 </div>
 
-<!-- MODAL DE CHECKOUT COM CROSS-SELLING -->
+<!-- MODAL DE CHECKOUT REESTRUTURADO (TOPO FIXO + CORPO ROLÁVEL) -->
 <div id="checkout-modal" class="modal-overlay no-print">
-    <div class="modal-body">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
-            <h3 style="color: #F1F5F9; font-size: 18px;">🛒 Finalizar Pedido</h3>
-            <button onclick="MenuApp.closeCheckoutModal()" style="background: transparent; border: none; color: #94A3B8; font-size: 22px; cursor: pointer; font-weight: bold;">✕</button>
+    <div class="modal">
+        <!-- CABEÇALHO FIXO -->
+        <div class="modal-header">
+            <h3 style="color: #F1F5F9; font-size: 18px; margin: 0;">🛒 Finalizar Pedido</h3>
+            <button type="button" onclick="MenuApp.closeCheckoutModal()" style="background: transparent; border: none; color: #94A3B8; font-size: 22px; cursor: pointer; font-weight: bold; line-height: 1;">✕</button>
         </div>
 
-        <!-- ÁREA DE CROSS-SELLING -->
-        <div id="cross-sell-section" class="cross-sell-box" style="display: none;">
-            <div class="cross-sell-title">🥤 Que tal acompanhar com...</div>
-            <div class="cross-sell-items" id="cross-sell-items-list"></div>
-        </div>
-
-        <div class="form-group" style="margin-bottom: 12px;">
-            <label style="font-size: 12px; color: #94A3B8; margin-bottom: 6px; display: block;">Tipo de Entrega</label>
-            <div class="toggle-group group-2" id="orderTypeToggle">
-                <button class="active" onclick="MenuApp.setOrderType('delivery')">🛵 Entrega</button>
-                <button onclick="MenuApp.setOrderType('pickup')">🏪 Retirada no Balcão</button>
+        <!-- CORPO ISOLADO PARA ROLAGEM -->
+        <div class="modal-body" id="checkoutModalBody">
+            <!-- ÁREA DE CROSS-SELLING -->
+            <div id="cross-sell-section" class="cross-sell-box" style="display: none;">
+                <div class="cross-sell-title">🥤 Que tal acompanhar com...</div>
+                <div class="cross-sell-items" id="cross-sell-items-list"></div>
             </div>
-        </div>
 
-        <!-- 1º CAMPO: WHATSAPP COM CONSULTA AUTOMÁTICA -->
-        <div class="form-group" style="margin-bottom: 10px;">
-            <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Seu WhatsApp (com DDD) *</label>
-            <input type="tel" id="cli-phone" placeholder="Ex: 33999999999" oninput="MenuApp.checkExistingCustomer(this.value)" style="padding: 10px 12px; font-size: 13px; width: 100%;" required>
-        </div>
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label style="font-size: 12px; color: #94A3B8; margin-bottom: 6px; display: block;">Tipo de Entrega</label>
+                <div class="toggle-group group-2" id="orderTypeToggle">
+                    <button class="active" onclick="MenuApp.setOrderType('delivery')">🛵 Entrega</button>
+                    <button onclick="MenuApp.setOrderType('pickup')">🏪 Retirada no Balcão</button>
+                </div>
+            </div>
 
-        <!-- RECONHECIMENTO DO CLIENTE -->
-        <div id="welcome-customer-badge" style="display: none; background: #0F172A; border: 1px solid #3B82F6; padding: 10px; border-radius: 8px; margin-bottom: 12px; font-size: 12px; color: #F1F5F9;">
-            👋 <span id="welcome-msg-text"></span>
-        </div>
-
-        <!-- 2º CAMPO: SEU NOME -->
-        <div class="form-group" style="margin-bottom: 10px;">
-            <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Seu Nome *</label>
-            <input type="text" id="cli-name" placeholder="Digite seu nome" style="padding: 10px 12px; font-size: 13px; width: 100%;">
-        </div>
-
-        <div id="delivery-address-group">
-            <button type="button" id="btn-gps" class="btn btn-sm" onclick="MenuApp.getGPSLocation()" style="margin-bottom: 10px; width: 100%; background: #3B82F6; color: #fff; font-size: 12px; font-weight: 600; padding: 10px;">
-                📍 Usar Minha Localização Atual (GPS)
-            </button>
-
+            <!-- 1º CAMPO: WHATSAPP COM CONSULTA AUTOMÁTICA -->
             <div class="form-group" style="margin-bottom: 10px;">
-                <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Endereço / Bairro (via GPS ou manual) *</label>
-                <input type="text" id="cli-address" placeholder="Rua e Bairro" style="padding: 10px 12px; font-size: 13px; width: 100%;">
+                <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Seu WhatsApp (com DDD) *</label>
+                <input type="tel" id="cli-phone" placeholder="Ex: 33999999999" oninput="MenuApp.checkExistingCustomer(this.value)" style="padding: 10px 12px; font-size: 13px; width: 100%;" required>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px;">
-                <div class="form-group">
-                    <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Número *</label>
-                    <input type="text" id="cli-number" placeholder="Ex: 123" style="padding: 10px 12px; font-size: 13px; width: 100%;">
+            <!-- RECONHECIMENTO DO CLIENTE -->
+            <div id="welcome-customer-badge" style="display: none; background: #0F172A; border: 1px solid #3B82F6; padding: 10px; border-radius: 8px; margin-bottom: 12px; font-size: 12px; color: #F1F5F9;">
+                👋 <span id="welcome-msg-text"></span>
+            </div>
+
+            <!-- 2º CAMPO: SEU NOME -->
+            <div class="form-group" style="margin-bottom: 10px;">
+                <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Seu Nome *</label>
+                <input type="text" id="cli-name" placeholder="Digite seu nome" style="padding: 10px 12px; font-size: 13px; width: 100%;">
+            </div>
+
+            <div id="delivery-address-group">
+                <button type="button" id="btn-gps" class="btn btn-sm" onclick="MenuApp.getGPSLocation()" style="margin-bottom: 10px; width: 100%; background: #3B82F6; color: #fff; font-size: 12px; font-weight: 600; padding: 10px;">
+                    📍 Usar Minha Localização Atual (GPS)
+                </button>
+
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Endereço / Bairro (via GPS ou manual) *</label>
+                    <input type="text" id="cli-address" placeholder="Rua e Bairro" style="padding: 10px 12px; font-size: 13px; width: 100%;">
                 </div>
-                <div class="form-group">
-                    <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Ref. (Opcional)</label>
-                    <input type="text" id="cli-reference" placeholder="Ex: Próximo à praça" style="padding: 10px 12px; font-size: 13px; width: 100%;">
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px;">
+                    <div class="form-group">
+                        <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Número *</label>
+                        <input type="text" id="cli-number" placeholder="Ex: 123" style="padding: 10px 12px; font-size: 13px; width: 100%;">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Ref. (Opcional)</label>
+                        <input type="text" id="cli-reference" placeholder="Ex: Próximo à praça" style="padding: 10px 12px; font-size: 13px; width: 100%;">
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <div style="background: #0F172A; border: 1px solid #334155; border-radius: 12px; padding: 12px; margin-bottom: 16px;">
-            <div style="display: flex; justify-content: space-between; font-size: 13px; color: #94A3B8; margin-bottom: 4px;">
-                <span>Subtotal:</span>
-                <span id="modal-subtotal-val">R$ 0,00</span>
+            <div style="background: #0F172A; border: 1px solid #334155; border-radius: 12px; padding: 12px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; font-size: 13px; color: #94A3B8; margin-bottom: 4px;">
+                    <span>Subtotal:</span>
+                    <span id="modal-subtotal-val">R$ 0,00</span>
+                </div>
+                <div id="modal-freight-row" style="display: flex; justify-content: space-between; font-size: 13px; color: #94A3B8; margin-bottom: 8px;">
+                    <span>Frete (GPS):</span>
+                    <span id="modal-freight-val">R$ 0,00</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; color: #F1F5F9; border-top: 1px solid #334155; padding-top: 8px;">
+                    <span>TOTAL FINAL:</span>
+                    <span style="color: #FF6B35;" id="modal-total-val">R$ 0,00</span>
+                </div>
             </div>
-            <div id="modal-freight-row" style="display: flex; justify-content: space-between; font-size: 13px; color: #94A3B8; margin-bottom: 8px;">
-                <span>Frete (GPS):</span>
-                <span id="modal-freight-val">R$ 0,00</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; color: #F1F5F9; border-top: 1px solid #334155; padding-top: 8px;">
-                <span>TOTAL FINAL:</span>
-                <span style="color: #FF6B35;" id="modal-total-val">R$ 0,00</span>
-            </div>
-        </div>
 
-        <!-- FORMA DE PAGAMENTO -->
-        <div class="form-group" style="margin-bottom: 10px;">
-            <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Forma de Pagamento *</label>
-            <select id="cli-payment" onchange="MenuApp.toggleChangeInput(this.value)" style="padding: 10px 12px; font-size: 13px; width: 100%; background: #1E293B; color: #F1F5F9; border: 1px solid #334155; border-radius: 8px;">
-                <option value="Pix">⚡ Pix</option>
-                <option value="Cartão">💳 Cartão (Máquina na entrega/retirada)</option>
-                <option value="Dinheiro">💵 Dinheiro (Em espécie)</option>
-            </select>
-        </div>
-
-        <!-- CAMPO PIX -->
-        <div id="pix-info-group" style="display: none; margin-bottom: 12px; background: #0F172A; padding: 12px; border-radius: 8px; border: 1px solid #10B981;">
-            <div style="font-size: 11px; color: #10B981; font-weight: bold; margin-bottom: 6px;">⚡ Chave Pix da Loja:</div>
-            <div style="display: flex; gap: 8px; align-items: center;">
-                <input type="text" id="store-pix-key" value="Carregando..." readonly style="padding: 8px; font-size: 12px; font-weight: bold; background: #1E293B; color: #F1F5F9; border: 1px solid #334155; border-radius: 6px; flex: 1;">
-                <button type="button" class="btn btn-sm btn-success" onclick="MenuApp.copyPixKey()" style="font-size: 11px; padding: 8px 12px;">📋 Copiar</button>
+            <!-- FORMA DE PAGAMENTO -->
+            <div class="form-group" style="margin-bottom: 10px;">
+                <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Forma de Pagamento *</label>
+                <select id="cli-payment" onchange="MenuApp.toggleChangeInput(this.value)" style="padding: 10px 12px; font-size: 13px; width: 100%; background: #1E293B; color: #F1F5F9; border: 1px solid #334155; border-radius: 8px;">
+                    <option value="Pix">⚡ Pix</option>
+                    <option value="Cartão">💳 Cartão (Máquina na entrega/retirada)</option>
+                    <option value="Dinheiro">💵 Dinheiro (Em espécie)</option>
+                </select>
             </div>
-            <small style="font-size: 10px; color: #94A3B8; margin-top: 6px; display: block;">Copie a chave, faça a transferência e envie o comprovante ao finalizar o pedido pelo WhatsApp!</small>
-        </div>
 
-        <!-- CAMPO DE TROCO -->
-        <div id="change-group" class="form-group" style="display: none; margin-bottom: 10px;">
-            <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Precisa de troco para quanto?</label>
-            <input type="text" id="cli-change" placeholder="Ex: R$ 50,00 ou Não preciso" style="padding: 10px 12px; font-size: 13px; width: 100%;">
+            <!-- CAMPO PIX -->
+            <div id="pix-info-group" style="display: none; margin-bottom: 12px; background: #0F172A; padding: 12px; border-radius: 8px; border: 1px solid #10B981;">
+                <div style="font-size: 11px; color: #10B981; font-weight: bold; margin-bottom: 6px;">⚡ Chave Pix da Loja:</div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <input type="text" id="store-pix-key" value="Carregando..." readonly style="padding: 8px; font-size: 12px; font-weight: bold; background: #1E293B; color: #F1F5F9; border: 1px solid #334155; border-radius: 6px; flex: 1;">
+                    <button type="button" class="btn btn-sm btn-success" onclick="MenuApp.copyPixKey()" style="font-size: 11px; padding: 8px 12px;">📋 Copiar</button>
+                </div>
+                <small style="font-size: 10px; color: #94A3B8; margin-top: 6px; display: block;">Copie a chave, faça a transferência e envie o comprovante ao finalizar o pedido pelo WhatsApp!</small>
+            </div>
+
+            <!-- CAMPO DE TROCO -->
+            <div id="change-group" class="form-group" style="display: none; margin-bottom: 10px;">
+                <label style="font-size: 12px; color: #94A3B8; margin-bottom: 4px; display: block;">Precisa de troco para quanto?</label>
+                <input type="text" id="cli-change" placeholder="Ex: R$ 50,00 ou Não preciso" style="padding: 10px 12px; font-size: 13px; width: 100%;">
+            </div>
+            
+            <!-- BOTÃO ÚNICO DE FINALIZAÇÃO -->
+            <button class="btn btn-sm" style="background: #25D366; color: #FFFFFF; font-weight: bold; padding: 14px; width: 100%; font-size: 15px;" onclick="MenuApp.sendWhatsApp()">
+                🚀 Finalizar Pedido
+            </button>
         </div>
-        
-        <!-- BOTÃO ÚNICO DE FINALIZAÇÃO -->
-        <button class="btn btn-sm" style="background: #25D366; color: #FFFFFF; font-weight: bold; padding: 14px; width: 100%; font-size: 15px;" onclick="MenuApp.sendWhatsApp()">
-            🚀 Finalizar Pedido
-        </button>
     </div>
 </div>
 
