@@ -197,7 +197,6 @@ const MenuApp = {
                         </button>
                     `;
                 } else {
-                    // Botões com tamanho ergonômico de 44x44px
                     actionBtnHtml = `
                         <div style="display:flex; align-items:center; gap:6px; background:#0F172A; padding:4px; border-radius:8px; border:1px solid #334155;">
                             <button onclick="MenuApp.updateQty('${escapeHtml(p.id)}', -1)" style="width:44px; height:44px; min-width:44px; min-height:44px; background:#1E293B; color:#fff; border:none; border-radius:6px; font-weight:bold; font-size:18px; cursor:pointer; touch-action:manipulation;">-</button>
@@ -325,7 +324,7 @@ const MenuApp = {
     getStoreCoordinates() {
         const localSettings = JSON.parse(localStorage.getItem('dly_settings') || '{}');
         const phoneVal = this.storeData.phone || localSettings.phone || '';
-        const nameVal = this.storeData.store_name || localSettings.storeName || 'Pastel e Batata Imperial';
+        const nameVal = this.storeData.store_name || localSettings.storeName || 'Delivery Control';
 
         return {
             lat: this.storeData.store_lat || localSettings.storeLat || -17.8575,
@@ -420,6 +419,37 @@ const MenuApp = {
         section.style.display = 'block';
     },
 
+    // --- SELEÇÃO DE PAGAMENTO COM CARDS (UX/UI IFOOD) ---
+    selectPayment(method, element) {
+        const paymentInput = document.getElementById('cli-payment');
+        if (paymentInput) paymentInput.value = method;
+
+        // Atualiza a classe 'active' nos cards visíveis
+        const cards = document.querySelectorAll('.payment-card');
+        cards.forEach(card => card.classList.remove('active'));
+
+        if (element) {
+            element.classList.add('active');
+        } else {
+            // Busca o card que corresponde ao método caso o elemento não seja passado diretamente
+            cards.forEach(card => {
+                if (card.getAttribute('onclick')?.includes(`'${method}'`)) {
+                    card.classList.add('active');
+                }
+            });
+        }
+
+        this.toggleChangeInput(method);
+    },
+
+    toggleChangeInput(val) {
+        const changeGroup = document.getElementById('change-group');
+        const pixGroup = document.getElementById('pix-info-group');
+
+        if (changeGroup) changeGroup.style.display = val === 'Dinheiro' ? 'block' : 'none';
+        if (pixGroup) pixGroup.style.display = val === 'Pix' ? 'block' : 'none';
+    },
+
     openCheckoutModal() {
         if (this.getSubtotal() === 0) return;
         this.renderCrossSellOffers();
@@ -429,8 +459,10 @@ const MenuApp = {
         const pixInput = document.getElementById('store-pix-key');
         if (pixInput) pixInput.value = pixVal || 'Consulte a chave no WhatsApp';
 
-        const paymentEl = document.getElementById('cli-payment');
-        if (paymentEl) this.toggleChangeInput(paymentEl.value);
+        // Sincroniza o método selecionado atualmente com os cards e a visibilidade de troco/Pix
+        const paymentInput = document.getElementById('cli-payment');
+        const currentMethod = paymentInput?.value || 'Pix';
+        this.selectPayment(currentMethod);
 
         const modal = document.getElementById('checkout-modal');
         if (modal) modal.style.display = 'flex';
@@ -439,14 +471,6 @@ const MenuApp = {
     closeCheckoutModal() {
         const modal = document.getElementById('checkout-modal');
         if (modal) modal.style.display = 'none';
-    },
-
-    toggleChangeInput(val) {
-        const changeGroup = document.getElementById('change-group');
-        const pixGroup = document.getElementById('pix-info-group');
-
-        if (changeGroup) changeGroup.style.display = val === 'Dinheiro' ? 'block' : 'none';
-        if (pixGroup) pixGroup.style.display = val === 'Pix' ? 'block' : 'none';
     },
 
     copyPixKey() {
@@ -657,7 +681,7 @@ const MenuApp = {
 
         const fullReference = reference ? `${reference} | PGTO: ${paymentFormatted}` : `PGTO: ${paymentFormatted}`;
 
-        // GRAVAÇÃO COM VALIDAÇÃO RIGOROSA NO SUPABASE (Canônico)
+        // GRAVAÇÃO NO SUPABASE
         try {
             if (typeof dbClient !== 'undefined') {
                 const { error: dbError } = await dbClient.from('orders').insert([{
@@ -692,7 +716,7 @@ const MenuApp = {
                 submitBtn.textContent = '🚀 Finalizar Pedido';
             }
             alert(`⚠️ Não foi possível registrar seu pedido no sistema.\n\nVerifique sua conexão e tente novamente.\n\nDetalhes: ${e.message}`);
-            return; // Interrompe para não abrir o WhatsApp sem ter gravado
+            return;
         }
 
         const typeLabel = this.orderType === 'delivery' ? '🛵 *Entrega*' : '🏪 *Retirada no Balcão*';
