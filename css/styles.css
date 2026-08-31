@@ -332,7 +332,7 @@ input, select, textarea {
 }
 
 .fab-menu button:active { background: #334155; }
-.fab-menu .icon-wrap { width: 32px; height: 32px; border-radius: 9px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.fab-menu .icon-wrap { width: 32px; height: 32px; border-radius: 99px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
 .subtabs {
     display: flex;
@@ -370,6 +370,7 @@ input, select, textarea {
     font-size: 15px; font-weight: 700;
     cursor: pointer; min-height: 52px;
     transition: background .2s, transform .1s;
+    touch-action: manipulation;
 }
 
 .btn:active { transform: scale(0.98); }
@@ -416,10 +417,51 @@ input, select, textarea {
 .list-item .li-actions { display: flex; gap: 6px; flex-shrink: 0; }
 .list-item .li-actions button { width: 38px; height: 38px; border-radius: 9px; border: none; background: #0F172A; color: #94A3B8; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(4px); z-index: 200; display: none; align-items: flex-end; justify-content: center; }
+/* MODAL AJUSTADO: SEM REFRESH E COM SCROLL CORRETO */
+.modal-overlay { 
+    position: fixed; 
+    inset: 0; 
+    background: rgba(0,0,0,0.85); 
+    backdrop-filter: blur(4px); 
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 200; 
+    display: none; 
+    align-items: flex-end; 
+    justify-content: center; 
+    overscroll-behavior-y: contain; /* IMPEDE ATUALIZAR A PÁGINA AO ARRASTAR */
+    -webkit-overflow-scrolling: touch;
+}
+
 .modal-overlay.active { display: flex; }
-.modal { background: #1E293B; width: 100%; max-width: 600px; max-height: 92vh; border-top-left-radius: 24px; border-top-right-radius: 24px; padding: 20px 20px calc(20px + env(safe-area-inset-bottom)); overflow-y: auto; border: 1px solid #334155; }
+
+.modal, .modal-content { 
+    background: #1E293B; 
+    width: 100%; 
+    max-width: 600px; 
+    max-height: 85vh; /* ESPAÇO PARA NÃO CORTAR O TOPO */
+    max-height: 85dvh;
+    border-top-left-radius: 24px; 
+    border-top-right-radius: 24px; 
+    padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 0px)); 
+    padding-top: max(20px, env(safe-area-inset-top, 20px)); /* RESPEITA A ÁREA DE CÂMERA/NOTCH */
+    overflow-y: auto; 
+    border: 1px solid #334155; 
+    overscroll-behavior-y: contain; /* MANTÉM A ROLAGEM INTERNA */
+    box-sizing: border-box;
+}
+
 .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #334155; }
+
+@media (min-width: 640px) {
+    .modal-overlay {
+        align-items: center;
+        padding: 20px;
+    }
+    .modal, .modal-content {
+        border-radius: 20px;
+        max-height: 85vh;
+    }
+}
 
 .toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%) translateY(-20px); background: #10B981; color: white; padding: 12px 20px; border-radius: 12px; font-size: 14px; font-weight: 600; z-index: 300; opacity: 0; pointer-events: none; transition: all .3s; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -432,7 +474,7 @@ input, select, textarea {
 .product-info p { font-size: 12px; color: #94A3B8; margin-bottom: 6px; }
 .product-price { font-size: 15px; font-weight: 700; color: #FF6B35; }
 .qty-controls { display: flex; align-items: center; gap: 8px; background: #0F172A; padding: 4px 8px; border-radius: 8px; border: 1px solid #334155; }
-.qty-btn { background: #334155; color: #FFF; border: none; width: 28px; height: 28px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+.qty-btn { background: #334155; color: #FFF; border: none; width: 28px; height: 28px; border-radius: 6px; font-weight: bold; cursor: pointer; touch-action: manipulation; }
 .qty-value { font-weight: 700; min-width: 18px; text-align: center; }
 
 /* Barra Flutuante Discreta do Carrinho */
@@ -448,14 +490,14 @@ input, select, textarea {
 /* Carrossel de Cross-Sell no Modal */
 .cross-sell-box { background: #0F172A; border: 1px dashed #3B82F6; border-radius: 12px; padding: 12px; margin-bottom: 16px; }
 .cross-sell-title { font-size: 12px; font-weight: 700; color: #60A5FA; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
-.cross-sell-items { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.cross-sell-items { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; overscroll-behavior-x: contain; }
 .cross-item-card { background: #1E293B; border: 1px solid #334155; border-radius: 10px; padding: 8px; min-width: 130px; text-align: center; flex-shrink: 0; }
 .cross-item-name { font-size: 11px; font-weight: 700; color: #F1F5F9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cross-item-price { font-size: 11px; color: #FF6B35; font-weight: 700; margin: 4px 0; }
 
 /* Controles de Reordenação no Gestor */
 .reorder-btns { display: flex; flex-direction: column; gap: 2px; }
-.btn-arrow { background: #334155; color: #F1F5F9; border: none; width: 26px; height: 22px; border-radius: 4px; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.btn-arrow { background: #334155; color: #F1F5F9; border: none; width: 26px; height: 22px; border-radius: 4px; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; touch-action: manipulation; }
 .btn-arrow:active { background: #FF6B35; }
 
 /* --- REGRAS DE IMPRESSÃO DE COMANDA E EXPORTAÇÃO PDF --- */
