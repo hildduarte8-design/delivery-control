@@ -2,7 +2,7 @@
 
 function escapeHtml(text) {
     const div = document.createElement('div');
-    div.appendChild(document.createTextNode(String(text || '')));
+    div.appendChild(document.createTextNode(String(text ?? '')));
     return div.innerHTML;
 }
 
@@ -60,13 +60,14 @@ const CalculatorManager = {
             const unitCost = Number(item.unit_cost ?? item.unitCost ?? (pkgQty > 0 ? totalPrice / pkgQty : 0));
             const unit = item.unit || 'un';
             const safeName = escapeHtml(item.name);
+            const formattedCost = unitCost.toFixed(2).replace('.', ',');
 
             return `<option value="${escapeHtml(item.id || item.name)}" 
                 data-name="${safeName}" 
                 data-price="${totalPrice > 0 ? totalPrice : (unitCost * pkgQty)}" 
                 data-qty="${pkgQty}" 
                 data-unit="${escapeHtml(unit)}">
-                ${safeName} (R$ ${unitCost.toFixed(2)}/${escapeHtml(unit)})
+                ${safeName} (R$ ${formattedCost}/${escapeHtml(unit)})
             </option>`;
         }).join('');
     },
@@ -78,14 +79,14 @@ const CalculatorManager = {
         const rowId = `ing_row_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
 
         const rowHtml = `
-            <div class="card ingredient-card" id="${rowId}" style="padding:12px; margin-bottom:10px; background:#0F172A; border:1px solid #334155; border-left:4px solid #F59E0B;">
+            <div class="card ingredient-card" id="${rowId}" style="padding:12px; margin-bottom:10px; background:#0F172A; border:1px solid #334155; border-left:4px solid #F59E0B; border-radius:12px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                     <span style="font-size:12px; font-weight:700; color:#F59E0B;">📦 Insumo / Embalagem</span>
-                    <button type="button" class="btn btn-sm" onclick="CalculatorManager.removeIngredientRow('${rowId}')" style="background:#EF4444; color:#fff; padding:2px 8px; font-size:10px;">✕ Excluir</button>
+                    <button type="button" class="btn btn-sm" onclick="CalculatorManager.removeIngredientRow('${rowId}')" style="background:#EF4444; color:#fff; padding:4px 10px; font-size:11px; min-height:36px; touch-action:manipulation;">✕ Excluir</button>
                 </div>
 
                 <div class="form-group" style="margin-bottom:8px;">
-                    <select class="ing-stock-select" onchange="CalculatorManager.onSelectStockItem('${rowId}', this.value)" style="font-size:12px; padding:6px; background:#1E293B; color:#F1F5F9; border:1px solid #475569;">
+                    <select class="ing-stock-select" onchange="CalculatorManager.onSelectStockItem('${rowId}', this.value)" style="font-size:12px; padding:8px; background:#1E293B; color:#F1F5F9; border:1px solid #475569; border-radius:8px; width:100%;">
                         <option value="">-- Puxar Item do Estoque (Opcional) --</option>
                         ${this.getStockOptionsHtml()}
                     </select>
@@ -93,23 +94,23 @@ const CalculatorManager = {
 
                 <div class="form-group" style="margin-bottom:8px;">
                     <label style="font-size:11px; color:#94A3B8;">Nome do Ingrediente ou Embalagem</label>
-                    <input type="text" class="ing-name" value="${escapeHtml(data?.name || '')}" placeholder="Ex: Queijo Muçarela, Caixa de Pizza" style="font-size:12px; padding:6px;">
+                    <input type="text" class="ing-name" value="${escapeHtml(data?.name || '')}" placeholder="Ex: Queijo Muçarela, Caixa de Pizza" style="font-size:13px; padding:8px; border-radius:8px; background:#1E293B; color:#F1F5F9; border:1px solid #334155; width:100%;">
                 </div>
 
-                <div style="background:#1E293B; padding:8px; border-radius:6px; margin-bottom:8px;">
-                    <div style="font-size:10px; font-weight:700; color:#CBD5E1; margin-bottom:4px; text-transform:uppercase;">1. Dados da Embalagem / Compra</div>
+                <div style="background:#1E293B; padding:10px; border-radius:8px; margin-bottom:8px; border:1px solid #334155;">
+                    <div style="font-size:10px; font-weight:700; color:#CBD5E1; margin-bottom:6px; text-transform:uppercase;">1. Dados da Embalagem / Compra</div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:6px;">
                         <div>
                             <label style="font-size:10px; color:#94A3B8;">Preço Pago (R$)</label>
-                            <input type="number" step="0.01" class="ing-purchase-price" value="${data?.purchasePrice || ''}" placeholder="120.00" oninput="CalculatorManager.calculateCost()" style="font-size:12px; padding:6px;">
+                            <input type="number" step="0.01" class="ing-purchase-price" value="${data?.purchasePrice || ''}" placeholder="120.00" oninput="CalculatorManager.calculateCost()" style="font-size:12px; padding:6px; border-radius:6px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; width:100%;">
                         </div>
                         <div>
                             <label style="font-size:10px; color:#94A3B8;">Tamanho/Peso</label>
-                            <input type="number" step="0.001" class="ing-purchase-qty" value="${data?.purchaseQty || '1'}" placeholder="3.5" oninput="CalculatorManager.calculateCost()" style="font-size:12px; padding:6px;">
+                            <input type="number" step="0.001" class="ing-purchase-qty" value="${data?.purchaseQty || '1'}" placeholder="3.5" oninput="CalculatorManager.calculateCost()" style="font-size:12px; padding:6px; border-radius:6px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; width:100%;">
                         </div>
                         <div>
                             <label style="font-size:10px; color:#94A3B8;">Unidade</label>
-                            <select class="ing-purchase-unit" onchange="CalculatorManager.calculateCost()" style="font-size:11px; padding:6px;">
+                            <select class="ing-purchase-unit" onchange="CalculatorManager.calculateCost()" style="font-size:11px; padding:6px; border-radius:6px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; width:100%;">
                                 <option value="kg" ${data?.purchaseUnit === 'kg' ? 'selected' : ''}>Quilo (kg)</option>
                                 <option value="g" ${data?.purchaseUnit === 'g' ? 'selected' : ''}>Grama (g)</option>
                                 <option value="l" ${data?.purchaseUnit === 'l' ? 'selected' : ''}>Litro (L)</option>
@@ -120,16 +121,16 @@ const CalculatorManager = {
                     </div>
                 </div>
 
-                <div style="background:#1E293B; padding:8px; border-radius:6px;">
-                    <div style="font-size:10px; font-weight:700; color:#CBD5E1; margin-bottom:4px; text-transform:uppercase;">2. Quantidade Usada no Prato</div>
+                <div style="background:#1E293B; padding:10px; border-radius:8px; border:1px solid #334155;">
+                    <div style="font-size:10px; font-weight:700; color:#CBD5E1; margin-bottom:6px; text-transform:uppercase;">2. Quantidade Usada no Prato</div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; align-items:center;">
                         <div>
                             <label style="font-size:10px; color:#94A3B8;">Qtd Usada</label>
-                            <input type="number" step="0.001" class="ing-recipe-qty" value="${data?.recipeQty || ''}" placeholder="Ex: 150 (g)" oninput="CalculatorManager.calculateCost()" style="font-size:12px; padding:6px;">
+                            <input type="number" step="0.001" class="ing-recipe-qty" value="${data?.recipeQty || ''}" placeholder="Ex: 150 (g)" oninput="CalculatorManager.calculateCost()" style="font-size:12px; padding:6px; border-radius:6px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; width:100%;">
                         </div>
                         <div>
                             <label style="font-size:10px; color:#94A3B8;">Unidade Usada</label>
-                            <select class="ing-recipe-unit" onchange="CalculatorManager.calculateCost()" style="font-size:11px; padding:6px;">
+                            <select class="ing-recipe-unit" onchange="CalculatorManager.calculateCost()" style="font-size:11px; padding:6px; border-radius:6px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; width:100%;">
                                 <option value="g" ${data?.recipeUnit === 'g' || !data ? 'selected' : ''}>Gramas (g)</option>
                                 <option value="kg" ${data?.recipeUnit === 'kg' ? 'selected' : ''}>Quilos (kg)</option>
                                 <option value="ml" ${data?.recipeUnit === 'ml' ? 'selected' : ''}>Mililitros (ml)</option>
@@ -164,6 +165,7 @@ const CalculatorManager = {
 
         const select = row.querySelector('.ing-stock-select');
         const opt = select.options[select.selectedIndex];
+        if (!opt) return;
 
         row.querySelector('.ing-name').value = opt.getAttribute('data-name') || '';
         row.querySelector('.ing-purchase-price').value = parseFloat(opt.getAttribute('data-price')) || 0;
@@ -231,7 +233,7 @@ const CalculatorManager = {
             totalCost += itemCost;
 
             if (display) {
-                display.textContent = `R$ ${itemCost.toFixed(2)}`;
+                display.textContent = `R$ ${itemCost.toFixed(2).replace('.', ',')}`;
                 display.style.color = '#10B981';
             }
         });
@@ -243,11 +245,13 @@ const CalculatorManager = {
         const costPerPortionEl = document.getElementById('costPerPortion');
         const costResultCard = document.getElementById('costResult');
 
-        if (costValueEl) costValueEl.textContent = `R$ ${totalCost.toFixed(2)}`;
-        if (costPerPortionEl) costPerPortionEl.textContent = `R$ ${costPerPortion.toFixed(2)}`;
+        if (costValueEl) costValueEl.textContent = `R$ ${totalCost.toFixed(2).replace('.', ',')}`;
+        if (costPerPortionEl) costPerPortionEl.textContent = `R$ ${costPerPortion.toFixed(2).replace('.', ',')}`;
         if (costResultCard) costResultCard.classList.remove('hidden');
 
         this.calculateSuggestedPrices(costPerPortion);
+
+        return { totalCost, costPerPortion };
     },
 
     calculateSuggestedPrices(costPerPortion) {
@@ -264,15 +268,16 @@ const CalculatorManager = {
         const balcaoEl = document.getElementById('suggestedCounterPrice');
         const deliveryEl = document.getElementById('suggestedDeliveryPrice');
 
-        if (balcaoEl) balcaoEl.textContent = `R$ ${counterPrice.toFixed(2)}`;
-        if (deliveryEl) deliveryEl.textContent = `R$ ${deliveryPrice.toFixed(2)}`;
+        if (balcaoEl) balcaoEl.textContent = `R$ ${counterPrice.toFixed(2).replace('.', ',')}`;
+        if (deliveryEl) deliveryEl.textContent = `R$ ${deliveryPrice.toFixed(2).replace('.', ',')}`;
     },
 
     async saveCurrentRecipe() {
         const name = document.getElementById('recipeName')?.value.trim();
         const yieldQty = Math.max(1, parseFloat(document.getElementById('recipeYield')?.value) || 1);
-        const costValText = document.getElementById('costValue')?.textContent.replace('R$', '').replace(',', '.').trim();
-        const totalCost = parseFloat(costValText) || 0;
+        
+        // Calcula e obtém os valores numéricos exatos diretamente sem depender de parse de string no DOM
+        const { totalCost, costPerPortion } = this.calculateCost();
 
         if (!name) {
             if (typeof showToast === 'function') showToast('Informe o nome da receita!', 'error');
@@ -297,7 +302,7 @@ const CalculatorManager = {
             name,
             yield_qty: yieldQty,
             total_cost: totalCost,
-            cost_per_portion: totalCost / yieldQty,
+            cost_per_portion: costPerPortion,
             ingredients: ingredientsData,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
@@ -306,7 +311,7 @@ const CalculatorManager = {
         try {
             if (typeof dbClient !== 'undefined') {
                 const { error } = await dbClient.from('recipes').upsert([recipePayload]);
-                if (error) console.error('Erro ao salvar no Supabase:', error);
+                if (error) console.error('Erro ao salvar no Supabase:', error.message);
             }
 
             let localRecipes = [];
@@ -333,6 +338,7 @@ const CalculatorManager = {
         } catch (e) {
             console.error('Erro ao salvar receita:', e);
             if (typeof showToast === 'function') showToast('Erro ao salvar ficha técnica.', 'error');
+            else alert('Erro ao salvar ficha técnica.');
         }
     },
 
@@ -349,7 +355,7 @@ const CalculatorManager = {
         }
 
         let localRecipes = JSON.parse(localStorage.getItem('dly_recipes') || '[]');
-        localRecipes = localRecipes.filter(r => (id ? r.id !== id : r.name !== name));
+        localRecipes = localRecipes.filter(r => (id ? String(r.id) !== String(id) : r.name !== name));
         localStorage.setItem('dly_recipes', JSON.stringify(localRecipes));
         if (typeof state !== 'undefined') state.recipes = localRecipes;
 
@@ -381,10 +387,10 @@ const CalculatorManager = {
             container.innerHTML = recipes.map(r => {
                 const safeName = escapeHtml(r.name);
                 const safeId = escapeHtml(r.id || '');
-                const costPortion = Number(r.cost_per_portion || r.total_cost || 0).toFixed(2);
+                const costPortion = Number(r.cost_per_portion || r.total_cost || 0).toFixed(2).replace('.', ',');
 
                 return `
-                    <div class="card" style="margin-bottom:8px; padding:12px; background:#1E293B; border-left:4px solid #3B82F6;">
+                    <div class="card" style="margin-bottom:8px; padding:12px; background:#1E293B; border-left:4px solid #3B82F6; border-radius:10px;">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <div>
                                 <strong style="color:#F1F5F9; font-size:14px; display:block;">🍲 ${safeName}</strong>
@@ -392,7 +398,7 @@ const CalculatorManager = {
                                     Rendimento: ${r.yield_qty || 1} porção(ões) • Custo/Un: <strong style="color:#10B981;">R$ ${costPortion}</strong>
                                 </span>
                             </div>
-                            <button class="btn btn-sm btn-danger" onclick="CalculatorManager.deleteRecipe('${safeId}', '${safeName.replace(/'/g, "\\'")}')" style="padding:4px 8px; font-size:11px;" title="Excluir">🗑️</button>
+                            <button class="btn btn-sm btn-danger" onclick="CalculatorManager.deleteRecipe('${safeId}', '${safeName.replace(/'/g, "\\'")}')" style="padding:6px 10px; min-height:36px; font-size:11px; touch-action:manipulation;" title="Excluir">🗑️</button>
                         </div>
                     </div>
                 `;
