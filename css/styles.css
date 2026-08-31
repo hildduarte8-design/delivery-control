@@ -415,6 +415,61 @@ input, select, textarea {
 
 .toggle-group button.active { background: #FF6B35; color: white; box-shadow: 0 2px 8px rgba(255,107,53,0.3); }
 
+/* --- CARDS SELECIONÁVEIS DE PAGAMENTO (100% LARGURA / 3 COLUNAS) --- */
+.payment-options-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px;
+    width: 100%;
+    margin-top: 8px;
+    box-sizing: border-box;
+}
+
+.payment-card {
+    width: 100%;
+    min-height: 52px;
+    padding: 10px 4px;
+    background: #0F172A;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: #94A3B8;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    touch-action: manipulation;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.payment-card .pay-icon {
+    font-size: 16px;
+    line-height: 1;
+}
+
+.payment-card .pay-label {
+    font-size: 13px;
+    font-weight: 700;
+}
+
+/* Estado Ativo / Selecionado */
+.payment-card.active {
+    background: rgba(255, 107, 53, 0.15);
+    border-color: #FF6B35;
+    color: #FF6B35;
+    box-shadow: 0 0 12px rgba(255, 107, 53, 0.2);
+}
+
+.payment-card:active {
+    transform: scale(0.97);
+}
+
 /* --- LISTAS, MODAIS E AVISOS (TOAST) --- */
 .list-item { background: #1E293B; border-radius: 12px; padding: 14px; margin-bottom: 10px; border: 1px solid #334155; display: flex; align-items: center; gap: 12px; }
 .list-item .li-icon { width: 42px; height: 42px; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -423,7 +478,7 @@ input, select, textarea {
 .list-item .li-sub { font-size: 12px; color: #94A3B8; margin-top: 2px; }
 .list-item .li-amount { font-weight: 700; font-size: 16px; }
 .list-item .li-actions { display: flex; gap: 6px; flex-shrink: 0; }
-.list-item .li-actions button { width: 38px; height: 38px; border-radius: 9px; border: none; background: #0F172A; color: #94A3B8; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.list-item .li-actions button { width: 38px; height: 38px; border-radius: 99px; border: none; background: #0F172A; color: #94A3B8; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
 /* --- ESTRUTURA DO MODAL (FLEXBOX ISOLADO E FIXO) --- */
 .modal-overlay { 
