@@ -25,27 +25,39 @@ function updateHeader() {
 
 function showWelcome() {
     if (localStorage.getItem('dly_welcomed')) return;
-    openModal('🎉 Bem-vindo ao Delivery Control!', `
-        <p style="color:#F1F5F9; font-size:15px; margin-bottom:14px;">
-            Seu app de gestão para Delivery está pronto.
-        </p>
-        <div style="background:#0F172A; border-radius:12px; padding:14px; margin-bottom:14px; border:1px solid #334155;">
-            <div style="font-size:13px; color:#94A3B8; line-height:1.7;">
-                <strong style="color:var(--primary-color, #FF6B35);">🛍️ Pedidos:</strong> acompanhamento ao vivo<br>
-                <strong style="color:var(--primary-color, #FF6B35);">🍔 Cardápio:</strong> gestão de pratos e preços<br>
-                <strong style="color:var(--primary-color, #FF6B35);">📊 Gestão:</strong> insumos, contas e logística<br>
-                <strong style="color:var(--primary-color, #FF6B35);">🏠 Dashboard:</strong> saldo em tempo real
+    if (typeof openModal === 'function') {
+        openModal('🎉 Bem-vindo ao Delivery Control!', `
+            <p style="color:#F1F5F9; font-size:15px; margin-bottom:14px;">
+                Seu app de gestão para Delivery está pronto.
+            </p>
+            <div style="background:#0F172A; border-radius:12px; padding:14px; margin-bottom:14px; border:1px solid #334155;">
+                <div style="font-size:13px; color:#94A3B8; line-height:1.7;">
+                    <strong style="color:var(--primary-color, #FF6B35);">🛍️ Pedidos:</strong> acompanhamento ao vivo<br>
+                    <strong style="color:var(--primary-color, #FF6B35);">🍔 Cardápio:</strong> gestão de pratos e preços<br>
+                    <strong style="color:var(--primary-color, #FF6B35);">📊 Gestão:</strong> insumos, contas e logística<br>
+                    <strong style="color:var(--primary-color, #FF6B35);">🏠 Dashboard:</strong> saldo em tempo real
+                </div>
             </div>
-        </div>
-        <button class="btn btn-large" onclick="localStorage.setItem('dly_welcomed','1'); closeModal(); if(typeof weeklyNotificationBanner === 'function') weeklyNotificationBanner();">
-            🚀 Começar a usar
-        </button>
-    `);
+            <button class="btn btn-large" onclick="localStorage.setItem('dly_welcomed','1'); closeModal(); if(typeof weeklyNotificationBanner === 'function') weeklyNotificationBanner();" style="width:100%; min-height:44px; touch-action:manipulation;">
+                🚀 Começar a usar
+            </button>
+        `);
+    }
 }
 
 // Controle da Tela de Login / Bloqueio Total
 function checkAdminAuth() {
-    const settings = typeof DB !== 'undefined' ? DB.load('dly_settings', {}) : {};
+    let settings = {};
+    if (typeof DB !== 'undefined') {
+        settings = DB.load('dly_settings', {});
+    } else {
+        try {
+            settings = JSON.parse(localStorage.getItem('dly_settings') || '{}');
+        } catch (e) {
+            settings = {};
+        }
+    }
+
     const savedPassword = settings.password;
     const loginScreen = document.getElementById('loginScreen');
     const storeTitle = document.getElementById('login_store_title');
@@ -67,7 +79,17 @@ function checkAdminAuth() {
 
 function validatePassword() {
     const input = document.getElementById('admin_pass_input')?.value;
-    const settings = typeof DB !== 'undefined' ? DB.load('dly_settings', {}) : {};
+    let settings = {};
+    if (typeof DB !== 'undefined') {
+        settings = DB.load('dly_settings', {});
+    } else {
+        try {
+            settings = JSON.parse(localStorage.getItem('dly_settings') || '{}');
+        } catch (e) {
+            settings = {};
+        }
+    }
+
     const loginScreen = document.getElementById('loginScreen');
 
     if (input && input === settings.password) {
@@ -97,7 +119,7 @@ function initGestureNavigation() {
     mainContainer.style.willChange = 'transform, opacity';
 
     mainContainer.addEventListener('touchstart', (e) => {
-        if (e.target.closest('.cross-sell-items, .subtabs, .modal-overlay, input, textarea, select, .category-scroll-bar')) {
+        if (e.target.closest('.cross-sell-items, .subtabs, .modal-overlay, input, textarea, select, .category-scroll-bar, .table-container')) {
             isDragging = false;
             return;
         }
@@ -167,14 +189,13 @@ function initGestureNavigation() {
     }, { passive: true });
 }
 
-// CORREÇÃO AUDITORIA #01/#04: Função de inicialização assíncrona com await no banco
+// Função de inicialização assíncrona com sincronização de banco e escutadores
 async function init() {
     if (typeof setupManifest === 'function') setupManifest();
     if (typeof setupServiceWorker === 'function') setupServiceWorker();
     
     updateHeader();
     
-    // Aguarda o banco/cache carregar completamente antes de pintar o painel
     if (typeof loadAll === 'function') {
         await loadAll();
     }
@@ -183,6 +204,14 @@ async function init() {
     if (isAuthed) {
         if (typeof switchTab === 'function') switchTab('dashboard');
         if (typeof renderDashboard === 'function') renderDashboard();
+        showWelcome();
+    }
+
+    const passInput = document.getElementById('admin_pass_input');
+    if (passInput) {
+        passInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') validatePassword();
+        });
     }
 
     if (typeof updateNotificationBadge === 'function') updateNotificationBadge();
