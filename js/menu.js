@@ -1,4 +1,4 @@
-// js/menu.js - Lógica Completa do Cardápio Digital (Frete a Combinar / Manual)
+// js/menu.js - Lógica Completa do Cardápio Digital (Frete a Combinar / Sem Link do Painel no Whats)
 
 function escapeHtml(text) {
     const div = document.createElement('div');
@@ -498,7 +498,6 @@ const MenuApp = {
         this.calculateTotals();
     },
 
-    // Pega a rua via GPS apenas para facilitar a digitação do cliente
     getGPSLocation() {
         const btn = document.getElementById('btn-gps');
         if (btn) {
@@ -519,7 +518,7 @@ const MenuApp = {
             async (position) => {
                 const lat = position.coords.latitude;
                 const lon = position.coords.longitude;
-                this.currentDeliveryFee = 0; // Mantém o frete a combinar
+                this.currentDeliveryFee = 0;
 
                 try {
                     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
@@ -732,9 +731,6 @@ const MenuApp = {
                             `💰 *TOTAL FINAL:* R$ ${subtotal.toFixed(2)}`;
         }
 
-        const currentOrigin = window.location.origin;
-        const adminOrderUrl = `${currentOrigin}/index.html?orderId=${orderId}`;
-
         const msg = `🛍️ *NOVO PEDIDO - ${storeCoords.storeName.toUpperCase()}*\n` +
                     `═══════════════════════\n\n` +
                     `📍 *TIPO:* ${typeLabel}\n` +
@@ -747,7 +743,6 @@ const MenuApp = {
                     `📋 *ITENS DO PEDIDO:*\n${itemsFormatted}\n` +
                     `═══════════════════════\n` +
                     `${totalsSection}\n\n` +
-                    `🔗 *Ver comanda no Painel:* ${adminOrderUrl}\n\n` +
                     `✨ _Obrigado pela preferência! Aguardo a confirmação do valor do frete._`;
 
         window.open(`https://api.whatsapp.com/send?phone=${storePhone}&text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
