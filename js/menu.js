@@ -1,4 +1,4 @@
-// js/menu.js - Lógica Completa do Cardápio Digital (Segurança, XSS, Prevenção de Duplicidade e Ergonomia)
+// js/menu.js - Lógica Completa do Cardápio Digital (Frete a Combinar / Manual)
 
 function escapeHtml(text) {
     const div = document.createElement('div');
@@ -9,8 +9,6 @@ function escapeHtml(text) {
 const MenuApp = {
     orderType: 'delivery',
     currentDeliveryFee: 0,
-    BASE_FEE: 4.00,
-    PRICE_PER_KM: 1.50,
     products: {},
     rawProductsList: [],
     selectedCategory: 'all',
@@ -364,8 +362,13 @@ const MenuApp = {
         const totalFinal = subtotal + freight;
 
         const subtotalFormatted = subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        const freightFormatted = freight.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        const totalFormatted = totalFinal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const freightFormatted = freight > 0 
+            ? freight.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+            : 'A combinar';
+            
+        const totalFormatted = freight > 0
+            ? totalFinal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+            : subtotalFormatted;
 
         const bar = document.getElementById('cart-floating-bar');
         
@@ -380,7 +383,7 @@ const MenuApp = {
             const freModal = document.getElementById('modal-freight-val');
             const totModal = document.getElementById('modal-total-val');
             if (subModal) subModal.textContent = subtotalFormatted;
-            if (freModal) freModal.textContent = freightFormatted;
+            if (freModal) freModal.textContent = this.orderType === 'delivery' ? freightFormatted : 'R$ 0,00';
             if (totModal) totModal.textContent = totalFormatted;
 
             const freightRow = document.getElementById('modal-freight-row');
@@ -419,7 +422,6 @@ const MenuApp = {
         section.style.display = 'block';
     },
 
-    // --- SELEÇÃO DE PAGAMENTO COM CARDS (UX/UI IFOOD) ---
     selectPayment(method, element) {
         const paymentInput = document.getElementById('cli-payment');
         if (paymentInput) paymentInput.value = method;
@@ -496,6 +498,7 @@ const MenuApp = {
         this.calculateTotals();
     },
 
+    // Pega a rua via GPS apenas para facilitar a digitação do cliente
     getGPSLocation() {
         const btn = document.getElementById('btn-gps');
         if (btn) {
@@ -503,10 +506,8 @@ const MenuApp = {
             btn.disabled = true;
         }
 
-        const storeCoords = this.getStoreCoordinates();
-
-        if (typeof GeoService === 'undefined' || !GeoService.getUserLocation) {
-            alert("Módulo de geolocalização indisponível.");
+        if (!navigator.geolocation) {
+            alert("Seu navegador não suporta GPS. Digite o endereço manualmente.");
             if (btn) {
                 btn.disabled = false;
                 btn.textContent = "📍 Usar Minha Localização Atual (GPS)";
@@ -514,22 +515,11 @@ const MenuApp = {
             return;
         }
 
-        GeoService.getUserLocation(
-            async (coords) => {
-                const lat = coords.lat;
-                const lon = coords.lng;
-
-                const km = GeoService.calculateDistanceKm(storeCoords.lat, storeCoords.lon, lat, lon);
-                
-                let fee = this.BASE_FEE;
-
-                // Até 300 metros da loja cobra apenas a taxa base (R$ 4,00)
-                if (km > 0.3) {
-                    const extraKm = km - 0.3;
-                    fee = Math.ceil(this.BASE_FEE + (extraKm * this.PRICE_PER_KM));
-                }
-
-                this.currentDeliveryFee = fee;
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                this.currentDeliveryFee = 0; // Mantém o frete a combinar
 
                 try {
                     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
@@ -538,13 +528,13 @@ const MenuApp = {
                     
                     const addrInput = document.getElementById('cli-address');
                     if (addrInput) {
-                        addrInput.value = `${street} (📍 ~${km.toFixed(1)} km - Frete: R$ ${fee.toFixed(2)})`;
+                        addrInput.value = `${street} (📍 GPS - Frete a combinar)`;
                     }
                     if (btn) btn.textContent = "✅ Localização Capturada!";
                 } catch (e) {
                     const addrInput = document.getElementById('cli-address');
                     if (addrInput) {
-                        addrInput.value = `📍 GPS (~${km.toFixed(1)} km - Frete: R$ ${fee.toFixed(2)})`;
+                        addrInput.value = `📍 GPS (Frete a combinar)`;
                     }
                     if (btn) btn.textContent = "✅ Localização Capturada!";
                 }
@@ -556,7 +546,9 @@ const MenuApp = {
                     btn.disabled = false;
                     btn.textContent = "📍 Usar Minha Localização Atual (GPS)";
                 }
-            }
+                alert("Sinal de GPS indisponível. Digite seu endereço de entrega.");
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
         );
     },
 
@@ -730,13 +722,13 @@ const MenuApp = {
         
         let totalsSection = '';
         if (this.orderType === 'delivery') {
-            const freteTxt = this.currentDeliveryFee > 0 ? `R$ ${this.currentDeliveryFee.toFixed(2)}` : 'A combinar';
+            const freteTxt = this.currentDeliveryFee > 0 ? `R$ ${this.currentDeliveryFee.toFixed(2)}` : 'A combinar (consultar via WhatsApp)';
             totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
                             `🛵 *FRETE:* ${freteTxt}\n` +
-                            `💰 *TOTAL FINAL:* R$ ${totalFinal.toFixed(2)}`;
+                            `💰 *TOTAL DOS ITENS:* R$ ${subtotal.toFixed(2)}`;
         } else {
             totalsSection = `💵 *SUBTOTAL:* R$ ${subtotal.toFixed(2)}\n` +
-                            `🏪 *FRETE:* R$ 0.00 (Retirada)\n` +
+                            `🏪 *FRETE:* R$ 0.00 (Retirada no Balcão)\n` +
                             `💰 *TOTAL FINAL:* R$ ${subtotal.toFixed(2)}`;
         }
 
@@ -756,7 +748,7 @@ const MenuApp = {
                     `═══════════════════════\n` +
                     `${totalsSection}\n\n` +
                     `🔗 *Ver comanda no Painel:* ${adminOrderUrl}\n\n` +
-                    `✨ _Obrigado pela preferência! Aguardo a confirmação._`;
+                    `✨ _Obrigado pela preferência! Aguardo a confirmação do valor do frete._`;
 
         window.open(`https://api.whatsapp.com/send?phone=${storePhone}&text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
 
@@ -800,7 +792,6 @@ const MenuApp = {
         if (recItems) recItems.innerHTML = itemsHtml;
 
         const freightArea = document.getElementById('rec-freight-area');
-        const totalFinal = subtotal + (this.orderType === 'delivery' ? this.currentDeliveryFee : 0);
 
         if (freightArea) {
             if (this.orderType === 'pickup') {
@@ -811,8 +802,8 @@ const MenuApp = {
             } else {
                 freightArea.innerHTML = `
                     <p><strong>Subtotal:</strong> R$ ${subtotal.toFixed(2)}</p>
-                    <p><strong>Frete (GPS):</strong> R$ ${this.currentDeliveryFee.toFixed(2)}</p>
-                    <p style="font-size: 16px; margin-top: 8px;"><strong>TOTAL: R$ ${totalFinal.toFixed(2)}</strong></p>
+                    <p><strong>Frete:</strong> A combinar</p>
+                    <p style="font-size: 16px; margin-top: 8px;"><strong>TOTAL ITENS: R$ ${subtotal.toFixed(2)}</strong></p>
                 `;
             }
         }
