@@ -424,14 +424,12 @@ const MenuApp = {
         const paymentInput = document.getElementById('cli-payment');
         if (paymentInput) paymentInput.value = method;
 
-        // Atualiza a classe 'active' nos cards visíveis
         const cards = document.querySelectorAll('.payment-card');
         cards.forEach(card => card.classList.remove('active'));
 
         if (element) {
             element.classList.add('active');
         } else {
-            // Busca o card que corresponde ao método caso o elemento não seja passado diretamente
             cards.forEach(card => {
                 if (card.getAttribute('onclick')?.includes(`'${method}'`)) {
                     card.classList.add('active');
@@ -459,7 +457,6 @@ const MenuApp = {
         const pixInput = document.getElementById('store-pix-key');
         if (pixInput) pixInput.value = pixVal || 'Consulte a chave no WhatsApp';
 
-        // Sincroniza o método selecionado atualmente com os cards e a visibilidade de troco/Pix
         const paymentInput = document.getElementById('cli-payment');
         const currentMethod = paymentInput?.value || 'Pix';
         this.selectPayment(currentMethod);
@@ -500,11 +497,6 @@ const MenuApp = {
     },
 
     getGPSLocation() {
-        if (!navigator.geolocation) {
-            alert("Seu navegador não suporta GPS. Digite o endereço manualmente.");
-            return;
-        }
-
         const btn = document.getElementById('btn-gps');
         if (btn) {
             btn.textContent = "⌛ Obtendo localização do GPS...";
@@ -513,28 +505,47 @@ const MenuApp = {
 
         const storeCoords = this.getStoreCoordinates();
 
-        navigator.geolocation.getCurrentPosition(
-            async (position) => {
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
+        if (typeof GeoService === 'undefined' || !GeoService.getUserLocation) {
+            alert("Módulo de geolocalização indisponível.");
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = "📍 Usar Minha Localização Atual (GPS)";
+            }
+            return;
+        }
+
+        GeoService.getUserLocation(
+            async (coords) => {
+                const lat = coords.lat;
+                const lon = coords.lng;
 
                 const km = GeoService.calculateDistanceKm(storeCoords.lat, storeCoords.lon, lat, lon);
+                
                 let fee = this.BASE_FEE;
-                if (km > 0.3) fee = Math.ceil(this.BASE_FEE + (km * this.PRICE_PER_KM));
+
+                // Até 300 metros da loja cobra apenas a taxa base (R$ 4,00)
+                if (km > 0.3) {
+                    const extraKm = km - 0.3;
+                    fee = Math.ceil(this.BASE_FEE + (extraKm * this.PRICE_PER_KM));
+                }
 
                 this.currentDeliveryFee = fee;
 
                 try {
                     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
                     const data = await res.json();
-                    const street = data.address.road || data.address.suburb || "Endereço via GPS";
+                    const street = data.address?.road || data.address?.suburb || "Endereço via GPS";
                     
                     const addrInput = document.getElementById('cli-address');
-                    if (addrInput) addrInput.value = `${street} (📍 ~${km.toFixed(1)} km - Frete: R$ ${fee.toFixed(2)})`;
+                    if (addrInput) {
+                        addrInput.value = `${street} (📍 ~${km.toFixed(1)} km - Frete: R$ ${fee.toFixed(2)})`;
+                    }
                     if (btn) btn.textContent = "✅ Localização Capturada!";
                 } catch (e) {
                     const addrInput = document.getElementById('cli-address');
-                    if (addrInput) addrInput.value = `📍 GPS (~${km.toFixed(1)} km - Frete: R$ ${fee.toFixed(2)})`;
+                    if (addrInput) {
+                        addrInput.value = `📍 GPS (~${km.toFixed(1)} km - Frete: R$ ${fee.toFixed(2)})`;
+                    }
                     if (btn) btn.textContent = "✅ Localização Capturada!";
                 }
                 if (btn) btn.disabled = false;
@@ -545,9 +556,7 @@ const MenuApp = {
                     btn.disabled = false;
                     btn.textContent = "📍 Usar Minha Localização Atual (GPS)";
                 }
-                alert("Sinal de GPS indisponível. Digite seu endereço de entrega.");
-            },
-            { enableHighAccuracy: true, timeout: 10000 }
+            }
         );
     },
 
@@ -639,7 +648,6 @@ const MenuApp = {
 
         if (!storePhone.startsWith('55')) storePhone = '55' + storePhone;
 
-        // Trava o botão contra clique duplo
         if (submitBtn) {
             submitBtn.disabled = true;
             submitBtn.textContent = '⌛ Gravando pedido...';
@@ -681,7 +689,6 @@ const MenuApp = {
 
         const fullReference = reference ? `${reference} | PGTO: ${paymentFormatted}` : `PGTO: ${paymentFormatted}`;
 
-        // GRAVAÇÃO NO SUPABASE
         try {
             if (typeof dbClient !== 'undefined') {
                 const { error: dbError } = await dbClient.from('orders').insert([{
