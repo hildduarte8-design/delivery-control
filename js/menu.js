@@ -248,26 +248,34 @@ const MenuApp = {
             </button>
         `;
 
-        const overlay = document.getElementById('checkout-modal');
-        if (overlay) {
-            let compContainer = document.getElementById('complements-modal-box');
-            if (!compContainer) {
-                compContainer = document.createElement('div');
-                compContainer.id = 'complements-modal-box';
-                compContainer.className = 'modal-overlay';
-                compContainer.style.zIndex = '99999';
-                document.body.appendChild(compContainer);
-            }
-            compContainer.innerHTML = `
-                <div class="modal-body" style="background:#1E293B; border:1px solid #334155; padding:16px; border-radius:12px; max-width:380px; width:100%;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                        <strong style="color:#FF6B35;">Opcionais do Prato</strong>
-                        <button onclick="document.getElementById('complements-modal-box').style.display='none'" style="background:none; border:none; color:#94A3B8; font-size:22px; cursor:pointer; padding:4px;">✕</button>
-                    </div>
-                    ${modalBody}
+        let compContainer = document.getElementById('complements-modal-box');
+        if (!compContainer) {
+            compContainer = document.createElement('div');
+            compContainer.id = 'complements-modal-box';
+            compContainer.className = 'modal-overlay';
+            compContainer.style.zIndex = '99999';
+            document.body.appendChild(compContainer);
+        }
+
+        compContainer.innerHTML = `
+            <div class="modal-body" style="background:#1E293B; border:1px solid #334155; padding:16px; border-radius:12px; max-width:380px; width:100%;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                    <strong style="color:#FF6B35;">Opcionais do Prato</strong>
+                    <button onclick="MenuApp.closeComplementsModal()" style="background:none; border:none; color:#94A3B8; font-size:22px; cursor:pointer; padding:4px;">✕</button>
                 </div>
-            `;
-            compContainer.style.display = 'flex';
+                ${modalBody}
+            </div>
+        `;
+
+        compContainer.classList.add('active');
+        compContainer.style.display = 'flex';
+    },
+
+    closeComplementsModal() {
+        const box = document.getElementById('complements-modal-box');
+        if (box) {
+            box.classList.remove('active');
+            box.style.display = 'none';
         }
     },
 
@@ -286,9 +294,7 @@ const MenuApp = {
             this.products[productId].selectedComplements = selected;
         }
 
-        const box = document.getElementById('complements-modal-box');
-        if (box) box.style.display = 'none';
-
+        this.closeComplementsModal();
         this.calculateTotals();
         this.renderProductsList();
     },
@@ -311,12 +317,16 @@ const MenuApp = {
         const caption = document.getElementById('lightbox-caption');
         if (img) img.src = imageUrl;
         if (caption) caption.textContent = title || '';
+        modal.classList.add('active');
         modal.style.display = 'flex';
     },
 
     closeLightbox() {
         const modal = document.getElementById('image-lightbox');
-        if (modal) modal.style.display = 'none';
+        if (modal) {
+            modal.classList.remove('active');
+            modal.style.display = 'none';
+        }
     },
 
     getStoreCoordinates() {
@@ -373,7 +383,10 @@ const MenuApp = {
         const bar = document.getElementById('cart-floating-bar');
         
         if (count > 0) {
-            if (bar) bar.style.display = 'flex';
+            if (bar) {
+                bar.style.display = 'flex';
+                bar.classList.add('active');
+            }
             const qtyLbl = document.getElementById('float-qty-label');
             const totalLbl = document.getElementById('float-total-val');
             if (qtyLbl) qtyLbl.textContent = `${count} ${count === 1 ? 'item selecionado' : 'itens selecionados'}`;
@@ -389,7 +402,10 @@ const MenuApp = {
             const freightRow = document.getElementById('modal-freight-row');
             if (freightRow) freightRow.style.display = this.orderType === 'delivery' ? 'flex' : 'none';
         } else {
-            if (bar) bar.style.display = 'none';
+            if (bar) {
+                bar.style.display = 'none';
+                bar.classList.remove('active');
+            }
             this.closeCheckoutModal();
         }
     },
@@ -464,12 +480,18 @@ const MenuApp = {
         this.selectPayment(currentMethod);
 
         const modal = document.getElementById('checkout-modal');
-        if (modal) modal.style.display = 'flex';
+        if (modal) {
+            modal.classList.add('active');
+            modal.style.display = 'flex';
+        }
     },
 
     closeCheckoutModal() {
         const modal = document.getElementById('checkout-modal');
-        if (modal) modal.style.display = 'none';
+        if (modal) {
+            modal.classList.remove('active');
+            modal.style.display = 'none';
+        }
     },
 
     copyPixKey() {
@@ -698,7 +720,7 @@ const MenuApp = {
                     subtotal: subtotal,
                     delivery_fee: freight,
                     total: totalFinal,
-                    status: 'pending', // Gravado como Novo Pedido para aprovação do frete
+                    status: 'pending',
                     source: 'Cardápio Digital',
                     created_at: new Date().toISOString()
                 }]);
