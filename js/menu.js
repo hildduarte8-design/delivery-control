@@ -1,4 +1,4 @@
-// js/menu.js - Lógica Completa do Cardápio Digital (Frete a Combinar / Sem Link do Painel no Whats)
+// js/menu.js - Lógica Completa do Cardápio Digital (Integração de Frete & Fluxo de Aprovacao)
 
 function escapeHtml(text) {
     const div = document.createElement('div');
@@ -698,7 +698,7 @@ const MenuApp = {
                     subtotal: subtotal,
                     delivery_fee: freight,
                     total: totalFinal,
-                    status: 'preparing',
+                    status: 'pending', // Gravado como Novo Pedido para aprovação do frete
                     source: 'Cardápio Digital',
                     created_at: new Date().toISOString()
                 }]);
