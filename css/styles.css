@@ -415,7 +415,7 @@ input, select, textarea {
 
 .toggle-group button.active { background: #FF6B35; color: white; box-shadow: 0 2px 8px rgba(255,107,53,0.3); }
 
-/* --- CARDS SELECIONÁVEIS DE PAGAMENTO (100% LARGURA / 3 COLUNAS) --- */
+/* --- CARDS SELECIONÁVEIS DE PAGAMENTO --- */
 .payment-options-grid {
     display: grid !important;
     grid-template-columns: repeat(3, 1fr) !important;
@@ -458,7 +458,6 @@ input, select, textarea {
     font-weight: 700;
 }
 
-/* Estado Ativo / Selecionado */
 .payment-card.active {
     background: rgba(255, 107, 53, 0.15);
     border-color: #FF6B35;
@@ -480,7 +479,7 @@ input, select, textarea {
 .list-item .li-actions { display: flex; gap: 6px; flex-shrink: 0; }
 .list-item .li-actions button { width: 38px; height: 38px; border-radius: 99px; border: none; background: #0F172A; color: #94A3B8; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
-/* --- ESTRUTURA DO MODAL (FLEXBOX ISOLADO E FIXO) --- */
+/* --- ESTRUTURA DO MODAL (TRAVAS ANTI-BLOQUEIO) --- */
 .modal-overlay { 
     position: fixed; 
     inset: 0; 
@@ -488,14 +487,18 @@ input, select, textarea {
     backdrop-filter: blur(6px); 
     -webkit-backdrop-filter: blur(6px);
     z-index: 9999; 
-    display: none; 
+    display: none !important; 
+    pointer-events: none;
     align-items: flex-end; 
     justify-content: center; 
     overscroll-behavior: none;
     touch-action: none;
 }
 
-.modal-overlay.active { display: flex; }
+.modal-overlay.active { 
+    display: flex !important; 
+    pointer-events: auto;
+}
 
 /* Container do Modal: Altura travada no Viewport */
 .modal, .modal-content { 
@@ -513,7 +516,7 @@ input, select, textarea {
     box-sizing: border-box;
 }
 
-/* Cabeçalho Fixo no Topo (Não Rola) */
+/* Cabeçalho Fixo no Topo */
 .modal-header { 
     flex-shrink: 0;
     display: flex; 
@@ -531,7 +534,7 @@ input, select, textarea {
     color: #F1F5F9;
 }
 
-/* Corpo do Modal: Única área que aceita rolagem interna */
+/* Corpo do Modal */
 #modalBody, .modal-body { 
     flex: 1;
     overflow-y: auto; 
