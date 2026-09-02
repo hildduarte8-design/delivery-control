@@ -195,6 +195,7 @@
     <div class="subtabs" id="financialSubtabs">
         <button class="active" data-sub="insumos">📦 Insumos</button>
         <button data-sub="fixed">📋 Contas Fixas</button>
+        <button data-sub="gastos">💸 Gastos</button>
         <button data-sub="logistics">🛵 Logística</button>
         <button data-sub="calc">🧮 Calculadora</button>
     </div>
@@ -225,7 +226,29 @@
         <div id="fixedList"></div>
     </div>
 
-    <!-- Sub-painel 3: Gastos com Logística -->
+    <!-- Sub-painel 3: Gastos e Despesas Gerais -->
+    <div class="sub-panel" data-panel="gastos">
+        <div class="card mini-card" style="margin-bottom: 16px; background: linear-gradient(145deg, #1E293B 0%, #0F172A 100%);">
+            <div class="top">
+                <div class="icon-box red">💸</div>
+                <span class="label">Total de Gastos Registrados</span>
+            </div>
+            <div class="value-sm negative" id="total-expenses-month">R$ 0,00</div>
+        </div>
+
+        <div class="section-title">
+            <span>Histórico de Saídas</span>
+            <button class="btn btn-sm btn-danger" onclick="ExpensesAdminManager.openExpenseModal()" style="width: auto;">
+                + Lançar Gasto
+            </button>
+        </div>
+
+        <div id="expenses-list-container">
+            <div style="color:#94A3B8; text-align:center; padding:20px; font-size:13px;">Carregando despesas...</div>
+        </div>
+    </div>
+
+    <!-- Sub-painel 4: Gastos com Logística -->
     <div class="sub-panel" data-panel="logistics">
         <button class="btn btn-large" onclick="openLogisticsModal()">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -247,7 +270,7 @@
         <div id="logisticsList"></div>
     </div>
 
-    <!-- Sub-painel 4: Calculadora de Ficha Técnica e Precificação para Delivery -->
+    <!-- Sub-painel 5: Calculadora de Ficha Técnica e Precificação para Delivery -->
     <div class="sub-panel" data-panel="calc">
         <div class="section-title">
             <span>🧮 Calculadora & Ficha Técnica</span>
@@ -405,6 +428,7 @@
 <div class="fab-menu" id="fabMenu">
     <button onclick="quickAction('sale')"><span class="icon-wrap" style="background:rgba(16,185,129,0.15);color:#10B981;">💰</span> Nova Entrada</button>
     <button onclick="quickAction('stock')"><span class="icon-wrap" style="background:rgba(255,107,53,0.15);color:#FF6B35;">📦</span> Novo Insumo</button>
+    <button onclick="ExpensesAdminManager.openExpenseModal()"><span class="icon-wrap" style="background:rgba(239,68,68,0.15);color:#EF4444;">💸</span> Novo Gasto</button>
     <button onclick="quickAction('logistics')"><span class="icon-wrap" style="background:rgba(239,68,68,0.15);color:#EF4444;">🛵</span> Gasto Logística</button>
     <button onclick="quickAction('fixed')"><span class="icon-wrap" style="background:rgba(59,130,246,0.15);color:#3B82F6;">📋</span> Conta Fixa</button>
     <button onclick="window.location.href='cardapio.html'"><span class="icon-wrap" style="background:rgba(245,158,11,0.15);color:#F59E0B;">📖</span> Ver Cardápio</button>
@@ -584,6 +608,7 @@
 <script src="js/stock.js"></script>
 <script src="js/sales.js"></script>
 <script src="js/expenses.js"></script>
+<script src="js/expenses-admin.js"></script>
 <script src="js/calculator.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/menu-admin.js"></script>
