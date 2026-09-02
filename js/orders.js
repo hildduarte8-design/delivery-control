@@ -1,4 +1,4 @@
-// js/orders.js - Gestão Completa de Pedidos ao Vivo com Supabase Realtime, Seletor de Data e Chat WhatsApp
+// js/orders.js - Gestão Completa de Pedidos ao Vivo com Supabase Realtime, Definição de Frete e Mensagens de WhatsApp
 
 function escapeHtml(text) {
     const div = document.createElement('div');
@@ -15,7 +15,6 @@ const OrdersManager = {
     audioCtx: null,
     selectedDate: null,
 
-    // Obtém o nome dinâmico da loja ou aplica o nome padrão
     getStoreName() {
         try {
             const localSettings = JSON.parse(localStorage.getItem('dly_settings') || '{}');
@@ -25,14 +24,21 @@ const OrdersManager = {
         }
     },
 
-    // Helper seguro para interpretar datas do Supabase sem quebrar no Safari/iOS
+    getPixKey() {
+        try {
+            const localSettings = JSON.parse(localStorage.getItem('dly_settings') || '{}');
+            return localSettings.pixKey || '';
+        } catch (e) {
+            return '';
+        }
+    },
+
     parseDateSafe(dateInput) {
         if (!dateInput) return new Date();
         if (dateInput instanceof Date) return dateInput;
         return new Date(String(dateInput).replace(' ', 'T'));
     },
 
-    // Converter data para o formato YYYY-MM-DD local sem erros de sintaxe
     getLocalDateStr(dateInput) {
         if (!dateInput) return '';
         const d = this.parseDateSafe(dateInput);
@@ -44,7 +50,6 @@ const OrdersManager = {
         return `${year}-${month}-${day}`;
     },
 
-    // Desbloqueia permissão de áudio com tratamento de Promise seguro
     unlockAudio() {
         try {
             if (!this.audioCtx) {
@@ -61,7 +66,6 @@ const OrdersManager = {
         }
     },
 
-    // Emite som de campainha ao receber novo pedido
     playAlertSound() {
         try {
             this.unlockAudio();
@@ -88,7 +92,6 @@ const OrdersManager = {
         }
     },
 
-    // Inicializa a escuta em Tempo Real (Supabase Realtime)
     initRealtime() {
         if (typeof dbClient === 'undefined' || this.realtimeChannel) return;
 
@@ -131,7 +134,6 @@ const OrdersManager = {
 
             this.allOrders = orders;
 
-            // Detecta pedidos novos usando IDs individuais
             const newOrdersDetected = [];
             orders.forEach(o => {
                 const idStr = String(o.id);
@@ -283,6 +285,8 @@ const OrdersManager = {
         const safePhone = escapeHtml(o.phone || o.customer_phone || '');
         const totalFormatted = Number(o.total || 0).toFixed(2).replace('.', ',');
 
+        const needsFreight = o.order_type === 'delivery' && Number(o.delivery_fee || 0) === 0;
+
         return `
             <div class="card" onclick="OrdersManager.openOrderDetails('${safeOrderId}')" style="margin-bottom:12px; padding:14px; border-left:4px solid ${o.status === 'pending' ? '#F59E0B' : o.status === 'preparing' ? '#3B82F6' : o.status === 'completed' ? '#10B981' : '#EF4444'}; cursor:pointer; transition: transform 0.1s;">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start;">
@@ -293,6 +297,7 @@ const OrdersManager = {
                         </div>
                         <div style="font-size:11px; color:#94A3B8; margin-top:2px;">⏰ ${dateFormatted} • ${o.order_type === 'delivery' ? '🛵 Entrega' : '🏪 Retirada'}</div>
                         <div style="font-size:11px; color:#10B981; margin-top:2px; font-weight:600;">💳 ${escapeHtml(o.payment_method || o.reference || 'Pagamento na entrega')}</div>
+                        ${needsFreight ? `<div style="font-size:10px; color:#F59E0B; font-weight:bold; margin-top:2px;">⚠️ Frete a definir</div>` : ''}
                     </div>
 
                     <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
@@ -311,7 +316,7 @@ const OrdersManager = {
                     <strong style="color:#FF6B35; font-size:16px;">Total: R$ ${totalFormatted}</strong>
                     <div style="display:flex; gap:6px;" onclick="event.stopPropagation();">
                         <button class="btn btn-sm btn-secondary" onclick="OrdersManager.printOrder('${safeOrderId}')" title="Imprimir Comanda">🖨️</button>
-                        <button class="btn btn-sm" style="background:#25D366; color:#fff;" onclick="OrdersManager.openWhatsAppChat('${safePhone}', '${safeClientName}')" title="WhatsApp">💬 Chat</button>
+                        <button class="btn btn-sm" style="background:#25D366; color:#fff;" onclick="OrdersManager.sendConfirmationWhatsApp('${safeOrderId}')" title="Enviar Whats">💬 Confirmar</button>
                     </div>
                 </div>
             </div>
@@ -354,9 +359,8 @@ const OrdersManager = {
         const safeNumber = escapeHtml(o.number || 'S/N');
         const safeReference = escapeHtml(o.payment_method || o.reference || 'Não informada');
 
-        const subtotalFormatted = Number(o.subtotal || 0).toFixed(2).replace('.', ',');
-        const feeFormatted = Number(o.delivery_fee || 0).toFixed(2).replace('.', ',');
-        const totalFormatted = Number(o.total || 0).toFixed(2).replace('.', ',');
+        const subtotalVal = Number(o.subtotal || 0);
+        const feeVal = Number(o.delivery_fee || 0);
 
         const bodyHtml = `
             <div style="background:#0F172A; padding:12px; border-radius:8px; margin-bottom:14px; border:1px solid #1E293B;">
@@ -386,36 +390,41 @@ const OrdersManager = {
             </div>
 
             <div style="background:#1E293B; padding:12px; border-radius:8px; margin-bottom:16px;">
-                <div style="display:flex; justify-content:space-between; font-size:12px; color:#94A3B8; margin-bottom:4px;">
-                    <span>Subtotal dos Itens:</span>
-                    <span>R$ ${subtotalFormatted}</span>
-                </div>
                 <div style="display:flex; justify-content:space-between; font-size:12px; color:#94A3B8; margin-bottom:6px;">
-                    <span>Taxa de Entrega (Frete):</span>
-                    <span>R$ ${feeFormatted}</span>
+                    <span>Subtotal dos Itens:</span>
+                    <span>R$ ${subtotalVal.toFixed(2).replace('.', ',')}</span>
                 </div>
+                ${o.order_type === 'delivery' ? `
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; background:#0F172A; padding:8px; border-radius:6px;">
+                        <span style="font-size:12px; color:#F59E0B; font-weight:bold;">🛵 Valor do Frete (R$):</span>
+                        <div style="display:flex; gap:6px;">
+                            <input type="number" id="input-fee-${safeOrderId}" value="${feeVal}" step="0.5" style="width:70px; background:#1E293B; color:#fff; border:1px solid #334155; padding:4px 8px; border-radius:6px; font-size:13px; font-weight:bold;">
+                            <button onclick="OrdersManager.saveDeliveryFee('${safeOrderId}')" style="background:#F59E0B; color:#000; border:none; padding:4px 10px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">💾 Salvar</button>
+                        </div>
+                    </div>
+                ` : ''}
                 <div style="display:flex; justify-content:space-between; font-size:15px; font-weight:800; color:#10B981; border-top:1px dashed #334155; padding-top:6px;">
                     <span>TOTAL DO PEDIDO:</span>
-                    <span>R$ ${totalFormatted}</span>
+                    <span>R$ ${Number(o.total || (subtotalVal + feeVal)).toFixed(2).replace('.', ',')}</span>
                 </div>
             </div>
 
-            <div style="font-size:12px; font-weight:bold; color:#94A3B8; margin-bottom:8px;">⚡ Atualizar Status do Pedido:</div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px;">
-                <button class="btn btn-sm" style="background:#3B82F6; color:#fff; padding:10px; min-height:44px; touch-action:manipulation;" onclick="OrdersManager.updateStatus('${safeOrderId}', 'preparing'); closeModal();">
-                    👨‍🍳 Colocar em Preparo
+            <div style="font-size:12px; font-weight:bold; color:#94A3B8; margin-bottom:8px;">⚡ Ações do Pedido:</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+                <button class="btn btn-sm" style="background:#25D366; color:#fff; padding:10px; min-height:44px; touch-action:manipulation;" onclick="OrdersManager.sendConfirmationWhatsApp('${safeOrderId}')">
+                    💬 Enviar Confirmação
                 </button>
-                <button class="btn btn-sm btn-success" style="padding:10px; min-height:44px; touch-action:manipulation;" onclick="OrdersManager.updateStatus('${safeOrderId}', 'completed'); closeModal();">
-                    ✅ Concluir Pedido
+                <button class="btn btn-sm btn-secondary" style="padding:10px; min-height:44px; touch-action:manipulation;" onclick="OrdersManager.printOrder('${safeOrderId}')">
+                    🖨️ Imprimir Comanda
                 </button>
             </div>
 
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                <button class="btn btn-sm" style="background:#25D366; color:#fff; padding:10px; min-height:44px; touch-action:manipulation;" onclick="OrdersManager.openWhatsAppChat('${safePhone}', '${safeClientName}')">
-                    💬 Conversar no Whats
+                <button class="btn btn-sm" style="background:#3B82F6; color:#fff; padding:10px; min-height:44px; touch-action:manipulation;" onclick="OrdersManager.updateStatus('${safeOrderId}', 'preparing'); closeModal();">
+                    👨‍🍳 Em Preparo
                 </button>
-                <button class="btn btn-sm btn-secondary" style="padding:10px; min-height:44px; touch-action:manipulation;" onclick="OrdersManager.printOrder('${safeOrderId}')">
-                    🖨️ Imprimir Comanda
+                <button class="btn btn-sm btn-success" style="padding:10px; min-height:44px; touch-action:manipulation;" onclick="OrdersManager.updateStatus('${safeOrderId}', 'completed'); closeModal();">
+                    ✅ Concluir Pedido
                 </button>
             </div>
         `;
@@ -423,6 +432,112 @@ const OrdersManager = {
         if (typeof openModal === 'function') {
             openModal('📋 Detalhes do Pedido', bodyHtml);
         }
+    },
+
+    async saveDeliveryFee(orderId) {
+        const input = document.getElementById(`input-fee-${orderId}`);
+        if (!input) return;
+
+        const newFee = parseFloat(input.value) || 0;
+        const o = this.allOrders.find(item => String(item.id) === String(orderId));
+        if (!o) return;
+
+        const subtotal = Number(o.subtotal || 0);
+        const newTotal = subtotal + newFee;
+
+        try {
+            if (typeof dbClient !== 'undefined') {
+                const { error } = await dbClient
+                    .from('orders')
+                    .update({ delivery_fee: newFee, total: newTotal })
+                    .eq('id', orderId);
+
+                if (error) throw error;
+            }
+
+            o.delivery_fee = newFee;
+            o.total = newTotal;
+
+            if (typeof showToast === 'function') showToast('Frete atualizado com sucesso!');
+            this.fetchOrders();
+            this.openOrderDetails(orderId);
+
+        } catch (e) {
+            console.error('Erro ao salvar frete:', e);
+            alert('Erro ao atualizar o frete no banco de dados.');
+        }
+    },
+
+    sendConfirmationWhatsApp(orderId) {
+        const o = this.allOrders.find(item => String(item.id) === String(orderId));
+        if (!o) return;
+
+        const phone = o.phone || o.customer_phone || '';
+        if (!phone) {
+            if (typeof showToast === 'function') showToast('Cliente sem telefone cadastrado!', 'error');
+            else alert('Cliente sem telefone cadastrado.');
+            return;
+        }
+
+        let cleanPhone = String(phone).replace(/\D/g, '');
+        if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
+
+        const storeName = this.getStoreName();
+        const pixKey = this.getPixKey();
+        const clientName = o.client_name || o.customer_name || 'Cliente';
+        const firstName = clientName ? clientName.split(' ')[0] : 'Cliente';
+
+        let items = o.items;
+        if (typeof items === 'string') {
+            try { items = JSON.parse(items); } catch(e) { items = []; }
+        }
+
+        const itemsTxt = (Array.isArray(items) && items.length > 0)
+            ? items.map(i => `• ${i.qty}x ${i.name}`).join('\n')
+            : '• Itens do pedido';
+
+        const subtotalVal = Number(o.subtotal || 0).toFixed(2).replace('.', ',');
+        const feeVal = Number(o.delivery_fee || 0).toFixed(2).replace('.', ',');
+        const totalVal = Number(o.total || (Number(o.subtotal || 0) + Number(o.delivery_fee || 0))).toFixed(2).replace('.', ',');
+        const payMethod = o.payment_method || o.reference || 'Não informado';
+        const isPix = payMethod.toLowerCase().includes('pix');
+
+        let pixSection = '';
+        if (isPix) {
+            pixSection = pixKey 
+                ? `\n⚡ *Chave Pix para pagamento:*\n\`${pixKey}\`\n`
+                : `\n⚡ *Pagamento via Pix.* (Solicite a chave caso precise)\n`;
+        }
+
+        let msg = '';
+
+        if (o.order_type === 'delivery') {
+            const address = o.address || o.delivery_address || 'A combinar';
+            const number = o.number || 'S/N';
+
+            msg = `Olá, *${firstName}*! Confirmamos o seu pedido com muito carinho! 🥟✨\n\n` +
+                  `📋 *ITENS DO PEDIDO:*\n${itemsTxt}\n\n` +
+                  `═══════════════════════\n` +
+                  `💵 *Subtotal:* R$ ${subtotalVal}\n` +
+                  `🛵 *Taxa de Entrega:* R$ ${feeVal}\n` +
+                  `💰 *TOTAL FINAL:* R$ ${totalVal}\n` +
+                  `💳 *Pagamento:* ${payMethod}\n` +
+                  `📍 *Entrega em:* ${address}, Nº ${number}\n` +
+                  `${pixSection}\n` +
+                  `Por favor, confira os dados acima. Se estiver tudo certinho, já colocaremos seu pedido em produção!\n\n` +
+                  `_– Equipe ${storeName}_`;
+        } else {
+            msg = `Olá, *${firstName}*! Recebemos seu pedido para retirada! 🏪✨\n\n` +
+                  `📋 *ITENS DO PEDIDO:*\n${itemsTxt}\n\n` +
+                  `═══════════════════════\n` +
+                  `💰 *TOTAL DOS ITENS:* R$ ${subtotalVal}\n` +
+                  `💳 *Pagamento:* ${payMethod}\n` +
+                  `${pixSection}\n` +
+                  `Já estamos preparando tudo com capricho. Te avisaremos aqui no Whats assim que estiver prontinho para você vir buscar!\n\n` +
+                  `_– Equipe ${storeName}_`;
+        }
+
+        window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
     },
 
     getClientOrdersCount(phone, clientName) {
@@ -434,22 +549,6 @@ const OrdersManager = {
             const ordName = ord.client_name || ord.customer_name;
             return (cleanPhone && ordPhone === cleanPhone) || (clientName && ordName === clientName);
         }).length;
-    },
-
-    openWhatsAppChat(phone, clientName) {
-        if (!phone) {
-            if (typeof showToast === 'function') showToast('Cliente sem telefone cadastrado!', 'error');
-            else alert('Cliente sem telefone cadastrado.');
-            return;
-        }
-        let cleanPhone = String(phone).replace(/\D/g, '');
-        if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
-
-        const storeName = this.getStoreName();
-        const firstName = clientName ? clientName.split(' ')[0] : 'Cliente';
-        const msg = `Olá, ${firstName}! Tudo bem? A equipe do *${storeName}* já colocou a mão na massa e o seu pedido está em preparo! 🥟👑 Em instantes ele estará prontinho para você aproveitar.`;
-
-        window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
     },
 
     stopLiveTimers() {
@@ -514,6 +613,13 @@ const OrdersManager = {
             const o = this.allOrders.find(item => String(item.id) === String(orderId));
             if (!o) return;
 
+            let receiptEl = document.getElementById('printable-receipt');
+            if (!receiptEl) {
+                receiptEl = document.createElement('div');
+                receiptEl.id = 'printable-receipt';
+                document.body.appendChild(receiptEl);
+            }
+
             const dateFormatted = this.parseDateSafe(o.created_at).toLocaleString('pt-BR');
             const storeName = this.getStoreName();
 
@@ -534,9 +640,6 @@ const OrdersManager = {
                 }).join('')
                 : '<div>Sem itens</div>';
 
-            const printWindow = window.open('', '_blank', 'width=400,height=600,noopener,noreferrer');
-            if (!printWindow) return alert('Bloqueador de pop-ups ativado no seu navegador.');
-
             const clientName = escapeHtml(o.client_name || o.customer_name || 'Não informado');
             const phone = escapeHtml(o.phone || o.customer_phone || 'S/N');
             const address = escapeHtml(o.address || o.delivery_address || '');
@@ -545,53 +648,39 @@ const OrdersManager = {
 
             const subtotalVal = Number(o.subtotal || 0).toFixed(2).replace('.', ',');
             const feeVal = Number(o.delivery_fee || 0).toFixed(2).replace('.', ',');
-            const totalVal = Number(o.total || 0).toFixed(2).replace('.', ',');
+            const totalVal = Number(o.total || (Number(o.subtotal || 0) + Number(o.delivery_fee || 0))).toFixed(2).replace('.', ',');
 
-            printWindow.document.write(`
-                <html>
-                <head>
-                    <title>Comanda - ${clientName}</title>
-                    <style>
-                        @page { margin: 0; }
-                        body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: 300px; margin: 0 auto; padding: 10px; color: #000; background: #fff; }
-                        .text-center { text-align: center; }
-                        .line { border-bottom: 1px dashed #000; margin: 8px 0; }
-                        .title { font-size: 16px; font-weight: bold; }
-                        .info { font-size: 11px; margin-bottom: 3px; }
-                        .total { font-size: 15px; font-weight: bold; }
-                    </style>
-                </head>
-                <body>
-                    <div class="text-center title">${escapeHtml(storeName.toUpperCase())}</div>
-                    <div class="text-center info">*** COMANDA DE PRODUÇÃO ***</div>
-                    <div class="line"></div>
+            receiptEl.innerHTML = `
+                <div style="font-family:'Courier New', Courier, monospace; width:100%; max-width:300px; margin:0 auto; padding:10px; color:#000; background:#fff;">
+                    <div style="text-align:center; font-size:16px; font-weight:bold;">${escapeHtml(storeName.toUpperCase())}</div>
+                    <div style="text-align:center; font-size:11px; margin-bottom:3px;">*** COMANDA DE PRODUÇÃO ***</div>
+                    <div style="border-bottom:1px dashed #000; margin:8px 0;"></div>
 
-                    <div class="info"><strong>DATA:</strong> ${dateFormatted}</div>
-                    <div class="info"><strong>TIPO:</strong> ${o.order_type === 'delivery' ? '🛵 ENTREGA' : '🏪 RETIRADA'}</div>
-                    <div class="info"><strong>CLIENTE:</strong> ${clientName}</div>
-                    <div class="info"><strong>TEL:</strong> ${phone}</div>
-                    ${o.order_type === 'delivery' ? `<div class="info"><strong>ENDEREÇO:</strong> ${address}, Nº ${number}</div>` : ''}
-                    <div class="info"><strong>PAGAMENTO:</strong> ${reference}</div>
+                    <div style="font-size:11px; margin-bottom:3px;"><strong>DATA:</strong> ${dateFormatted}</div>
+                    <div style="font-size:11px; margin-bottom:3px;"><strong>TIPO:</strong> ${o.order_type === 'delivery' ? '🛵 ENTREGA' : '🏪 RETIRADA'}</div>
+                    <div style="font-size:11px; margin-bottom:3px;"><strong>CLIENTE:</strong> ${clientName}</div>
+                    <div style="font-size:11px; margin-bottom:3px;"><strong>TEL:</strong> ${phone}</div>
+                    ${o.order_type === 'delivery' ? `<div style="font-size:11px; margin-bottom:3px;"><strong>ENDEREÇO:</strong> ${address}, Nº ${number}</div>` : ''}
+                    <div style="font-size:11px; margin-bottom:3px;"><strong>PAGAMENTO:</strong> ${reference}</div>
 
-                    <div class="line"></div>
+                    <div style="border-bottom:1px dashed #000; margin:8px 0;"></div>
                     <div style="font-weight:bold; font-size:12px; margin-bottom:6px;">ITENS DO PEDIDO:</div>
                     ${itemsFormatted}
 
-                    <div class="line"></div>
-                    <div class="info">Subtotal: R$ ${subtotalVal}</div>
-                    <div class="info">Taxa Entrega: R$ ${feeVal}</div>
-                    <div class="total" style="margin-top:4px;">TOTAL: R$ ${totalVal}</div>
+                    <div style="border-bottom:1px dashed #000; margin:8px 0;"></div>
+                    <div style="font-size:11px;">Subtotal: R$ ${subtotalVal}</div>
+                    <div style="font-size:11px;">Taxa Entrega: R$ ${feeVal}</div>
+                    <div style="font-size:15px; font-weight:bold; margin-top:4px;">TOTAL: R$ ${totalVal}</div>
 
-                    <div class="line"></div>
-                    <div class="text-center info">Obrigado pela preferência!</div>
+                    <div style="border-bottom:1px dashed #000; margin:8px 0;"></div>
+                    <div style="text-align:center; font-size:11px;">Obrigado pela preferência!</div>
+                </div>
+            `;
 
-                    <script>
-                        window.onload = function() { window.print(); setTimeout(function() { window.close(); }, 500); };
-                    <\/script>
-                </body>
-                </html>
-            `);
-            printWindow.document.close();
+            receiptEl.style.display = 'block';
+            window.print();
+            receiptEl.style.display = 'none';
+
         } catch(e) {
             console.error('Erro ao gerar comanda:', e);
             if (typeof showToast === 'function') showToast('Erro ao gerar comanda para impressão.', 'error');
@@ -614,7 +703,7 @@ const OrdersManager = {
                 if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
 
                 const firstName = clientName ? clientName.split(' ')[0] : 'Cliente';
-                const msg = `Olá, ${firstName}! Tudo bem? A equipe do *${storeName}* já colocou a mão na massa e o seu pedido está em preparo! 🥟👑 Em instantes ele estará prontinho para você aproveitar.`;
+                const msg = `Olá, *${firstName}*! Tudo bem? A equipe do *${storeName}* já colocou a mão na massa e o seu pedido está em preparo! 🥟👑 Em instantes ele estará prontinho.\n\n_– Equipe ${storeName}_`;
 
                 window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
             }
@@ -624,7 +713,13 @@ const OrdersManager = {
                 if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
 
                 const firstName = clientName ? clientName.split(' ')[0] : 'Cliente';
-                const msg = `Olá, ${firstName}! 👑\n\nSeu pedido no *${storeName}* foi finalizado e já está pronto / a caminho! 🛵😋\n\nAgradecemos imensamente a preferência e desejamos um excelente apetite!`;
+                let msg = '';
+
+                if (o?.order_type === 'pickup') {
+                    msg = `Olá, *${firstName}*! Passando pra avisar que seu pedido acabou de ficar pronto e está quentinho! 🥟🔥\n\nPode vir buscar aqui no balcão. Estamos te aguardando! 😊\n\n_– Equipe ${storeName}_`;
+                } else {
+                    msg = `Olá, *${firstName}*! Seu pedido ficou pronto e acabou de sair para entrega em seu endereço! 🛵😋\n\nEm instantes chega aí. Um excelente apetite!\n\n_– Equipe ${storeName}_`;
+                }
 
                 window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
             }
@@ -641,11 +736,9 @@ const OrdersManager = {
     }
 };
 
-// Escuta cliques do usuário para destravar áudio do navegador
 document.addEventListener('click', () => OrdersManager.unlockAudio(), { once: true });
 document.addEventListener('touchstart', () => OrdersManager.unlockAudio(), { once: true });
 
-// Refetch de pedidos e recálculo ao voltar para a aba
 document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
         OrdersManager.stopLiveTimers();
@@ -655,7 +748,6 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 
-// Inicialização única na carga do DOM
 document.addEventListener('DOMContentLoaded', () => {
     OrdersManager.initRealtime();
     OrdersManager.fetchOrders();
