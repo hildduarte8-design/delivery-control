@@ -8,6 +8,10 @@ function escapeHtml(text) {
 }
 
 const MenuAdminManager = {
+    async init() {
+        await this.renderAdminProductsList();
+    },
+
     async uploadProductImage(file) {
         try {
             if (typeof dbClient === 'undefined') return null;
@@ -342,5 +346,11 @@ const MenuAdminManager = {
     }
 };
 
-// Compatibilidade global
+// Compatibilidade global para chamadas via HTML
+window.MenuAdminManager = MenuAdminManager;
 window.openNewProductModal = () => MenuAdminManager.openProductModal();
+
+// Inicialização automática do painel
+document.addEventListener('DOMContentLoaded', () => {
+    MenuAdminManager.init();
+});
