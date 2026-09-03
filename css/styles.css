@@ -1,3 +1,7 @@
+:root {
+    --primary-color: #FF6B35;
+}
+
 /* --- RESET E ESTILOS GERAIS --- */
 * {
     box-sizing: border-box;
@@ -75,7 +79,7 @@ input, select, textarea {
 }
 
 .app-header h1 span {
-    color: #FF6B35;
+    color: var(--primary-color);
 }
 
 .app-header .date-display {
@@ -115,7 +119,7 @@ input, select, textarea {
     right: 6px;
     width: 10px;
     height: 10px;
-    background: #FF6B35;
+    background: var(--primary-color);
     border-radius: 50%;
     border: 2px solid #0F172A;
 }
@@ -282,7 +286,7 @@ input, select, textarea {
     border-top: 2px solid transparent;
 }
 
-.bottom-nav button.active { color: #FF6B35; border-top-color: #FF6B35; }
+.bottom-nav button.active { color: var(--primary-color); border-top-color: var(--primary-color); }
 .bottom-nav button:active { background: rgba(255,107,53,0.08); }
 .bottom-nav svg { width: 24px; height: 24px; }
 
@@ -293,7 +297,7 @@ input, select, textarea {
     transform: translateX(-50%);
     width: 56px; height: 56px;
     border-radius: 50%;
-    background: #FF6B35;
+    background: var(--primary-color);
     border: none;
     color: white;
     font-size: 28px;
@@ -375,7 +379,7 @@ input, select, textarea {
     transition: all .2s;
 }
 
-.subtabs button.active { background: #FF6B35; color: white; }
+.subtabs button.active { background: var(--primary-color); color: white; }
 .sub-panel { display: none; }
 .sub-panel.active { display: block; animation: fadeIn .25s ease; }
 
@@ -384,7 +388,7 @@ input, select, textarea {
     display: flex; align-items: center; justify-content: center; gap: 8px;
     width: 100%; padding: 14px 16px;
     border: none; border-radius: 12px;
-    background: #FF6B35; color: white;
+    background: var(--primary-color); color: white;
     font-size: 15px; font-weight: 700;
     cursor: pointer; min-height: 52px;
     transition: background .2s, transform .1s;
@@ -394,7 +398,7 @@ input, select, textarea {
 .btn:active { transform: scale(0.98); }
 .btn-large { min-height: 56px; font-size: 16px; }
 .btn-secondary { background: #334155; color: #F1F5F9; }
-.btn-ghost { background: transparent; color: #FF6B35; border: 1px solid #FF6B35; }
+.btn-ghost { background: transparent; color: var(--primary-color); border: 1px solid var(--primary-color); }
 .btn-danger { background: #EF4444; }
 .btn-success { background: #10B981; }
 .btn-sm { padding: 8px 14px; min-height: 36px; font-size: 13px; font-weight: 600; border-radius: 9px; }
@@ -420,7 +424,7 @@ input[type="date"] {
 
 .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
     outline: none;
-    border-color: #FF6B35;
+    border-color: var(--primary-color);
     background: #1E293B;
 }
 
@@ -433,7 +437,7 @@ input[type="date"] {
     cursor: pointer; min-height: 44px; transition: all .2s; text-transform: uppercase; letter-spacing: 0.3px;
 }
 
-.toggle-group button.active { background: #FF6B35; color: white; box-shadow: 0 2px 8px rgba(255,107,53,0.3); }
+.toggle-group button.active { background: var(--primary-color); color: white; box-shadow: 0 2px 8px rgba(255,107,53,0.3); }
 
 /* --- CARDS SELECIONÁVEIS DE PAGAMENTO --- */
 .payment-options-grid {
@@ -480,8 +484,8 @@ input[type="date"] {
 
 .payment-card.active {
     background: rgba(255, 107, 53, 0.15);
-    border-color: #FF6B35;
-    color: #FF6B35;
+    border-color: var(--primary-color);
+    color: var(--primary-color);
     box-shadow: 0 0 12px rgba(255, 107, 53, 0.2);
 }
 
@@ -585,7 +589,7 @@ input[type="date"] {
 .product-card { background: #1E293B; border: 1px solid #334155; border-radius: 14px; padding: 14px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
 .product-info h4 { font-size: 16px; color: #F1F5F9; margin-bottom: 4px; }
 .product-info p { font-size: 12px; color: #94A3B8; margin-bottom: 6px; }
-.product-price { font-size: 15px; font-weight: 700; color: #FF6B35; }
+.product-price { font-size: 15px; font-weight: 700; color: var(--primary-color); }
 .qty-controls { display: flex; align-items: center; gap: 8px; background: #0F172A; padding: 4px 8px; border-radius: 8px; border: 1px solid #334155; }
 .qty-btn { background: #334155; color: #FFF; border: none; width: 28px; height: 28px; border-radius: 6px; font-weight: bold; cursor: pointer; touch-action: manipulation; }
 .qty-value { font-weight: 700; min-width: 18px; text-align: center; }
@@ -606,12 +610,12 @@ input[type="date"] {
 .cross-sell-items { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; overscroll-behavior-x: contain; }
 .cross-item-card { background: #1E293B; border: 1px solid #334155; border-radius: 10px; padding: 8px; min-width: 130px; text-align: center; flex-shrink: 0; }
 .cross-item-name { font-size: 11px; font-weight: 700; color: #F1F5F9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cross-item-price { font-size: 11px; color: #FF6B35; font-weight: 700; margin: 4px 0; }
+.cross-item-price { font-size: 11px; color: var(--primary-color); font-weight: 700; margin: 4px 0; }
 
 /* Controles de Reordenação no Gestor */
 .reorder-btns { display: flex; flex-direction: column; gap: 2px; }
 .btn-arrow { background: #334155; color: #F1F5F9; border: none; width: 26px; height: 22px; border-radius: 4px; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; touch-action: manipulation; }
-.btn-arrow:active { background: #FF6B35; }
+.btn-arrow:active { background: var(--primary-color); }
 
 /* --- REGRAS DE IMPRESSÃO DE COMANDA E EXPORTAÇÃO PDF --- */
 @media print {
