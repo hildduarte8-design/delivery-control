@@ -85,7 +85,7 @@ async function loadSettingsUI() {
         colorPicker.value = activeColor;
         colorHex.value = activeColor;
         colorPicker.oninput = (e) => {
-            colorHex.value = e.target.value;
+            colorHex.value = e.target.value.toUpperCase();
             applyDynamicTheme(e.target.value);
         };
         colorHex.oninput = (e) => {
@@ -203,7 +203,6 @@ async function saveSettings() {
             }
         }
 
-        // Converte coordenadas para número puro ou null (evita string vazia no Supabase)
         const storeLat = (rawLat !== '' && rawLat !== null && !isNaN(Number(rawLat))) ? Number(rawLat) : null;
         const storeLon = (rawLon !== '' && rawLon !== null && !isNaN(Number(rawLon))) ? Number(rawLon) : null;
 
@@ -277,7 +276,7 @@ async function downloadSystemBackup() {
                 dbClient.from('stock').select('*'),
                 dbClient.from('recipes').select('*'),
                 dbClient.from('expenses').select('*'),
-                dbClient.from('expenses').select('*'), // Fallback seguro para chamadas paralelas
+                dbClient.from('orders').select('*'), // ✅ CORRIGIDO: Puxa a tabela 'orders' em vez de repetir 'expenses'
                 dbClient.from('customers').select('*')
             ]);
 
