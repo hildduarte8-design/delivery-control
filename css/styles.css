@@ -211,7 +211,7 @@ input, select, textarea {
 .mini-card .icon-box {
     width: 32px;
     height: 32px;
-    border-radius: 9px;
+    border-radius: 99px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -342,21 +342,31 @@ input, select, textarea {
 .fab-menu button:active { background: #334155; }
 .fab-menu .icon-wrap { width: 32px; height: 32px; border-radius: 99px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
+/* SUB-ABAS COM ROLAGEM HORIZONTAL FLUÍDA NO MOBILE */
 .subtabs {
     display: flex;
+    gap: 6px;
     background: #1E293B;
     border-radius: 12px;
     padding: 4px;
     margin-bottom: 16px;
     border: 1px solid #334155;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+}
+
+.subtabs::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
 }
 
 .subtabs button {
-    flex: 1;
+    flex: 0 0 auto; /* Impede os botões de esmagar */
     background: transparent;
     border: none;
     color: #94A3B8;
-    padding: 10px 12px;
+    padding: 10px 16px;
     border-radius: 99px;
     font-size: 13px;
     font-weight: 600;
@@ -396,6 +406,16 @@ input, select, textarea {
     width: 100%; padding: 13px 14px;
     background: #0F172A; border: 1px solid #334155;
     border-radius: 11px; color: #F1F5F9; font-size: 15px; min-height: 50px;
+}
+
+/* CORREÇÃO DO MODO ESCURO PARA CAMPOS DE DATA */
+input[type="date"] {
+    background-color: #0F172A !important;
+    color: #F1F5F9 !important;
+    border: 1px solid #334155 !important;
+    border-radius: 11px !important;
+    padding: 12px 14px !important;
+    color-scheme: dark;
 }
 
 .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
