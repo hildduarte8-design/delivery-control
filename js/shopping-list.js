@@ -1,7 +1,8 @@
-// js/shopping-list.js - Módulo de Lista de Compras, Checklist & Exportação CSV
+// js/shopping-list.js - Módulo de Lista de Compras Blindado
 
 const ShoppingListManager = {
     items: [],
+    _saving: false,
 
     async init() {
         await this.renderList();
@@ -11,15 +12,16 @@ const ShoppingListManager = {
         const container = document.getElementById('shopping-list-container');
         if (!container) return;
 
-        container.innerHTML = '<div style="text-align:center; color:#94A3B8; padding:20px;">Carregando lista de compras...</div>';
-
         try {
-            if (typeof dbClient === 'undefined') return;
+            if (!dbClient) {
+                container.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:20px;">Modo offline ou sem conexão.</div>';
+                return;
+            }
 
             const { data, error } = await dbClient
                 .from('shopping_list')
                 .select('*')
-                .order('is_purchased', { ascending: true }) // Pendentes no topo, marcados no fim
+                .order('is_purchased', { ascending: true })
                 .order('created_at', { ascending: true });
 
             if (error) throw error;
@@ -27,7 +29,7 @@ const ShoppingListManager = {
             this.items = data || [];
 
             if (this.items.length === 0) {
-                container.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:30px;">Sua lista de compras está vazia. Adicione itens para começar!</div>';
+                container.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:30px;">Sua lista de compras está vazia.</div>';
                 this.updateTotals();
                 return;
             }
@@ -36,31 +38,24 @@ const ShoppingListManager = {
 
             container.innerHTML = this.items.map(item => {
                 const isChecked = item.is_purchased ? 'checked' : '';
-                const itemTotal = (Number(item.quantity || 1) * Number(item.unit_price || 0));
                 const textStyle = item.is_purchased ? 'text-decoration: line-through; color: #64748B;' : 'color: #F1F5F9;';
 
                 return `
                     <div class="list-item" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: #1E293B; border-bottom: 1px solid #334155; margin-bottom: 6px; border-radius: 10px;">
-                        
-                        <!-- CHECKBOX E NOME DO ITEM -->
                         <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;">
                             <input type="checkbox" ${isChecked} onchange="ShoppingListManager.toggleCheck('${item.id}', this.checked)" style="width: 22px; height: 22px; accent-color: #10B981; cursor: pointer; flex-shrink: 0;">
-                            
                             <div style="min-width: 0;">
                                 <div style="font-weight: 700; font-size: 15px; ${textStyle} white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(item.item_name)}</div>
                                 <div style="font-size: 11px; color: #94A3B8;">Qtd: ${item.quantity || 1} • ${escapeHtml(item.category || 'Insumos')}</div>
                             </div>
                         </div>
-
-                        <!-- EDICÃO DE PREÇO EM TEMPO REAL E EXCLUSÃO -->
                         <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
                             <div style="display: flex; align-items: center; background: #0F172A; border: 1px solid #334155; border-radius: 8px; padding: 2px 8px;">
                                 <span style="font-size: 12px; color: #94A3B8; margin-right: 4px;">R$</span>
-                                <input type="number" step="0.01" value="${item.unit_price > 0 ? item.unit_price : ''}" placeholder="0,00" 
+                                <input type="number" step="0.01" min="0" value="${item.unit_price > 0 ? item.unit_price : ''}" placeholder="0,00" 
                                     onchange="ShoppingListManager.updatePrice('${item.id}', this.value)" 
                                     style="width: 65px; background: transparent; border: none; color: #10B981; font-weight: 800; font-size: 14px; text-align: right; outline: none;">
                             </div>
-
                             <button onclick="ShoppingListManager.deleteItem('${item.id}')" title="Excluir" style="background: none; border: none; color: #EF4444; font-size: 16px; cursor: pointer; padding: 4px;">🗑️</button>
                         </div>
                     </div>
@@ -78,47 +73,40 @@ const ShoppingListManager = {
         const topExpenseCard = document.getElementById('shopping-top-expense');
 
         const grandTotal = this.items.reduce((acc, i) => acc + (Number(i.quantity || 1) * Number(i.unit_price || 0)), 0);
-        
         const sorted = [...this.items].sort((a, b) => ((b.quantity || 1) * (b.unit_price || 0)) - ((a.quantity || 1) * (a.unit_price || 0)));
         const topItem = sorted[0];
         const topVal = topItem ? ((topItem.quantity || 1) * (topItem.unit_price || 0)) : 0;
 
-        if (totalCard) {
-            totalCard.textContent = grandTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        }
-        if (topExpenseCard) {
-            topExpenseCard.textContent = topVal > 0 
-                ? `${topItem.item_name} (${topVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` 
-                : 'Nenhum item';
-        }
+        if (totalCard) totalCard.textContent = grandTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        if (topExpenseCard) topExpenseCard.textContent = topVal > 0 ? `${topItem.item_name} (${topVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : 'Nenhum item';
     },
 
     async toggleCheck(id, isChecked) {
         const item = this.items.find(i => i.id === id);
         if (item) item.is_purchased = isChecked;
-
         this.updateTotals();
 
         try {
-            await dbClient.from('shopping_list').update({ is_purchased: isChecked }).eq('id', id);
-            this.renderList(); // Reordena enviando os concluídos para baixo
+            if (dbClient) await dbClient.from('shopping_list').update({ is_purchased: isChecked }).eq('id', id);
+            await this.renderList();
         } catch (e) {
             console.error('Erro ao marcar item:', e);
         }
     },
 
     async updatePrice(id, newPrice) {
-        const price = parseFloat(newPrice) || 0;
+        // Bloqueia preços negativos
+        const price = Math.max(0, parseFloat(newPrice) || 0);
         const item = this.items.find(i => i.id === id);
         if (item) {
             item.unit_price = price;
             item.total_price = price * (item.quantity || 1);
         }
 
-        this.updateTotals(); // Atualiza a soma no topo na hora
+        this.updateTotals();
 
         try {
-            await dbClient.from('shopping_list').update({ unit_price: price, total_price: price * (item.quantity || 1) }).eq('id', id);
+            if (dbClient) await dbClient.from('shopping_list').update({ unit_price: price, total_price: price * (item.quantity || 1) }).eq('id', id);
         } catch (e) {
             console.error('Erro ao atualizar preço:', e);
         }
@@ -136,18 +124,17 @@ const ShoppingListManager = {
                     <option value="Insumos">🧀 Insumos / Ingredientes</option>
                     <option value="Embalagens">📦 Embalagens</option>
                     <option value="Bebidas">🥤 Bebidas</option>
-                    <option value="Limpeza">Mecânica / Limpeza</option>
                     <option value="Outros">Outros</option>
                 </select>
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                 <div class="form-group">
                     <label>Quantidade *</label>
-                    <input type="number" step="0.001" id="shop_qty" value="1" oninput="ShoppingListManager.calcPreview()">
+                    <input type="number" step="0.001" min="0.001" id="shop_qty" value="1" oninput="ShoppingListManager.calcPreview()">
                 </div>
                 <div class="form-group">
                     <label>Preço Unitário Estimado (R$)</label>
-                    <input type="number" step="0.01" id="shop_unit_price" placeholder="0.00 (Opcional)" oninput="ShoppingListManager.calcPreview()">
+                    <input type="number" step="0.01" min="0" id="shop_unit_price" placeholder="0.00" oninput="ShoppingListManager.calcPreview()">
                 </div>
             </div>
             <div style="background:#0F172A; padding:12px; border-radius:8px; text-align:right; margin-bottom:14px; border:1px solid #334155;">
@@ -157,73 +144,60 @@ const ShoppingListManager = {
             <button class="btn btn-large btn-success" id="btn_save_shop" onclick="ShoppingListManager.saveItem()">💾 Adicionar à Lista</button>
         `;
 
-        if (typeof openModal === 'function') {
-            openModal('🛒 Novo Item de Compra', bodyHtml);
-        }
+        if (typeof openModal === 'function') openModal('🛒 Novo Item de Compra', bodyHtml);
     },
 
     calcPreview() {
-        const qty = parseFloat(document.getElementById('shop_qty')?.value) || 0;
-        const price = parseFloat(document.getElementById('shop_unit_price')?.value) || 0;
+        const qty = Math.max(0, parseFloat(document.getElementById('shop_qty')?.value) || 0);
+        const price = Math.max(0, parseFloat(document.getElementById('shop_unit_price')?.value) || 0);
         const total = qty * price;
         const previewEl = document.getElementById('shop_total_preview');
-        if (previewEl) {
-            previewEl.textContent = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        }
+        if (previewEl) previewEl.textContent = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     },
 
     async saveItem() {
+        if (this._saving) return; // Trava anti-duplo clique
+
         const item_name = document.getElementById('shop_name')?.value.trim();
         const category = document.getElementById('shop_category')?.value || 'Insumos';
-        const quantity = parseFloat(document.getElementById('shop_qty')?.value) || 1;
-        const unit_price = parseFloat(document.getElementById('shop_unit_price')?.value) || 0;
+        const quantity = Math.max(0.001, parseFloat(document.getElementById('shop_qty')?.value) || 1);
+        const unit_price = Math.max(0, parseFloat(document.getElementById('shop_unit_price')?.value) || 0);
         const total_price = quantity * unit_price;
         const saveBtn = document.getElementById('btn_save_shop');
 
         if (!item_name) {
             if (typeof showToast === 'function') showToast('Preencha o nome do produto!', 'error');
-            else alert('Preencha o nome do produto!');
             return;
         }
 
         try {
-            if (saveBtn) {
-                saveBtn.disabled = true;
-                saveBtn.textContent = '⌛ Adicionando...';
+            this._saving = true;
+            if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⌛ Adicionando...'; }
+
+            if (dbClient) {
+                const { error } = await dbClient.from('shopping_list').insert([{ item_name, category, quantity, unit_price, total_price, is_purchased: false }]);
+                if (error) throw error;
             }
-
-            const { error } = await dbClient.from('shopping_list').insert([{
-                item_name,
-                category,
-                quantity,
-                unit_price,
-                total_price,
-                is_purchased: false
-            }]);
-
-            if (error) throw error;
 
             if (typeof showToast === 'function') showToast('Item adicionado à lista!');
             if (typeof closeModal === 'function') closeModal();
-            this.renderList();
+            await this.renderList();
 
         } catch (e) {
             console.error('Erro ao salvar item da lista:', e);
             if (typeof showToast === 'function') showToast('Erro ao salvar item.', 'error');
-            if (saveBtn) {
-                saveBtn.disabled = false;
-                saveBtn.textContent = '💾 Adicionar à Lista';
-            }
+        } finally {
+            this._saving = false;
+            if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Adicionar à Lista'; }
         }
     },
 
     async deleteItem(id) {
         if (!confirm('Deseja remover este item da lista?')) return;
         try {
-            const { error } = await dbClient.from('shopping_list').delete().eq('id', id);
-            if (error) throw error;
+            if (dbClient) await dbClient.from('shopping_list').delete().eq('id', id);
             if (typeof showToast === 'function') showToast('Item removido!');
-            this.renderList();
+            await this.renderList();
         } catch (e) {
             console.error('Erro ao excluir item:', e);
         }
@@ -232,18 +206,18 @@ const ShoppingListManager = {
     exportCSV() {
         if (!this.items || this.items.length === 0) {
             if (typeof showToast === 'function') showToast('Sua lista está vazia para exportar.', 'error');
-            else alert('Sua lista está vazia.');
             return;
         }
 
+        const csvEscape = (val) => `"${String(val ?? '').replace(/"/g, '""')}"`;
         let csvContent = "Status;Item;Categoria;Quantidade;Preco_Unitario_R$;Total_R$\n";
 
         this.items.forEach(item => {
             const status = item.is_purchased ? 'Comprado' : 'Pendente';
             const row = [
-                `"${status}"`,
-                `"${item.item_name.replace(/"/g, '""')}"`,
-                `"${item.category || 'Insumos'}"`,
+                csvEscape(status),
+                csvEscape(item.item_name),
+                csvEscape(item.category || 'Insumos'),
                 item.quantity || 1,
                 (item.unit_price || 0).toFixed(2),
                 ((item.quantity || 1) * (item.unit_price || 0)).toFixed(2)
