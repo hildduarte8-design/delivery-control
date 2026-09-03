@@ -190,10 +190,11 @@
     </div>
 </section>
 
-<!-- ABA 4: GESTÃO & FINANCEIRO (UNIFICADA: ESTOQUE + GASTOS) -->
+<!-- ABA 4: GESTÃO & FINANCEIRO (UNIFICADA: ESTOQUE + GASTOS + COMPRAS) -->
 <section id="tab-financial" class="tab-content">
     <div class="subtabs" id="financialSubtabs">
         <button class="active" data-sub="insumos">📦 Insumos</button>
+        <button data-sub="compras">🛒 Lista de Compras</button>
         <button data-sub="fixed">📋 Contas Fixas</button>
         <button data-sub="gastos">💸 Gastos</button>
         <button data-sub="logistics">🛵 Logística</button>
@@ -211,7 +212,40 @@
         <div id="stockList"></div>
     </div>
 
-    <!-- Sub-painel 2: Contas Fixas -->
+    <!-- Sub-painel 2: Lista de Compras -->
+    <div class="sub-panel" data-panel="compras">
+        <div class="grid-2" style="margin-bottom: 12px;">
+            <div class="mini-card">
+                <div class="top">
+                    <div class="icon-box green">🛒</div>
+                    <div class="label">Total da Lista</div>
+                </div>
+                <div class="value-sm positive" id="shopping-total-value">R$ 0,00</div>
+            </div>
+            <div class="mini-card">
+                <div class="top">
+                    <div class="icon-box red">🔥</div>
+                    <div class="label">Maior Gasto</div>
+                </div>
+                <div class="value-sm" id="shopping-top-expense" style="font-size:12px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">-</div>
+            </div>
+        </div>
+
+        <div style="display:flex; gap:8px; margin-bottom:14px;">
+            <button class="btn btn-success" onclick="ShoppingListManager.openModal()" style="flex:1;">
+                + Item de Compra
+            </button>
+            <button class="btn btn-secondary" onclick="ShoppingListManager.exportCSV()" style="width:auto; padding:0 16px; background:#334155;">
+                📥 CSV para IA
+            </button>
+        </div>
+
+        <div id="shopping-list-container">
+            <div style="color:#94A3B8; text-align:center; padding:20px; font-size:13px;">Carregando lista de compras...</div>
+        </div>
+    </div>
+
+    <!-- Sub-painel 3: Contas Fixas -->
     <div class="sub-panel" data-panel="fixed">
         <div class="card" style="background: linear-gradient(135deg, rgba(239,68,68,0.15) 0%, rgba(239,68,68,0.04) 100%); border-color: rgba(239,68,68,0.3);">
             <div class="label" style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Total Mensal Fixo</div>
@@ -226,7 +260,7 @@
         <div id="fixedList"></div>
     </div>
 
-    <!-- Sub-painel 3: Gastos e Despesas Gerais -->
+    <!-- Sub-painel 4: Gastos e Despesas Gerais -->
     <div class="sub-panel" data-panel="gastos">
         <div class="card mini-card" style="margin-bottom: 16px; background: linear-gradient(145deg, #1E293B 0%, #0F172A 100%);">
             <div class="top">
@@ -248,7 +282,7 @@
         </div>
     </div>
 
-    <!-- Sub-painel 4: Gastos com Logística -->
+    <!-- Sub-painel 5: Gastos com Logística -->
     <div class="sub-panel" data-panel="logistics">
         <button class="btn btn-large" onclick="openLogisticsModal()">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -270,7 +304,7 @@
         <div id="logisticsList"></div>
     </div>
 
-    <!-- Sub-painel 5: Calculadora de Ficha Técnica e Precificação para Delivery -->
+    <!-- Sub-painel 6: Calculadora de Ficha Técnica e Precificação para Delivery -->
     <div class="sub-panel" data-panel="calc">
         <div class="section-title">
             <span>🧮 Calculadora & Ficha Técnica</span>
@@ -427,6 +461,7 @@
 <button class="fab" id="fabBtn">+</button>
 <div class="fab-menu" id="fabMenu">
     <button onclick="quickAction('sale')"><span class="icon-wrap" style="background:rgba(16,185,129,0.15);color:#10B981;">💰</span> Nova Entrada</button>
+    <button onclick="ShoppingListManager.openModal()"><span class="icon-wrap" style="background:rgba(245,158,11,0.15);color:#F59E0B;">🛒</span> Item de Compra</button>
     <button onclick="quickAction('stock')"><span class="icon-wrap" style="background:rgba(255,107,53,0.15);color:#FF6B35;">📦</span> Novo Insumo</button>
     <button onclick="ExpensesAdminManager.openExpenseModal()"><span class="icon-wrap" style="background:rgba(239,68,68,0.15);color:#EF4444;">💸</span> Novo Gasto</button>
     <button onclick="quickAction('logistics')"><span class="icon-wrap" style="background:rgba(239,68,68,0.15);color:#EF4444;">🛵</span> Gasto Logística</button>
@@ -462,7 +497,7 @@
 
 <div class="toast" id="toast"></div>
 
-<!-- ESTRUTURA DO MODAL PRINCIPAL (TRAVADO COM DISPLAY NONE INICIAL) -->
+<!-- ESTRUTURA DO MODAL PRINCIPAL -->
 <div class="modal-overlay" id="modalOverlay" style="display: none;">
     <div class="modal" id="modalContent">
         <div class="modal-handle"></div>
@@ -609,6 +644,7 @@
 <script src="js/sales.js"></script>
 <script src="js/expenses.js"></script>
 <script src="js/expenses-admin.js"></script>
+<script src="js/shopping-list.js"></script>
 <script src="js/calculator.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/menu-admin.js"></script>
