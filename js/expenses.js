@@ -7,6 +7,9 @@ function escapeHtml(text) {
 }
 
 const ExpensesManager = {
+    _savingFixed: false,
+    _savingLogistics: false,
+
     // Helper para interpretar datas sem erro de fuso ou sintaxe
     parseDateSafe(dateInput) {
         if (!dateInput) return null;
@@ -18,7 +21,7 @@ const ExpensesManager = {
     // Carrega despesas do Supabase ou LocalStorage
     async fetchExpenses() {
         try {
-            if (typeof dbClient !== 'undefined') {
+            if (typeof dbClient !== 'undefined' && dbClient) {
                 const { data, error } = await dbClient.from('expenses').select('*').order('created_at', { ascending: false });
                 if (!error && data) {
                     const fixed = data.filter(e => e.type === 'fixed');
@@ -48,13 +51,15 @@ const ExpensesManager = {
 
     // Salva ou Edita Conta Fixa
     async saveFixedExpense(editingId = null) {
-        const desc = document.getElementById('exp_desc')?.value?.trim();
-        const amt = parseFloat(document.getElementById('exp_amt')?.value) || 0;
-        const due = parseInt(document.getElementById('exp_due')?.value) || 1;
+        if (this._savingFixed) return;
 
-        if (!desc || amt <= 0) {
-            if (typeof showToast === 'function') showToast('Preencha a descrição e um valor válido!', 'error');
-            else alert('Preencha a descrição e um valor válido!');
+        const desc = document.getElementById('exp_desc')?.value?.trim();
+        const amt = Math.max(0, parseFloat(document.getElementById('exp_amt')?.value) || 0);
+        const due = Math.min(31, Math.max(1, parseInt(document.getElementById('exp_due')?.value) || 10));
+        const saveBtn = document.querySelector('#modalBody button.btn');
+
+        if (!desc || amt < 0.01) {
+            if (typeof showToast === 'function') showToast('Preencha a descrição e um valor mínimo de R$ 0,01!', 'error');
             return;
         }
 
@@ -70,12 +75,18 @@ const ExpensesManager = {
         };
 
         try {
-            if (typeof dbClient !== 'undefined') {
+            this._savingFixed = true;
+            if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⌛ Salvando...'; }
+
+            if (typeof dbClient !== 'undefined' && dbClient) {
                 const { error } = await dbClient.from('expenses').upsert([payload]);
                 if (error) console.error('Erro no Supabase ao salvar conta fixa:', error.message);
             }
         } catch (e) {
             console.error('Erro ao salvar conta fixa:', e);
+        } finally {
+            this._savingFixed = false;
+            if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = `💾 ${editingId ? 'Atualizar' : 'Salvar'} Conta Fixa`; }
         }
 
         if (typeof state === 'undefined') window.state = { expenses: { fixed: [], logistics: [] } };
@@ -101,12 +112,14 @@ const ExpensesManager = {
 
     // Salva ou Edita Gasto de Logística
     async saveLogisticsExpense(editingId = null) {
-        const desc = document.getElementById('log_desc')?.value?.trim();
-        const amt = parseFloat(document.getElementById('log_amt')?.value) || 0;
+        if (this._savingLogistics) return;
 
-        if (!desc || amt <= 0) {
-            if (typeof showToast === 'function') showToast('Preencha a descrição e um valor válido!', 'error');
-            else alert('Preencha a descrição e um valor válido!');
+        const desc = document.getElementById('log_desc')?.value?.trim();
+        const amt = Math.max(0, parseFloat(document.getElementById('log_amt')?.value) || 0);
+        const saveBtn = document.querySelector('#modalBody button.btn');
+
+        if (!desc || amt < 0.01) {
+            if (typeof showToast === 'function') showToast('Preencha a descrição e um valor mínimo de R$ 0,01!', 'error');
             return;
         }
 
@@ -121,12 +134,18 @@ const ExpensesManager = {
         };
 
         try {
-            if (typeof dbClient !== 'undefined') {
+            this._savingLogistics = true;
+            if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⌛ Salvando...'; }
+
+            if (typeof dbClient !== 'undefined' && dbClient) {
                 const { error } = await dbClient.from('expenses').upsert([payload]);
                 if (error) console.error('Erro no Supabase ao salvar logística:', error.message);
             }
         } catch (e) {
             console.error('Erro ao salvar gasto de logística:', e);
+        } finally {
+            this._savingLogistics = false;
+            if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = `💾 ${editingId ? 'Atualizar' : 'Salvar'} Gasto`; }
         }
 
         if (typeof state === 'undefined') window.state = { expenses: { fixed: [], logistics: [] } };
@@ -155,7 +174,7 @@ const ExpensesManager = {
         if (!confirm('Tem certeza que deseja excluir esta despesa?')) return;
 
         try {
-            if (typeof dbClient !== 'undefined') {
+            if (typeof dbClient !== 'undefined' && dbClient) {
                 await dbClient.from('expenses').delete().eq('id', id);
             }
         } catch (e) {
@@ -194,7 +213,7 @@ function openFixedExpenseModal(id = null) {
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
             <div class="form-group">
                 <label>Valor Mensal (R$) *</label>
-                <input type="number" step="0.01" id="exp_amt" value="${exp?.amount || ''}" placeholder="0.00">
+                <input type="number" step="0.01" min="0.01" id="exp_amt" value="${exp?.amount || ''}" placeholder="0.00">
             </div>
             <div class="form-group">
                 <label>Dia do Vencimento</label>
@@ -228,7 +247,7 @@ function openLogisticsModal(id = null) {
         </div>
         <div class="form-group">
             <label>Valor (R$) *</label>
-            <input type="number" step="0.01" id="log_amt" value="${exp?.amount || ''}" placeholder="0.00">
+            <input type="number" step="0.01" min="0.01" id="log_amt" value="${exp?.amount || ''}" placeholder="0.00">
         </div>
         <button class="btn btn-large" onclick="ExpensesManager.saveLogisticsExpense(${safeId ? `'${safeId}'` : 'null'})" style="margin-top:12px; width:100%; min-height:44px; touch-action:manipulation;">
             💾 ${safeId ? 'Atualizar' : 'Salvar'} Gasto
