@@ -1,9 +1,12 @@
 // js/expenses.js - Gestão Completa de Despesas (Contas Fixas e Logística)
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.appendChild(document.createTextNode(String(text ?? '')));
-    return div.innerHTML;
+// Declaração segura do escapeHtml para evitar duplicidade no escopo global (NR-07)
+if (typeof window.escapeHtml !== 'function') {
+    window.escapeHtml = function(text) {
+        const div = document.createElement('div');
+        div.appendChild(document.createTextNode(String(text ?? '')));
+        return div.innerHTML;
+    };
 }
 
 const ExpensesManager = {
