@@ -4,6 +4,10 @@ const AnalyticsManager = {
     currentPeriod: 'all', // 'today', '7days', 'month', 'all'
     lastFilteredOrders: [],
 
+    async init() {
+        await this.render();
+    },
+
     async render() {
         const container = document.getElementById('analytics-container');
         if (!container) return;
@@ -11,8 +15,8 @@ const AnalyticsManager = {
         container.innerHTML = '<div style="text-align:center; color:#94A3B8; padding:30px;">⌛ Carregando dados de desempenho...</div>';
 
         try {
-            if (typeof dbClient === 'undefined') {
-                container.innerHTML = '<div style="text-align:center; color:#EF4444; padding:20px;">Erro de conexão com o banco de dados.</div>';
+            if (!dbClient) {
+                container.innerHTML = '<div style="text-align:center; color:#EF4444; padding:20px;">Modo offline ou sem conexão com o banco de dados.</div>';
                 return;
             }
 
@@ -69,9 +73,9 @@ const AnalyticsManager = {
                         <strong style="display:block; font-size:17px; color:#F59E0B; margin-top:2px;">R$ ${stats.ticketMedio.toFixed(2)}</strong>
                     </div>
 
-                    <div class="card" style="padding:12px; text-align:center; border-top:3px solid #FF6B35; margin:0;">
+                    <div class="card" style="padding:12px; text-align:center; border-top:3px solid var(--primary-color, #FF6B35); margin:0;">
                         <span style="font-size:11px; color:#94A3B8;">Itens Vendidos</span>
-                        <strong style="display:block; font-size:17px; color:#FF6B35; margin-top:2px;">${stats.totalItemsSold} un</strong>
+                        <strong style="display:block; font-size:17px; color:var(--primary-color, #FF6B35); margin-top:2px;">${stats.totalItemsSold} un</strong>
                     </div>
                 </div>
 
@@ -112,15 +116,15 @@ const AnalyticsManager = {
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; font-size:13px;">
                                     <div>
                                         <span style="font-size:14px; margin-right:4px;">${medal}</span>
-                                        <strong style="color:#F1F5F9;">${p.name}</strong>
+                                        <strong style="color:#F1F5F9;">${escapeHtml(p.name)}</strong>
                                     </div>
                                     <div style="text-align:right;">
-                                        <strong style="color:#FF6B35;">${p.qty} un</strong>
+                                        <strong style="color:var(--primary-color, #FF6B35);">${p.qty} un</strong>
                                         <span style="font-size:11px; color:#94A3B8; margin-left:6px;">(R$ ${p.revenue.toFixed(2)})</span>
                                     </div>
                                 </div>
                                 <div style="background:#0F172A; height:6px; border-radius:3px; overflow:hidden;">
-                                    <div style="background: linear-gradient(90deg, #FF6B35, #10B981); height:100%; width:${percent}%; border-radius:3px; transition: width 0.3s;"></div>
+                                    <div style="background: linear-gradient(90deg, var(--primary-color, #FF6B35), #10B981); height:100%; width:${percent}%; border-radius:3px; transition: width 0.3s;"></div>
                                 </div>
                             </div>
                         `;
@@ -143,17 +147,23 @@ const AnalyticsManager = {
         if (period === 'all') return orders;
 
         const now = new Date();
+        const todayStr = now.toISOString().split('T')[0];
+
         return orders.filter(o => {
-            const orderDate = new Date(o.created_at);
+            const dateStr = o.created_at || o.date;
+            if (!dateStr) return false;
+
+            const orderDate = new Date(dateStr);
+            const orderDayStr = orderDate.toISOString().split('T')[0];
 
             if (period === 'today') {
-                return orderDate.toDateString() === now.toDateString();
+                return orderDayStr === todayStr;
             }
 
             if (period === '7days') {
-                const diffTime = Math.abs(now - orderDate);
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                return diffDays <= 7;
+                // Filtro exato dos últimos 7 dias sem erro de arredondamento
+                const sevenDaysAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+                return orderDate >= sevenDaysAgo && orderDate <= now;
             }
 
             if (period === 'month') {
@@ -174,13 +184,13 @@ const AnalyticsManager = {
             const total = Number(o.total || 0);
             totalRevenue += total;
 
-            // Classificação automática por forma de pagamento
-            const ref = (o.reference || '').toLowerCase();
+            // Classificação robusta por forma de pagamento
+            const ref = String(o.payment_method || o.reference || '').toLowerCase();
             if (ref.includes('pix')) {
                 paymentBreakdown.Pix += total;
-            } else if (ref.includes('cart') || ref.includes('débito') || ref.includes('crédito')) {
+            } else if (ref.includes('cart') || ref.includes('débito') || ref.includes('crédito') || ref.includes('card')) {
                 paymentBreakdown.Cartao += total;
-            } else if (ref.includes('dinheiro') || ref.includes('espécie')) {
+            } else if (ref.includes('dinheiro') || ref.includes('espécie') || ref.includes('money')) {
                 paymentBreakdown.Dinheiro += total;
             } else {
                 paymentBreakdown.Outros += total;
@@ -232,26 +242,37 @@ const AnalyticsManager = {
             return;
         }
 
+        const csvEscape = (val) => `"${String(val ?? '').replace(/"/g, '""')}"`;
         let csv = 'Data/Hora;Cliente;Telefone;Tipo;Pagamento;Subtotal;Frete;Total;Status\n';
 
         this.lastFilteredOrders.forEach(o => {
-            const date = new Date(o.created_at).toLocaleString('pt-BR');
-            const name = (o.client_name || '').replace(/;/g, '');
-            const phone = (o.phone || '').replace(/;/g, '');
+            const date = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '';
+            const name = o.client_name || o.customer_name || '';
+            const phone = o.phone || '';
             const type = o.order_type === 'delivery' ? 'Entrega' : 'Retirada';
-            const payment = (o.reference || 'Não informado').replace(/;/g, '');
+            const payment = o.payment_method || o.reference || 'Não informado';
             const subtotal = Number(o.subtotal || 0).toFixed(2);
             const freight = Number(o.delivery_fee || 0).toFixed(2);
             const total = Number(o.total || 0).toFixed(2);
             const status = o.status || 'pending';
 
-            csv += `"${date}";"${name}";"${phone}";"${type}";"${payment}";"${subtotal}";"${freight}";"${total}";"${status}"\n`;
+            csv += `${csvEscape(date)};${csvEscape(name)};${csvEscape(phone)};${csvEscape(type)};${csvEscape(payment)};${subtotal};${freight};${total};${csvEscape(status)}\n`;
         });
 
         const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
         link.download = `Relatorio_Vendas_${this.currentPeriod}_${new Date().toISOString().slice(0,10)}.csv`;
+        document.body.appendChild(link);
         link.click();
+        document.body.removeChild(link);
+
+        if (typeof showToast === 'function') showToast('📊 CSV baixado com sucesso!');
     }
 };
+
+window.AnalyticsManager = AnalyticsManager;
+
+document.addEventListener('DOMContentLoaded', () => {
+    AnalyticsManager.init();
+});
