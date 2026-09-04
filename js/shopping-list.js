@@ -95,18 +95,23 @@ const ShoppingListManager = {
     },
 
     async updatePrice(id, newPrice) {
-        // Bloqueia preços negativos
         const price = Math.max(0, parseFloat(newPrice) || 0);
         const item = this.items.find(i => i.id === id);
-        if (item) {
-            item.unit_price = price;
-            item.total_price = price * (item.quantity || 1);
-        }
+        
+        // Proteção contra item indefinido (evita TypeError)
+        if (!item) return;
 
+        item.unit_price = price;
+        item.total_price = price * (item.quantity || 1);
         this.updateTotals();
 
         try {
-            if (dbClient) await dbClient.from('shopping_list').update({ unit_price: price, total_price: price * (item.quantity || 1) }).eq('id', id);
+            if (dbClient) {
+                await dbClient.from('shopping_list').update({ 
+                    unit_price: price, 
+                    total_price: price * (item.quantity || 1) 
+                }).eq('id', id);
+            }
         } catch (e) {
             console.error('Erro ao atualizar preço:', e);
         }
@@ -156,7 +161,7 @@ const ShoppingListManager = {
     },
 
     async saveItem() {
-        if (this._saving) return; // Trava anti-duplo clique
+        if (this._saving) return;
 
         const item_name = document.getElementById('shop_name')?.value.trim();
         const category = document.getElementById('shop_category')?.value || 'Insumos';
@@ -235,6 +240,9 @@ const ShoppingListManager = {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+
+        // Liberação de memória após o clique de download
+        setTimeout(() => URL.revokeObjectURL(url), 100);
 
         if (typeof showToast === 'function') showToast('📊 CSV baixado com sucesso!');
     }
