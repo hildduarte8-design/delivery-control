@@ -37,9 +37,20 @@ const ExpensesAdminManager = {
                 return;
             }
 
-            const total = expenses.reduce((acc, item) => acc + Number(item.amount || 0), 0);
+            // CORREÇÃO EA-04: Soma apenas os gastos do MÊS ATUAL para o card de resumo
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+
+            const monthExpenses = expenses.filter(item => {
+                const dateVal = item.expense_date ? item.expense_date + 'T00:00:00' : item.created_at;
+                const d = new Date(dateVal);
+                return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+            });
+
+            const totalMonth = monthExpenses.reduce((acc, item) => acc + Number(item.amount || 0), 0);
             if (totalCard) {
-                totalCard.textContent = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                totalCard.textContent = totalMonth.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             }
 
             container.innerHTML = expenses.map(item => {
@@ -94,7 +105,7 @@ const ExpensesAdminManager = {
             </div>
 
             <div id="modal_items_list" style="display:flex; flex-direction:column; gap:8px; max-height:260px; overflow-y:auto; padding-right:4px; margin-bottom:12px;">
-                </div>
+            </div>
 
             <button type="button" class="btn btn-sm btn-secondary" onclick="ExpensesAdminManager.addItemRow()" style="margin-bottom:14px; width:100%; border:1px dashed var(--primary-color, #FF6B35); color:var(--primary-color, #FF6B35);">
                 ➕ Adicionar Outro Item
