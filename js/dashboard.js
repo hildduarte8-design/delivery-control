@@ -1,4 +1,4 @@
-// js/analytics.js & js/dashboard.js - Painel Principal e Métricas de Vendas
+// js/dashboard.js - Painel Principal & Fechamento Financeiro
 
 function escapeHtml(text) {
     const div = document.createElement('div');
@@ -34,153 +34,7 @@ function getIFoodWeeklyCycle(referenceDate = new Date()) {
     return { cycleStart, cycleEnd };
 }
 
-// Módulo de Analytics
-if (!window.AnalyticsManager) {
-    window.AnalyticsManager = {
-        currentFilter: 'all',
-        cachedOrders: [],
-
-        setFilter(filterType) {
-            this.currentFilter = filterType;
-            this.render();
-        },
-
-        render(ordersList = null) {
-            if (ordersList && Array.isArray(ordersList)) {
-                this.cachedOrders = ordersList;
-            }
-
-            let orders = this.cachedOrders;
-            if (!orders || orders.length === 0) {
-                if (typeof state !== 'undefined' && Array.isArray(state.orders)) orders = state.orders;
-                else {
-                    try {
-                        orders = JSON.parse(localStorage.getItem('dly_orders') || localStorage.getItem('dly_sales') || '[]');
-                    } catch (e) {
-                        orders = [];
-                    }
-                }
-            }
-
-            const now = new Date();
-            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-
-            const filteredOrders = orders.filter(o => {
-                if (o.status === 'cancelled') return false;
-
-                const orderDate = parseDateSafe(o.created_at || o.date);
-                const orderDateStr = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${String(orderDate.getDate()).padStart(2, '0')}`;
-
-                if (this.currentFilter === 'today') return orderDateStr === todayStr;
-                if (this.currentFilter === '7days') {
-                    const diffDays = Math.ceil(Math.abs(now - orderDate) / (1000 * 60 * 60 * 24));
-                    return diffDays <= 7;
-                }
-                if (this.currentFilter === 'month') {
-                    return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
-                }
-                return true;
-            });
-
-            let totalRevenue = 0;
-            let totalOrdersCount = filteredOrders.length;
-            let totalItemsQty = 0;
-
-            let totalPix = 0;
-            let totalCard = 0;
-            let totalCash = 0;
-
-            const rankingMap = new Map();
-
-            filteredOrders.forEach(o => {
-                const orderTotal = Number(o.total || o.amount || 0);
-                totalRevenue += orderTotal;
-
-                const method = String(o.payment_method || o.reference || o.paymentMethod || '').toLowerCase();
-
-                if (method.includes('pix')) {
-                    totalPix += orderTotal;
-                } else if (method.includes('carta') || method.includes('cartão') || method.includes('credito') || method.includes('debito') || method.includes('card')) {
-                    totalCard += orderTotal;
-                } else {
-                    totalCash += orderTotal;
-                }
-
-                let items = o.items;
-                if (typeof items === 'string') {
-                    try { items = JSON.parse(items); } catch (e) { items = []; }
-                }
-
-                if (Array.isArray(items) && items.length > 0) {
-                    items.forEach(item => {
-                        const qty = Number(item.qty || item.quantity || 1);
-                        totalItemsQty += qty;
-
-                        const name = item.name || 'Item do Cardápio';
-
-                        let itemTotal = Number(item.total || 0);
-                        if (itemTotal <= 0) {
-                            const unitPrice = Number(item.price || item.unit_price || item.unitPrice || (orderTotal > 0 ? orderTotal / items.length : 0));
-                            itemTotal = unitPrice * qty;
-                        }
-
-                        if (!rankingMap.has(name)) {
-                            rankingMap.set(name, { qty: 0, revenue: 0 });
-                        }
-
-                        const curr = rankingMap.get(name);
-                        curr.qty += qty;
-                        curr.revenue += itemTotal;
-                    });
-                }
-            });
-
-            const elFaturamento = document.getElementById('dash_faturamento') || document.getElementById('analyticsRevenue');
-            const elTotalPedidos = document.getElementById('dash_total_pedidos') || document.getElementById('analyticsOrdersCount');
-            const elTicketMedio = document.getElementById('dash_ticket_medio') || document.getElementById('analyticsTicket');
-            const elItensVendidos = document.getElementById('dash_itens_vendidos') || document.getElementById('analyticsItemsCount');
-
-            const elPix = document.getElementById('dash_pay_pix') || document.getElementById('payPixVal');
-            const elCard = document.getElementById('dash_pay_card') || document.getElementById('payCardVal');
-            const elCash = document.getElementById('dash_pay_cash') || document.getElementById('payCashVal');
-
-            const ticketMedioVal = totalOrdersCount > 0 ? totalRevenue / totalOrdersCount : 0;
-
-            if (elFaturamento) elFaturamento.textContent = `R$ ${totalRevenue.toFixed(2).replace('.', ',')}`;
-            if (elTotalPedidos) elTotalPedidos.textContent = totalOrdersCount;
-            if (elTicketMedio) elTicketMedio.textContent = `R$ ${ticketMedioVal.toFixed(2).replace('.', ',')}`;
-            if (elItensVendidos) elItensVendidos.textContent = `${totalItemsQty} un`;
-
-            if (elPix) elPix.textContent = `R$ ${totalPix.toFixed(2).replace('.', ',')}`;
-            if (elCard) elCard.textContent = `R$ ${totalCard.toFixed(2).replace('.', ',')}`;
-            if (elCash) elCash.textContent = `R$ ${totalCash.toFixed(2).replace('.', ',')}`;
-
-            const rankingContainer = document.getElementById('dash_ranking_list') || document.getElementById('rankingContainer');
-            if (rankingContainer) {
-                const sortedRanking = Array.from(rankingMap.entries()).sort((a, b) => b[1].qty - a[1].qty);
-
-                if (sortedRanking.length === 0) {
-                    rankingContainer.innerHTML = '<div style="color:#94A3B8; font-size:12px; padding:15px; text-align:center;">Nenhum prato vendido ainda.</div>';
-                } else {
-                    rankingContainer.innerHTML = sortedRanking.map(([name, data], idx) => {
-                        const trophy = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🏅';
-                        const revFormatted = data.revenue.toFixed(2).replace('.', ',');
-                        return `
-                            <div style="margin-bottom:10px; padding:8px; background:#0F172A; border-radius:6px; border:1px solid #1E293B;">
-                                <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; color:#F1F5F9;">
-                                    <span>${trophy} <strong>${escapeHtml(name)}</strong></span>
-                                    <strong style="color:#10B981;">${data.qty} un <span style="color:#94A3B8; font-size:11px; font-weight:normal;">(R$ ${revFormatted})</span></strong>
-                                </div>
-                            </div>
-                        `;
-                    }).join('');
-                }
-            }
-        }
-    };
-}
-
-// Painel Principal com Fechamento Semanal Estilo iFood (Quinta a Quarta)
+// Painel Principal
 async function renderDashboard() {
     const balanceValue = document.getElementById('balanceValue');
     const balanceTrend = document.getElementById('balanceTrend');
@@ -200,7 +54,7 @@ async function renderDashboard() {
         let orders = [];
         let expenses = [];
 
-        if (typeof dbClient !== 'undefined') {
+        if (typeof dbClient !== 'undefined' && dbClient) {
             const [ordersRes, expRes] = await Promise.all([
                 dbClient.from('orders').select('*').order('created_at', { ascending: false }),
                 dbClient.from('expenses').select('*')
@@ -224,9 +78,10 @@ async function renderDashboard() {
         });
         const todayIn = todayOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
 
-        // 2. Gastos de Hoje
+        // 2. Gastos de Hoje (Prioriza expense_date para alinhamento correto)
         const todayExp = expenses.filter(e => {
-            const expDate = parseDateSafe(e.created_at || e.date);
+            const dateVal = e.expense_date || e.created_at || e.date;
+            const expDate = parseDateSafe(dateVal);
             const expDateStr = `${expDate.getFullYear()}-${String(expDate.getMonth() + 1).padStart(2, '0')}-${String(expDate.getDate()).padStart(2, '0')}`;
             return expDateStr === todayStr;
         });
@@ -256,12 +111,12 @@ async function renderDashboard() {
         const weekOrders = orders.filter(o => {
             if (o.status === 'cancelled') return false;
             const d = parseDateSafe(o.created_at || o.date);
-            return d >= cycleStart && d <= now;
+            return d >= cycleStart && d <= cycleEnd;
         });
 
         const weekExp = expenses.filter(e => {
-            const d = parseDateSafe(e.created_at || e.date);
-            return d >= cycleStart && d <= now;
+            const d = parseDateSafe(e.expense_date || e.created_at || e.date);
+            return d >= cycleStart && d <= cycleEnd;
         });
 
         const weekInVal = weekOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
@@ -289,10 +144,10 @@ async function renderDashboard() {
             }
         }
 
-        // 5. Saldo do Mês
+        // 5. Saldo do Mês (Considera expense_date)
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         const monthOrders = orders.filter(o => o.status !== 'cancelled' && parseDateSafe(o.created_at || o.date) >= startOfMonth);
-        const monthExp = expenses.filter(e => parseDateSafe(e.created_at || e.date) >= startOfMonth);
+        const monthExp = expenses.filter(e => parseDateSafe(e.expense_date || e.created_at || e.date) >= startOfMonth);
         const monthInVal = monthOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
         const monthOutVal = monthExp.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
         const monthNet = monthInVal - monthOutVal;
