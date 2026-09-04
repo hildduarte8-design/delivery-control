@@ -5,6 +5,12 @@ const SUPABASE_KEY = 'sb_publishable_raTvDULM2YDmTngVIOM11g_CZe6jZWj';
 
 const dbClient = typeof supabase !== 'undefined' ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
+// Helper para verificar se a conexão com o banco está pronta
+function isDbReady() {
+    return !!dbClient;
+}
+window.isDbReady = isDbReady;
+
 // Gerenciador de Armazenamento Local (Offline First)
 const DB = {
     load(key, fallback) {
@@ -26,7 +32,7 @@ const state = {
     sales: [],
     orders: [],
     menu: [],
-    expenses: { fixed: [], logistics: [] },
+    expenses: { fixed: [], logistics: [], general: [], all: [] },
     settings: {}
 };
 
@@ -47,17 +53,18 @@ async function loadAll() {
     state.sales = DB.load('dly_sales', []);
     state.orders = DB.load('dly_orders', []);
     state.menu = DB.load('dly_menu', []);
-    state.expenses = DB.load('dly_expenses', { fixed: [], logistics: [] });
+    state.expenses = DB.load('dly_expenses', { fixed: [], logistics: [], general: [], all: [] });
     state.settings = DB.load('dly_settings', { storeName: 'Delivery Control', phone: '', password: '' });
 
     // 2. Sincronização em nuvem com o Supabase
-    if (!dbClient) {
+    if (!isDbReady()) {
         console.warn('Cliente Supabase não inicializado. Operando estritamente offline.');
         return;
     }
 
     try {
-        const [stockRes, recipeRes, salesRes, ordersRes, productsRes, expRes, cfgRes] = await Promise.all([
+        // Usa Promise.allSettled para garantir que a falha de uma tabela não aborte as outras 6
+        const results = await Promise.allSettled([
             dbClient.from('stock').select('*'),
             dbClient.from('recipes').select('*'),
             dbClient.from('sales').select('*'),
@@ -67,46 +74,51 @@ async function loadAll() {
             dbClient.from('store_settings').select('*').eq('id', 1).maybeSingle()
         ]);
 
-        // Estoque: Mantém a estrutura original do banco para compatibilidade com stock.js e calculator.js
-        if (stockRes.data) {
-            state.stock = stockRes.data;
+        const [stockRes, recipeRes, salesRes, ordersRes, productsRes, expRes, cfgRes] = results;
+
+        // Estoque
+        if (stockRes.status === 'fulfilled' && stockRes.value?.data) {
+            state.stock = stockRes.value.data;
             DB.save('dly_stock', state.stock);
         }
 
         // Receitas / Fichas Técnicas
-        if (recipeRes.data) {
-            state.recipes = recipeRes.data;
+        if (recipeRes.status === 'fulfilled' && recipeRes.value?.data) {
+            state.recipes = recipeRes.value.data;
             DB.save('dly_recipes', state.recipes);
         }
 
         // Vendas
-        if (salesRes.data) {
-            state.sales = salesRes.data;
+        if (salesRes.status === 'fulfilled' && salesRes.value?.data) {
+            state.sales = salesRes.value.data;
             DB.save('dly_sales', state.sales);
         }
 
         // Pedidos ao vivo
-        if (ordersRes.data) {
-            state.orders = ordersRes.data;
+        if (ordersRes.status === 'fulfilled' && ordersRes.value?.data) {
+            state.orders = ordersRes.value.data;
             DB.save('dly_orders', state.orders);
         }
 
         // Cardápio / Produtos
-        if (productsRes.data) {
-            state.menu = productsRes.data;
+        if (productsRes.status === 'fulfilled' && productsRes.value?.data) {
+            state.menu = productsRes.value.data;
             DB.save('dly_menu', state.menu);
         }
 
-        // Despesas (Fixas e Logística)
-        if (expRes.data) {
-            state.expenses.fixed = expRes.data.filter(e => e.type === 'fixed');
-            state.expenses.logistics = expRes.data.filter(e => e.type === 'logistics');
+        // Despesas (Fixas, Logística e Compras/Geral)
+        if (expRes.status === 'fulfilled' && expRes.value?.data) {
+            const allExp = expRes.value.data;
+            state.expenses.fixed = allExp.filter(e => e.type === 'fixed');
+            state.expenses.logistics = allExp.filter(e => e.type === 'logistics');
+            state.expenses.general = allExp.filter(e => e.type !== 'fixed' && e.type !== 'logistics');
+            state.expenses.all = allExp;
             DB.save('dly_expenses', state.expenses);
         }
 
         // Configurações da Loja: Preserva ambas as nomenclaturas para evitar divergências
-        if (cfgRes.data) {
-            const c = cfgRes.data;
+        if (cfgRes.status === 'fulfilled' && cfgRes.value?.data) {
+            const c = cfgRes.value.data;
             state.settings = {
                 storeName: c.store_name || 'Delivery Control',
                 store_name: c.store_name || 'Delivery Control',
