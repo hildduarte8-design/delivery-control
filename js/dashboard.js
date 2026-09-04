@@ -1,9 +1,12 @@
 // js/dashboard.js - Painel Principal & Fechamento Financeiro
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.appendChild(document.createTextNode(String(text ?? '')));
-    return div.innerHTML;
+// Declaração segura do escapeHtml para evitar duplicidade no escopo global (NR-07)
+if (typeof window.escapeHtml !== 'function') {
+    window.escapeHtml = function(text) {
+        const div = document.createElement('div');
+        div.appendChild(document.createTextNode(String(text ?? '')));
+        return div.innerHTML;
+    };
 }
 
 // Helper para converter datas do Supabase/Local sem falhas no iOS/Safari
@@ -182,7 +185,7 @@ async function renderDashboard() {
             }
         }
 
-        // 7. Renderiza Analytics
+        // 7. Renderiza Analytics repassando o array de pedidos (Evita re-query no Supabase - NR-09)
         if (window.AnalyticsManager && typeof window.AnalyticsManager.render === 'function') {
             window.AnalyticsManager.render(orders);
         }
