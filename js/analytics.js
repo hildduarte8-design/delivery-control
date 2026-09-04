@@ -8,27 +8,28 @@ const AnalyticsManager = {
         await this.render();
     },
 
-    async render() {
+    async render(ordersData = null) {
         const container = document.getElementById('analytics-container');
         if (!container) return;
 
-        container.innerHTML = '<div style="text-align:center; color:#94A3B8; padding:30px;">⌛ Carregando dados de desempenho...</div>';
-
         try {
-            if (!dbClient) {
-                container.innerHTML = '<div style="text-align:center; color:#EF4444; padding:20px;">Modo offline ou sem conexão com o banco de dados.</div>';
-                return;
-            }
+            let orders = ordersData;
 
-            // Busca pedidos do banco
-            const { data: orders, error } = await dbClient
-                .from('orders')
-                .select('*')
-                .order('created_at', { ascending: false });
+            // Se não recebeu os pedidos prontos, busca do banco ou do cache local
+            if (!orders) {
+                if (typeof dbClient !== 'undefined' && dbClient) {
+                    const { data, error } = await dbClient
+                        .from('orders')
+                        .select('*')
+                        .order('created_at', { ascending: false });
 
-            if (error || !orders) {
-                container.innerHTML = '<div style="text-align:center; color:#EF4444; padding:20px;">Erro ao carregar dados de vendas.</div>';
-                return;
+                    if (error) throw error;
+                    orders = data || [];
+                } else if (typeof state !== 'undefined' && state.sales) {
+                    orders = state.sales;
+                } else {
+                    orders = JSON.parse(localStorage.getItem('dly_sales') || '[]');
+                }
             }
 
             // Filtra por pedidos concluídos / válidos
@@ -134,7 +135,7 @@ const AnalyticsManager = {
 
         } catch (e) {
             console.error('Erro no Analytics:', e);
-            container.innerHTML = '<div style="text-align:center; color:#EF4444; padding:20px;">Falha ao processar métricas.</div>';
+            if (container) container.innerHTML = '<div style="text-align:center; color:#EF4444; padding:20px;">Falha ao processar métricas.</div>';
         }
     },
 
@@ -161,7 +162,6 @@ const AnalyticsManager = {
             }
 
             if (period === '7days') {
-                // Filtro exato dos últimos 7 dias sem erro de arredondamento
                 const sevenDaysAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
                 return orderDate >= sevenDaysAgo && orderDate <= now;
             }
@@ -184,7 +184,6 @@ const AnalyticsManager = {
             const total = Number(o.total || 0);
             totalRevenue += total;
 
-            // Classificação robusta por forma de pagamento
             const ref = String(o.payment_method || o.reference || '').toLowerCase();
             if (ref.includes('pix')) {
                 paymentBreakdown.Pix += total;
@@ -261,18 +260,18 @@ const AnalyticsManager = {
 
         const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
+        const url = URL.createObjectURL(blob);
+        link.href = url;
         link.download = `Relatorio_Vendas_${this.currentPeriod}_${new Date().toISOString().slice(0,10)}.csv`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+
+        // Liberação de memória após o clique de download
+        setTimeout(() => URL.revokeObjectURL(url), 100);
 
         if (typeof showToast === 'function') showToast('📊 CSV baixado com sucesso!');
     }
 };
 
 window.AnalyticsManager = AnalyticsManager;
-
-document.addEventListener('DOMContentLoaded', () => {
-    AnalyticsManager.init();
-});
