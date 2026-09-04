@@ -1,5 +1,29 @@
 // js/ui.js - Interface, Modais, Toasts, Navegação e Sub-abas
 
+let toastTimer = null;
+
+// Helper global para escapar valores para exportação CSV sem quebrar colunas
+function csvEscape(val) {
+    const str = String(val ?? '');
+    return `"${str.replace(/"/g, '""')}"`;
+}
+
+// Helper global para travar botões e evitar duplo envio/clique rápido
+async function withSaveGuard(btn, asyncFn) {
+    if (!btn || btn.dataset.saving === 'true') return;
+    const originalText = btn.textContent;
+    try {
+        btn.dataset.saving = 'true';
+        btn.disabled = true;
+        btn.textContent = '⌛ Aguarde...';
+        await asyncFn();
+    } finally {
+        btn.dataset.saving = 'false';
+        btn.disabled = false;
+        btn.textContent = originalText;
+    }
+}
+
 function switchTab(tabId) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.bottom-nav button').forEach(el => el.classList.remove('active'));
@@ -52,9 +76,15 @@ function closeModal() {
 function showToast(msg, type = 'success') {
     const toast = document.getElementById('toast');
     if (!toast) return;
+
+    if (toastTimer) clearTimeout(toastTimer);
+
     toast.textContent = msg;
     toast.className = `toast show ${type}`;
-    setTimeout(() => toast.className = 'toast', 3000);
+    
+    toastTimer = setTimeout(() => {
+        toast.className = 'toast';
+    }, 3000);
 }
 
 function quickAction(action) {
@@ -158,6 +188,8 @@ document.addEventListener('click', (e) => {
 });
 
 // Exposição global de funções de interface
+window.csvEscape = csvEscape;
+window.withSaveGuard = withSaveGuard;
 window.switchTab = switchTab;
 window.openModal = openModal;
 window.closeModal = closeModal;
