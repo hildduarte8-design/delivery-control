@@ -78,7 +78,7 @@ function checkAdminAuth() {
 }
 
 function validatePassword() {
-    const input = document.getElementById('admin_pass_input')?.value;
+    const input = document.getElementById('admin_pass_input')?.value?.trim();
     let settings = {};
     if (typeof DB !== 'undefined') {
         settings = DB.load('dly_settings', {});
@@ -92,7 +92,7 @@ function validatePassword() {
 
     const loginScreen = document.getElementById('loginScreen');
 
-    if (input && input === settings.password) {
+    if (input && input === String(settings.password || '').trim()) {
         sessionStorage.setItem('dly_auth', 'true');
         if (loginScreen) loginScreen.style.display = 'none';
         if (typeof showToast === 'function') showToast('Acesso liberado!');
@@ -217,7 +217,11 @@ async function init() {
     if (typeof updateNotificationBadge === 'function') updateNotificationBadge();
     
     if (typeof OrdersManager !== 'undefined' && OrdersManager.initRealtime) {
-        OrdersManager.initRealtime();
+        try {
+            OrdersManager.initRealtime();
+        } catch (errRealtime) {
+            console.warn('Erro ao inicializar conexão realtime de pedidos:', errRealtime);
+        }
     }
     
     initGestureNavigation();
@@ -231,3 +235,8 @@ if (document.readyState === 'loading') {
 } else {
     init();
 }
+
+window.applyThemeColor = applyThemeColor;
+window.updateHeader = updateHeader;
+window.checkAdminAuth = checkAdminAuth;
+window.validatePassword = validatePassword;
