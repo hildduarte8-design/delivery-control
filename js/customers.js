@@ -1,9 +1,11 @@
-// js/customers.js - Gestão de Clientes (CRM + Disparo de Marketing no WhatsApp)
+// js/customers.js - Gestão de Clientes (CRM + Fidelidade + Disparo de Marketing no WhatsApp)
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.appendChild(document.createTextNode(String(text ?? '')));
-    return div.innerHTML;
+if (typeof window.escapeHtml !== 'function') {
+    window.escapeHtml = function(text) {
+        const div = document.createElement('div');
+        div.appendChild(document.createTextNode(String(text ?? '')));
+        return div.innerHTML;
+    };
 }
 
 const CustomersManager = {
@@ -34,7 +36,6 @@ const CustomersManager = {
             let dbOrders = [];
 
             if (typeof dbClient !== 'undefined') {
-                // 1. Busca cadastros explícitos da tabela de clientes
                 try {
                     const { data: custData } = await dbClient.from('customers').select('*').order('created_at', { ascending: false });
                     if (custData) dbCustomers = custData;
@@ -42,7 +43,6 @@ const CustomersManager = {
                     console.warn('Tabela "customers" indisponível ou não criada:', e);
                 }
 
-                // 2. Busca histórico de pedidos para agregação do CRM
                 try {
                     const { data: ordData } = await dbClient.from('orders').select('*').order('created_at', { ascending: false });
                     if (ordData) dbOrders = ordData;
@@ -63,6 +63,7 @@ const CustomersManager = {
                     name: c.name || 'Cliente Sem Nome',
                     phone: c.phone || '',
                     address: c.address || '',
+                    loyaltyStamps: c.loyalty_stamps || c.loyaltyStamps || 0,
                     totalSpent: 0,
                     ordersCount: 0,
                     lastOrderDate: null,
@@ -84,6 +85,7 @@ const CustomersManager = {
                         name: rawName || 'Cliente Sem Nome',
                         phone: rawPhone,
                         address: o.address || o.delivery_address || '',
+                        loyaltyStamps: 0,
                         totalSpent: 0,
                         ordersCount: 0,
                         lastOrderDate: null,
@@ -165,8 +167,13 @@ const CustomersManager = {
         const safePhone = escapeHtml(c.phone);
         const totalSpentFormatted = Number(c.totalSpent || 0).toFixed(2).replace('.', ',');
 
+        // --- DADOS DO CARTÃO FIDELIDADE ---
+        const stamps = c.loyaltyStamps || 0;
+        const progressPercent = Math.min(100, (stamps / 10) * 100);
+        const isRewardReady = stamps >= 10;
+
         return `
-            <div class="card" style="margin-bottom:12px; padding:14px; border-left:4px solid #FF6B35;">
+            <div class="card" style="margin-bottom:12px; padding:14px; border-left:4px solid ${isRewardReady ? '#10B981' : '#FF6B35'}; background:#1E293B;">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
                     <div>
                         <strong style="color:#F1F5F9; font-size:15px;">👤 ${safeName}</strong>
@@ -176,6 +183,24 @@ const CustomersManager = {
                         <div style="font-size:15px; font-weight:800; color:#10B981;">R$ ${totalSpentFormatted}</div>
                         <div style="font-size:10px; color:#94A3B8;">${c.ordersCount} pedido(s)</div>
                     </div>
+                </div>
+
+                <!-- CARTÃO FIDELIDADE VISUAL -->
+                <div style="background:#0F172A; border:1px solid ${isRewardReady ? '#10B981' : '#334155'}; border-radius:8px; padding:10px; margin-bottom:10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; margin-bottom:6px;">
+                        <span style="color:#CBD5E1; font-weight:700;">🎫 Fidelidade (Mín. R$ 25)</span>
+                        <span style="font-weight:800; color:${isRewardReady ? '#10B981' : '#F59E0B'};">
+                            ${isRewardReady ? '🎉 10/10 - GANHOU PASTEL!' : `🎟️ ${stamps}/10 Carimbos`}
+                        </span>
+                    </div>
+                    <div style="background:#1E293B; height:8px; border-radius:4px; overflow:hidden;">
+                        <div style="background:${isRewardReady ? '#10B981' : 'linear-gradient(90deg, #FF6B35, #F59E0B)'}; height:100%; width:${progressPercent}%; transition:width 0.3s;"></div>
+                    </div>
+                    ${isRewardReady ? `
+                        <div style="font-size:11px; color:#10B981; margin-top:6px; font-weight:700; text-align:center;">
+                            🎁 Direito a 1 Pastel Grátis (Frango ou Queijo) no próximo pedido!
+                        </div>
+                    ` : ''}
                 </div>
 
                 <div style="font-size:11px; color:#94A3B8; margin-bottom:8px;">
@@ -239,6 +264,7 @@ const CustomersManager = {
             name,
             phone,
             address,
+            loyalty_stamps: 0,
             created_at: new Date().toISOString()
         };
 
@@ -266,10 +292,10 @@ const CustomersManager = {
         if (!c) return;
 
         const cleanPhone = c.phone ? String(c.phone).replace(/\D/g, '') : '';
-        this.openMarketingModal(c.name, cleanPhone);
+        this.openMarketingModal(c.name, cleanPhone, c.loyaltyStamps || 0);
     },
 
-    openMarketingModal(name, phone) {
+    openMarketingModal(name, phone, loyaltyStamps = 0) {
         if (typeof openModal !== 'function') return;
 
         const safeName = escapeHtml(name);
@@ -283,6 +309,7 @@ const CustomersManager = {
             <div class="form-group">
                 <label>Modelo de Mensagem</label>
                 <select id="mkt_template_select" onchange="CustomersManager.updateMktPreview()">
+                    <option value="loyalty_reward">🎁 Aviso de Pastel Grátis (Fidelidade)</option>
                     <option value="winback">🎁 Cupom para Sumidos (Reativação)</option>
                     <option value="promo">🔥 Oferta do Dia / Promoção</option>
                     <option value="new_product">😋 Novidade no Cardápio</option>
@@ -300,9 +327,11 @@ const CustomersManager = {
             </button>
         `);
 
-        // Armazena o nome no dataset do elemento para consulta sem quebra de aspas
         const modalEl = document.getElementById('mkt_template_select');
-        if (modalEl) modalEl.dataset.clientName = name;
+        if (modalEl) {
+            modalEl.dataset.clientName = name;
+            modalEl.dataset.stamps = loyaltyStamps;
+        }
 
         this.updateMktPreview();
     },
@@ -317,13 +346,14 @@ const CustomersManager = {
         const firstName = fullName.split(' ')[0];
 
         const templates = {
+            'loyalty_reward': `Parabéns, ${firstName}! 🎉\n\nVocê completou seus carimbos no nosso Cartão Fidelidade! 🎟️✨\n\nNo seu próximo pedido, você ganhou *1 Pastel Grátis* (Frango ou Queijo)! Aproveite e peça pelo nosso cardápio! 😋`,
             'winback': `Oi ${firstName}! Saudades de você por aqui! 😋\n\nPreparamos um cupom especial de *10% OFF* no seu próximo pedido. Que tal aproveitar hoje?\n\nFaça seu pedido diretamente pelo nosso cardápio! 😉`,
             'promo': `Fala ${firstName}! Tudo bem? 🔥\n\nHoje estamos com uma super promoção imperdível no nosso delivery. Dá uma olhada no nosso cardápio e aproveite antes que acabe!`,
             'new_product': `Olá ${firstName}! Tem novidade quentinha no nosso cardápio hoje! 😋\n\nLançamos uma opção incrível e achamos a sua cara. Vem conferir!`,
             'vip': `Oi ${firstName}! Passando para agradecer por sempre pedir com a gente! ⭐\n\nComo cliente VIP, seu próximo pedido tem *Frete Grátis*. É só avisar a gente por aqui!`
         };
 
-        textEl.value = templates[template] || templates['winback'];
+        textEl.value = templates[template] || templates['loyalty_reward'];
     },
 
     sendMarketingWhatsApp(phone) {
