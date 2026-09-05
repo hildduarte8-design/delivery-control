@@ -1,9 +1,11 @@
-// js/sales.js - Vendas Manuais de Balcão (Integrado ao Fluxo de Pedidos em Tempo Real)
+// js/sales.js - Vendas Manuais de Balcão (Integrado ao Fluxo de Pedidos com Data Retroativa)
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.appendChild(document.createTextNode(String(text ?? '')));
-    return div.innerHTML;
+if (typeof window.escapeHtml !== 'function') {
+    window.escapeHtml = function(text) {
+        const div = document.createElement('div');
+        div.appendChild(document.createTextNode(String(text ?? '')));
+        return div.innerHTML;
+    };
 }
 
 function parseDateSafe(dateInput) {
@@ -116,6 +118,11 @@ const SalesManager = {
         this.customersCache = customers;
         this.productsCache = products;
 
+        // Data e hora local padrão para o input
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        const defaultDateTime = now.toISOString().slice(0, 16);
+
         const customerOptions = customers.map(c => {
             const name = escapeHtml(c.name || 'Cliente');
             const phone = escapeHtml(c.phone || c.whatsapp || '');
@@ -131,6 +138,15 @@ const SalesManager = {
 
         const modalBody = `
             <div style="padding:2px;">
+                <!-- CAMPO DE SELEÇÃO DE DATA RETROATIVA -->
+                <div class="form-group" style="margin-bottom:10px;">
+                    <label style="font-size:11px; color:#F59E0B; font-weight:700;">📅 Data e Hora do Pedido *</label>
+                    <input type="datetime-local" id="sale_created_at" value="${defaultDateTime}" style="font-size:12px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px;">
+                    <small style="color:#94A3B8; font-size:10px; display:block; margin-top:2px;">
+                        Altere este campo para lançar pedidos retroativos de dias anteriores.
+                    </small>
+                </div>
+
                 <div class="form-group" style="margin-bottom:10px;">
                     <label style="font-size:12px; color:#CBD5E1;">Cliente Cadastrado (Opcional)</label>
                     <select id="sale_customer_select" onchange="SalesManager.onSelectCustomer(this.value)" style="font-size:13px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px;">
@@ -155,7 +171,6 @@ const SalesManager = {
                     <input type="text" id="sale_address" placeholder="Rua, Número, Bairro (ou Balcão)" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%;">
                 </div>
 
-                <!-- CAMPO DE SELEÇÃO DA FORMA DE PAGAMENTO -->
                 <div class="form-group" style="margin-bottom:12px;">
                     <label style="font-size:11px; color:#94A3B8;">Forma de Pagamento *</label>
                     <select id="sale_payment_method" style="font-size:12px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px;">
@@ -302,6 +317,7 @@ const SalesManager = {
     },
 
     async saveManualSale() {
+        const createdAtInput = document.getElementById('sale_created_at')?.value;
         const client_name = document.getElementById('sale_client_name')?.value.trim() || 'Cliente Balcão';
         const phone = document.getElementById('sale_phone')?.value.trim() || '';
         const address = document.getElementById('sale_address')?.value.trim() || 'Venda no Balcão';
@@ -321,6 +337,9 @@ const SalesManager = {
             ? `sale_${crypto.randomUUID()}` 
             : `sale_${Date.now()}`;
 
+        // Processa a data do pedido: retroativa ou atual
+        const orderDate = createdAtInput ? new Date(createdAtInput).toISOString() : new Date().toISOString();
+
         const orderData = {
             id: orderId,
             client_name,
@@ -336,9 +355,9 @@ const SalesManager = {
             delivery_fee: 0,
             discount: discount,
             total: total,
-            status: 'preparing', // ENTRA DIRETO EM PREPARO NA FILA AO VIVO
+            status: 'preparing',
             source: 'Manual',
-            created_at: new Date().toISOString()
+            created_at: orderDate
         };
 
         let savedToCloud = false;
@@ -350,6 +369,20 @@ const SalesManager = {
                     savedToCloud = true;
                 } else {
                     console.warn('Erro retornado pelo Supabase:', error);
+                }
+
+                // Sincroniza tabela de clientes automaticamente
+                if (phone || client_name !== 'Cliente Balcão') {
+                    try {
+                        await dbClient.from('customers').upsert([{
+                            name: client_name,
+                            phone: phone || null,
+                            address: address !== 'Venda no Balcão' ? address : null,
+                            last_order_at: orderDate
+                        }], { onConflict: 'phone' });
+                    } catch (errCust) {
+                        console.warn('Erro ao atualizar cadastro do cliente:', errCust);
+                    }
                 }
             }
         } catch (e) {
@@ -378,7 +411,7 @@ const SalesManager = {
         }
 
         if (typeof showToast === 'function') {
-            showToast(savedToCloud ? 'Pedido enviado para a cozinha (Em Preparo)!' : 'Pedido salvo localmente em preparo!');
+            showToast(savedToCloud ? 'Pedido registrado no histórico!' : 'Pedido salvo localmente!');
         }
         if (typeof closeModal === 'function') closeModal();
 
