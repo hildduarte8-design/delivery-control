@@ -1,4 +1,4 @@
-// js/sales.js - Vendas Manuais de Balcão (Integrado ao Fluxo de Pedidos com Data Retroativa)
+// js/sales.js - Vendas Manuais de Balcão (Integrado ao Fluxo de Pedidos com Data Retroativa + Alerta Fidelidade)
 
 if (typeof window.escapeHtml !== 'function') {
     window.escapeHtml = function(text) {
@@ -73,7 +73,7 @@ const SalesManager = {
                 if (name && name !== 'Cliente Balcão') {
                     const key = phone ? phone : name.toLowerCase();
                     if (!map.has(key)) {
-                        map.set(key, { id: key, name, phone, address });
+                        map.set(key, { id: key, name, phone, address, loyalty_stamps: 0 });
                     }
                 }
             });
@@ -127,7 +127,10 @@ const SalesManager = {
             const name = escapeHtml(c.name || 'Cliente');
             const phone = escapeHtml(c.phone || c.whatsapp || '');
             const address = escapeHtml(c.address || c.delivery_address || '');
-            return `<option value="${escapeHtml(c.id || name)}" data-name="${name}" data-phone="${phone}" data-address="${address}">${name} ${phone ? '(' + phone + ')' : ''}</option>`;
+            const stamps = Number(c.loyalty_stamps || c.loyaltyStamps || 0);
+            const badge = stamps >= 10 ? ' 🎁 (PASTEL GRÁTIS!)' : stamps > 0 ? ` 🎟️ (${stamps}/10)` : '';
+
+            return `<option value="${escapeHtml(c.id || name)}" data-name="${name}" data-phone="${phone}" data-address="${address}" data-stamps="${stamps}">${name} ${phone ? '(' + phone + ')' : ''}${badge}</option>`;
         }).join('');
 
         const productOptions = products.map(p => {
@@ -154,6 +157,9 @@ const SalesManager = {
                         ${customerOptions}
                     </select>
                 </div>
+
+                <!-- ALERTA DE FIDELIDADE / PASTEL GRÁTIS -->
+                <div id="sale_loyalty_alert" style="display:none; margin-bottom:10px; padding:8px 10px; border-radius:6px; font-size:12px; font-weight:bold;"></div>
 
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:10px;">
                     <div class="form-group" style="margin:0;">
@@ -224,18 +230,46 @@ const SalesManager = {
     },
 
     onSelectCustomer(val) {
-        if (!val || !this.customersCache) return;
-
-        const customer = this.customersCache.find(c => String(c.id) === String(val) || String(c.name) === String(val));
-        if (!customer) return;
-
+        const alertBox = document.getElementById('sale_loyalty_alert');
         const nameInput = document.getElementById('sale_client_name');
         const phoneInput = document.getElementById('sale_phone');
         const addressInput = document.getElementById('sale_address');
 
+        if (!val || !this.customersCache) {
+            if (alertBox) alertBox.style.display = 'none';
+            return;
+        }
+
+        const customer = this.customersCache.find(c => String(c.id) === String(val) || String(c.name) === String(val));
+        if (!customer) {
+            if (alertBox) alertBox.style.display = 'none';
+            return;
+        }
+
         if (nameInput) nameInput.value = customer.name || '';
         if (phoneInput) phoneInput.value = customer.phone || customer.whatsapp || '';
         if (addressInput) addressInput.value = customer.address || customer.delivery_address || '';
+
+        // Exibe alerta do Cartão Fidelidade se aplicável
+        const stamps = Number(customer.loyalty_stamps || customer.loyaltyStamps || 0);
+
+        if (alertBox) {
+            if (stamps >= 10) {
+                alertBox.style.display = 'block';
+                alertBox.style.background = 'rgba(16, 185, 129, 0.2)';
+                alertBox.style.border = '1px solid #10B981';
+                alertBox.style.color = '#10B981';
+                alertBox.innerHTML = `🎁 <strong>CLIENTE VIP!</strong> Este cliente completou 10 carimbos e tem direito a <strong>1 Pastel Grátis (Frango ou Queijo)</strong> neste pedido!`;
+            } else if (stamps > 0) {
+                alertBox.style.display = 'block';
+                alertBox.style.background = 'rgba(245, 158, 11, 0.15)';
+                alertBox.style.border = '1px solid #F59E0B';
+                alertBox.style.color = '#F59E0B';
+                alertBox.innerHTML = `🎟️ <strong>Cartão Fidelidade:</strong> ${stamps}/10 carimbos acumulados (Mínimo R$ 25,00 por carimbo).`;
+            } else {
+                alertBox.style.display = 'none';
+            }
+        }
     },
 
     addItemToSale() {
