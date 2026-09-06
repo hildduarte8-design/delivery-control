@@ -1,4 +1,4 @@
-// js/sales.js - Vendas Manuais de Balcão (Busca Automática por WhatsApp + Fidelidade + Data Retroativa)
+// js/sales.js - Vendas Manuais de Balcão (Busca por WhatsApp + Fidelidade + Tratamento de Pedidos Retroativos)
 
 if (typeof window.escapeHtml !== 'function') {
     window.escapeHtml = function(text) {
@@ -220,7 +220,7 @@ const SalesManager = {
                     </div>
                 </div>
 
-                <button class="btn btn-large" onclick="SalesManager.saveManualSale()" style="margin-top:14px; background:#FF6B35; color:#fff; width:100%; min-height:48px; touch-action:manipulation;">💾 Lançar Pedido em Preparo</button>
+                <button class="btn btn-large" onclick="SalesManager.saveManualSale()" style="margin-top:14px; background:#FF6B35; color:#fff; width:100%; min-height:48px; touch-action:manipulation;">💾 Lançar Pedido</button>
             </div>
         `;
 
@@ -229,7 +229,6 @@ const SalesManager = {
         }
     },
 
-    // Busca cliente instantaneamente enquanto o usuário digita o WhatsApp
     lookupCustomerByPhone(val) {
         const clean = String(val || '').replace(/\D/g, '');
         const alertBox = document.getElementById('sale_loyalty_alert');
@@ -408,8 +407,12 @@ const SalesManager = {
             ? `sale_${crypto.randomUUID()}` 
             : `sale_${Date.now()}`;
 
-        // Processa a data do pedido: retroativa ou atual
-        const orderDate = createdAtInput ? new Date(createdAtInput).toISOString() : new Date().toISOString();
+        // Processa data do pedido e identifica se é lançamento retroativo
+        const orderDateObj = createdAtInput ? new Date(createdAtInput) : new Date();
+        const orderDate = orderDateObj.toISOString();
+
+        const isRetroactive = (new Date() - orderDateObj) > (5 * 60 * 1000);
+        const autoStatus = isRetroactive ? 'completed' : 'preparing';
 
         const orderData = {
             id: orderId,
@@ -426,7 +429,7 @@ const SalesManager = {
             delivery_fee: 0,
             discount: discount,
             total: total,
-            status: 'preparing',
+            status: autoStatus,
             source: 'Manual',
             created_at: orderDate
         };
@@ -455,6 +458,11 @@ const SalesManager = {
                         console.warn('Erro ao atualizar cadastro do cliente:', errCust);
                     }
                 }
+
+                // Computa o carimbo de fidelidade se o pedido for retroativo e já finalizado
+                if (autoStatus === 'completed' && phone && typeof OrdersManager !== 'undefined' && OrdersManager.processLoyaltyStamp) {
+                    await OrdersManager.processLoyaltyStamp(phone, total);
+                }
             }
         } catch (e) {
             console.error('Erro ao salvar no Supabase:', e);
@@ -482,7 +490,8 @@ const SalesManager = {
         }
 
         if (typeof showToast === 'function') {
-            showToast(savedToCloud ? 'Pedido registrado no histórico!' : 'Pedido salvo localmente!');
+            const msg = isRetroactive ? 'Pedido retroativo registrado como Concluído!' : 'Pedido lançado em preparo!';
+            showToast(msg, 'success');
         }
         if (typeof closeModal === 'function') closeModal();
 
