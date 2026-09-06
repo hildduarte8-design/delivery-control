@@ -1,4 +1,4 @@
-// js/orders.js - Gestão Completa de Pedidos ao Vivo com Supabase Realtime, Cancelamento, Frete, WhatsApp e Fidelidade
+// js/orders.js - Gestão Completa de Pedidos ao Vivo com Supabase Realtime, Filtro de Cancelados, Frete, WhatsApp e Fidelidade
 
 if (typeof window.escapeHtml !== 'function') {
     window.escapeHtml = function(text) {
@@ -213,7 +213,8 @@ const OrdersManager = {
         const y = parts[0] || '', m = parts[1] || '', d = parts[2] || '';
         const displayLabel = isToday ? `Hoje (${d}/${m})` : `${d}/${m}/${y}`;
         
-        const countForDay = this.allOrders.filter(o => this.getLocalDateStr(o.created_at) === this.selectedDate).length;
+        // Conta apenas pedidos válidos para o contador do dia
+        const countForDay = this.allOrders.filter(o => o.status !== 'cancelled' && this.getLocalDateStr(o.created_at) === this.selectedDate).length;
 
         bar.innerHTML = `
             <button onclick="OrdersManager.selectDatePage('${prevDateStr}')" style="background:#0F172A; color:#F1F5F9; border:1px solid #334155; padding:8px 14px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px; min-height:44px; touch-action:manipulation;">
@@ -561,11 +562,13 @@ const OrdersManager = {
         window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
     },
 
+    // Calcula total de pedidos VÁLIDOS do cliente (Ignora cancelados)
     getClientOrdersCount(phone, clientName) {
         if (!this.allOrders || this.allOrders.length === 0) return 1;
         const cleanPhone = phone ? String(phone).replace(/\D/g, '') : '';
 
         return this.allOrders.filter(ord => {
+            if (ord.status === 'cancelled') return false; // Ignora cancelados
             const ordPhone = (ord.phone || ord.customer_phone) ? String(ord.phone || ord.customer_phone).replace(/\D/g, '') : '';
             const ordName = ord.client_name || ord.customer_name;
             return (cleanPhone && ordPhone === cleanPhone) || (clientName && ordName === clientName);
@@ -777,7 +780,6 @@ const OrdersManager = {
             }
 
             if (newStatus === 'completed') {
-                // Processa o carimbo do programa de fidelidade ao concluir o pedido
                 if (phone) {
                     await this.processLoyaltyStamp(phone, Number(o?.total || 0));
                 }
