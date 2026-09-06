@@ -1,6 +1,5 @@
-// js/dashboard.js - Painel Principal & Fechamento Financeiro
+// js/dashboard.js - Painel Principal & Fechamento Financeiro (Com filtro de pedidos cancelados)
 
-// Declaração segura do escapeHtml para evitar duplicidade no escopo global (NR-07)
 if (typeof window.escapeHtml !== 'function') {
     window.escapeHtml = function(text) {
         const div = document.createElement('div');
@@ -9,7 +8,6 @@ if (typeof window.escapeHtml !== 'function') {
     };
 }
 
-// Helper para converter datas do Supabase/Local sem falhas no iOS/Safari
 function parseDateSafe(dateInput) {
     if (!dateInput) return new Date();
     if (dateInput instanceof Date) return dateInput;
@@ -18,7 +16,6 @@ function parseDateSafe(dateInput) {
     return isNaN(d.getTime()) ? new Date() : d;
 }
 
-// Helper: Calcula o intervalo do ciclo semanal estilo iFood (Quinta 00:00 a Quarta 23:59)
 function getIFoodWeeklyCycle(referenceDate = new Date()) {
     const d = parseDateSafe(referenceDate);
     d.setHours(0, 0, 0, 0);
@@ -37,7 +34,6 @@ function getIFoodWeeklyCycle(referenceDate = new Date()) {
     return { cycleStart, cycleEnd };
 }
 
-// Painel Principal
 async function renderDashboard() {
     const balanceValue = document.getElementById('balanceValue');
     const balanceTrend = document.getElementById('balanceTrend');
@@ -72,16 +68,18 @@ async function renderDashboard() {
         const now = new Date();
         const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-        // 1. Entradas de Hoje
-        const todayOrders = orders.filter(o => {
-            if (o.status === 'cancelled') return false;
+        // Filtro centralizado para descartar pedidos cancelados
+        const validOrders = orders.filter(o => o.status !== 'cancelled');
+
+        // 1. Entradas de Hoje (Apenas Válidos)
+        const todayOrders = validOrders.filter(o => {
             const orderDate = parseDateSafe(o.created_at || o.date);
             const orderDateStr = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${String(orderDate.getDate()).padStart(2, '0')}`;
             return orderDateStr === todayStr;
         });
         const todayIn = todayOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
 
-        // 2. Gastos de Hoje (Prioriza expense_date para alinhamento correto)
+        // 2. Gastos de Hoje
         const todayExp = expenses.filter(e => {
             const dateVal = e.expense_date || e.created_at || e.date;
             const expDate = parseDateSafe(dateVal);
@@ -94,25 +92,21 @@ async function renderDashboard() {
         if (outToday) outToday.textContent = `R$ ${todayOut.toFixed(2).replace('.', ',')}`;
 
         // 3. Saldo Atual Geral
-        const totalInGeral = orders
-            .filter(o => o.status !== 'cancelled')
-            .reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
-        const totalOutGeral = expenses
-            .reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
+        const totalInGeral = validOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
+        const totalOutGeral = expenses.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
         const currentBalance = totalInGeral - totalOutGeral;
 
         balanceValue.textContent = `R$ ${currentBalance.toFixed(2).replace('.', ',')}`;
         if (balanceTrend) {
-            balanceTrend.textContent = orders.length > 0 
-                ? `${orders.length} pedido(s) registrado(s)` 
+            balanceTrend.textContent = validOrders.length > 0 
+                ? `${validOrders.length} pedido(s) válido(s) registrado(s)` 
                 : 'Sem movimentações ainda';
         }
 
-        // 4. Saldo da Semana (Ciclo de Repasse: Quinta a Quarta)
+        // 4. Saldo da Semana (Quinta a Quarta)
         const { cycleStart, cycleEnd } = getIFoodWeeklyCycle(now);
 
-        const weekOrders = orders.filter(o => {
-            if (o.status === 'cancelled') return false;
+        const weekOrders = validOrders.filter(o => {
             const d = parseDateSafe(o.created_at || o.date);
             return d >= cycleStart && d <= cycleEnd;
         });
@@ -147,9 +141,9 @@ async function renderDashboard() {
             }
         }
 
-        // 5. Saldo do Mês (Considera expense_date)
+        // 5. Saldo do Mês
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const monthOrders = orders.filter(o => o.status !== 'cancelled' && parseDateSafe(o.created_at || o.date) >= startOfMonth);
+        const monthOrders = validOrders.filter(o => parseDateSafe(o.created_at || o.date) >= startOfMonth);
         const monthExp = expenses.filter(e => parseDateSafe(e.expense_date || e.created_at || e.date) >= startOfMonth);
         const monthInVal = monthOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
         const monthOutVal = monthExp.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
@@ -163,9 +157,9 @@ async function renderDashboard() {
             monthBadge.style.color = monthNet >= 0 ? '#10B981' : '#EF4444';
         }
 
-        // 6. Últimas Movimentações (5 mais recentes)
+        // 6. Últimas Movimentações (Apenas pedidos válidos)
         if (movList) {
-            const recentOrders = orders.slice(0, 5);
+            const recentOrders = validOrders.slice(0, 5);
             if (recentOrders.length === 0) {
                 movList.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:15px; font-size:12px;">Nenhuma movimentação recente</div>';
             } else {
@@ -185,7 +179,7 @@ async function renderDashboard() {
             }
         }
 
-        // 7. Renderiza Analytics repassando o array de pedidos (Evita re-query no Supabase - NR-09)
+        // 7. Renderiza Analytics repassando o array de pedidos
         if (window.AnalyticsManager && typeof window.AnalyticsManager.render === 'function') {
             window.AnalyticsManager.render(orders);
         }
