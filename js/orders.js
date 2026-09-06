@@ -1,9 +1,11 @@
-// js/orders.js - Gestão Completa de Pedidos ao Vivo com Supabase Realtime, Definição de Frete e Mensagens de WhatsApp
+// js/orders.js - Gestão Completa de Pedidos ao Vivo com Supabase Realtime, Cancelamento, Frete, WhatsApp e Fidelidade
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.appendChild(document.createTextNode(String(text ?? '')));
-    return div.innerHTML;
+if (typeof window.escapeHtml !== 'function') {
+    window.escapeHtml = function(text) {
+        const div = document.createElement('div');
+        div.appendChild(document.createTextNode(String(text ?? '')));
+        return div.innerHTML;
+    };
 }
 
 const OrdersManager = {
@@ -275,6 +277,16 @@ const OrdersManager = {
 
         const clientOrdersCount = this.getClientOrdersCount(o.phone || o.customer_phone, o.client_name || o.customer_name);
 
+        // Verifica status de fidelidade do cliente
+        const customer = typeof CustomersManager !== 'undefined' && Array.isArray(CustomersManager.allCustomers)
+            ? CustomersManager.allCustomers.find(c => {
+                const cPhone = c.phone ? String(c.phone).replace(/\D/g, '') : '';
+                const oPhone = (o.phone || o.customer_phone) ? String(o.phone || o.customer_phone).replace(/\D/g, '') : '';
+                return (cPhone && oPhone && cPhone === oPhone) || (c.name && o.client_name && c.name.toLowerCase() === o.client_name.toLowerCase());
+            }) : null;
+
+        const isRewardReady = customer && (customer.loyaltyStamps >= 10 || customer.loyalty_stamps >= 10);
+
         let statusBadge = '🟢 Novo';
         if (o.status === 'preparing') statusBadge = '👨‍🍳 Em Preparo';
         else if (o.status === 'completed') statusBadge = '✅ Concluído';
@@ -291,7 +303,7 @@ const OrdersManager = {
             <div class="card" onclick="OrdersManager.openOrderDetails('${safeOrderId}')" style="margin-bottom:12px; padding:14px; border-left:4px solid ${o.status === 'pending' ? '#F59E0B' : o.status === 'preparing' ? '#3B82F6' : o.status === 'completed' ? '#10B981' : '#EF4444'}; cursor:pointer; transition: transform 0.1s;">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                     <div>
-                        <div style="display:flex; align-items:center; gap:6px;">
+                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                             <strong style="color:#F1F5F9; font-size:15px;">👤 ${safeClientName}</strong>
                             <span style="font-size:10px; background:#1E293B; color:#F59E0B; padding:2px 6px; border-radius:10px; font-weight:bold;">👑 ${clientOrdersCount}º pedido</span>
                         </div>
@@ -307,6 +319,12 @@ const OrdersManager = {
                         </span>
                     </div>
                 </div>
+
+                ${isRewardReady ? `
+                    <div style="margin-top:8px; background:rgba(16,185,129,0.15); border:1px solid #10B981; color:#10B981; padding:6px 10px; border-radius:6px; font-size:11px; font-weight:bold;">
+                        🎁 CLIENTE TEM PASTEL GRÁTIS! (10/10 Carimbos)
+                    </div>
+                ` : ''}
 
                 <div style="font-size:12px; color:#CBD5E1; margin:10px 0; background:#0F172A; padding:8px 10px; border-radius:6px;">
                     📝 <strong>Itens:</strong> ${itemsSummary}
@@ -419,12 +437,15 @@ const OrdersManager = {
                 </button>
             </div>
 
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
                 <button class="btn btn-sm" style="background:#3B82F6; color:#fff; padding:10px; min-height:44px; touch-action:manipulation;" onclick="OrdersManager.updateStatus('${safeOrderId}', 'preparing'); closeModal();">
-                    👨‍🍳 Em Preparo
+                    👨‍🍳 Preparo
                 </button>
                 <button class="btn btn-sm btn-success" style="padding:10px; min-height:44px; touch-action:manipulation;" onclick="OrdersManager.updateStatus('${safeOrderId}', 'completed'); closeModal();">
-                    ✅ Concluir Pedido
+                    ✅ Concluir
+                </button>
+                <button class="btn btn-sm" style="background:#EF4444; color:#fff; padding:10px; min-height:44px; touch-action:manipulation;" onclick="if(confirm('Tem certeza que deseja cancelar este pedido?')) { OrdersManager.updateStatus('${safeOrderId}', 'cancelled'); closeModal(); }">
+                    ❌ Cancelar
                 </button>
             </div>
         `;
@@ -549,6 +570,53 @@ const OrdersManager = {
             const ordName = ord.client_name || ord.customer_name;
             return (cleanPhone && ordPhone === cleanPhone) || (clientName && ordName === clientName);
         }).length;
+    },
+
+    // Processa a contagem do Cartão Fidelidade ao concluir o pedido
+    async processLoyaltyStamp(phone, orderTotal) {
+        if (!phone) return;
+        const cleanPhone = String(phone).replace(/\D/g, '');
+        if (!cleanPhone) return;
+
+        try {
+            if (typeof dbClient !== 'undefined' && dbClient) {
+                const { data: customer } = await dbClient
+                    .from('customers')
+                    .select('id, name, phone, loyalty_stamps')
+                    .or(`phone.eq.${phone},phone.eq.${cleanPhone}`)
+                    .maybeSingle();
+
+                if (customer) {
+                    let currentStamps = Number(customer.loyalty_stamps || 0);
+                    let newStamps = currentStamps;
+
+                    if (currentStamps >= 10) {
+                        newStamps = Number(orderTotal || 0) >= 25.00 ? 1 : 0;
+                        if (typeof showToast === 'function') {
+                            showToast(`🎁 Pastel grátis entregue! Novo ciclo do Cartão Fidelidade iniciado (${newStamps}/10).`, 'success');
+                        }
+                    } else if (Number(orderTotal || 0) >= 25.00) {
+                        newStamps = currentStamps + 1;
+                        if (newStamps === 10) {
+                            if (typeof showToast === 'function') {
+                                showToast(`🎉 ${customer.name || 'Cliente'} completou 10 carimbos e ganhou 1 Pastel!`, 'success');
+                            }
+                        } else {
+                            if (typeof showToast === 'function') {
+                                showToast(`🎟️ Carimbo fidelidade registrado! (${newStamps}/10)`, 'info');
+                            }
+                        }
+                    }
+
+                    await dbClient
+                        .from('customers')
+                        .update({ loyalty_stamps: newStamps })
+                        .eq('id', customer.id);
+                }
+            }
+        } catch (e) {
+            console.warn('Erro ao processar programa de fidelidade:', e);
+        }
     },
 
     stopLiveTimers() {
@@ -708,20 +776,27 @@ const OrdersManager = {
                 window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
             }
 
-            if (newStatus === 'completed' && phone) {
-                let cleanPhone = String(phone).replace(/\D/g, '');
-                if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
-
-                const firstName = clientName ? clientName.split(' ')[0] : 'Cliente';
-                let msg = '';
-
-                if (o?.order_type === 'pickup') {
-                    msg = `Olá, *${firstName}*! Passando pra avisar que seu pedido acabou de ficar pronto e está quentinho! 🥟🔥\n\nPode vir buscar aqui no balcão. Estamos te aguardando! 😊\n\n_– Equipe ${storeName}_`;
-                } else {
-                    msg = `Olá, *${firstName}*! Seu pedido ficou pronto e acabou de sair para entrega em seu endereço! 🛵😋\n\nEm instantes chega aí. Um excelente apetite!\n\n_– Equipe ${storeName}_`;
+            if (newStatus === 'completed') {
+                // Processa o carimbo do programa de fidelidade ao concluir o pedido
+                if (phone) {
+                    await this.processLoyaltyStamp(phone, Number(o?.total || 0));
                 }
 
-                window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
+                if (phone) {
+                    let cleanPhone = String(phone).replace(/\D/g, '');
+                    if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
+
+                    const firstName = clientName ? clientName.split(' ')[0] : 'Cliente';
+                    let msg = '';
+
+                    if (o?.order_type === 'pickup') {
+                        msg = `Olá, *${firstName}*! Passando pra avisar que seu pedido acabou de ficar pronto e está quentinho! 🥟🔥\n\nPode vir buscar aqui no balcão. Estamos te aguardando! 😊\n\n_– Equipe ${storeName}_`;
+                    } else {
+                        msg = `Olá, *${firstName}*! Seu pedido ficou pronto e acabou de sair para entrega em seu endereço! 🛵😋\n\nEm instantes chega aí. Um excelente apetite!\n\n_– Equipe ${storeName}_`;
+                    }
+
+                    window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
+                }
             }
 
             if (typeof showToast === 'function') showToast('Status do pedido atualizado!');
