@@ -1,4 +1,4 @@
-// js/customers.js - Gestão de Clientes (CRM + Fidelidade + Disparo de Marketing no WhatsApp)
+// js/customers.js - Gestão de Clientes (CRM + Fidelidade Automática + WhatsApp)
 
 if (typeof window.escapeHtml !== 'function') {
     window.escapeHtml = function(text) {
@@ -11,9 +11,13 @@ if (typeof window.escapeHtml !== 'function') {
 const CustomersManager = {
     allCustomers: [],
 
-    // Normaliza chave de telefone/nome para agrupamento perfeito no CRM
+    // Normaliza telefone e nome para agrupamento perfeito no CRM
     getCleanKey(phone, name) {
-        const cleanPhone = phone ? String(phone).replace(/\D/g, '') : '';
+        let cleanPhone = phone ? String(phone).replace(/\D/g, '') : '';
+        // Remove o DDI 55 se estiver presente para padronizar com/sem 55
+        if (cleanPhone.startsWith('55') && cleanPhone.length >= 12) {
+            cleanPhone = cleanPhone.slice(2);
+        }
         if (cleanPhone.length >= 8) return cleanPhone;
         return name ? String(name).trim().toLowerCase() : '';
     },
@@ -53,25 +57,29 @@ const CustomersManager = {
 
             const customersMap = {};
 
-            // Mapeia cadastros explícitos da tabela
+            // 1. Mapeia cadastros explícitos da tabela 'customers'
             dbCustomers.forEach(c => {
                 const key = this.getCleanKey(c.phone, c.name);
                 if (!key) return;
+
+                const stampsInDb = Number(c.loyalty_stamps ?? c.loyaltyStamps ?? 0);
 
                 customersMap[key] = {
                     id: c.id,
                     name: c.name || 'Cliente Sem Nome',
                     phone: c.phone || '',
                     address: c.address || '',
-                    loyaltyStamps: c.loyalty_stamps || c.loyaltyStamps || 0,
+                    dbStamps: stampsInDb,
+                    loyaltyStamps: stampsInDb,
                     totalSpent: 0,
                     ordersCount: 0,
+                    validOrdersMin25Count: 0,
                     lastOrderDate: null,
                     itemsFrequency: {}
                 };
             });
 
-            // Agrega métricas e histórico a partir das comandas
+            // 2. Agrega métricas e histórico a partir dos pedidos
             dbOrders.forEach(o => {
                 const rawPhone = o.phone || o.customer_phone || '';
                 const rawName = o.client_name || o.customer_name || '';
@@ -85,9 +93,11 @@ const CustomersManager = {
                         name: rawName || 'Cliente Sem Nome',
                         phone: rawPhone,
                         address: o.address || o.delivery_address || '',
+                        dbStamps: 0,
                         loyaltyStamps: 0,
                         totalSpent: 0,
                         ordersCount: 0,
+                        validOrdersMin25Count: 0,
                         lastOrderDate: null,
                         itemsFrequency: {}
                     };
@@ -109,7 +119,13 @@ const CustomersManager = {
 
                 if (isRealOrder) {
                     cust.ordersCount += 1;
-                    cust.totalSpent += Number(o.total || 0);
+                    const orderTotal = Number(o.total || 0);
+                    cust.totalSpent += orderTotal;
+
+                    // Conta pedidos válidos de R$ 25,00 ou mais para o cartão fidelidade
+                    if (orderTotal >= 25.00) {
+                        cust.validOrdersMin25Count += 1;
+                    }
 
                     if (Array.isArray(items)) {
                         items.forEach(item => {
@@ -123,6 +139,11 @@ const CustomersManager = {
                         cust.lastOrderDate = o.created_at;
                     }
                 }
+            });
+
+            // 3. Define carimbos: considera o MAIOR valor entre o gravado no banco e os pedidos válidos calculados (>= R$ 25)
+            Object.values(customersMap).forEach(cust => {
+                cust.loyaltyStamps = Math.max(cust.dbStamps, cust.validOrdersMin25Count);
             });
 
             const customersList = Object.values(customersMap).sort((a, b) => b.totalSpent - a.totalSpent);
@@ -185,13 +206,19 @@ const CustomersManager = {
                     </div>
                 </div>
 
-                <!-- CARTÃO FIDELIDADE VISUAL -->
+                <!-- CARTÃO FIDELIDADE VISUAL E CONTROLE MANUAL -->
                 <div style="background:#0F172A; border:1px solid ${isRewardReady ? '#10B981' : '#334155'}; border-radius:8px; padding:10px; margin-bottom:10px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; margin-bottom:6px;">
                         <span style="color:#CBD5E1; font-weight:700;">🎫 Fidelidade (Mín. R$ 25)</span>
-                        <span style="font-weight:800; color:${isRewardReady ? '#10B981' : '#F59E0B'};">
-                            ${isRewardReady ? '🎉 10/10 - GANHOU PASTEL!' : `🎟️ ${stamps}/10 Carimbos`}
-                        </span>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <span style="font-weight:800; color:${isRewardReady ? '#10B981' : '#F59E0B'};">
+                                ${isRewardReady ? '🎉 10/10 - GANHOU PASTEL!' : `🎟️ ${stamps}/10 Carimbos`}
+                            </span>
+                            <div style="display:flex; gap:2px;">
+                                <button onclick="CustomersManager.updateCustomerStamps(${index}, -1)" title="Remover carimbo" style="background:#334155; color:#F1F5F9; border:none; padding:2px 6px; border-radius:4px; font-weight:bold; cursor:pointer; font-size:11px;">-</button>
+                                <button onclick="CustomersManager.updateCustomerStamps(${index}, 1)" title="Adicionar carimbo" style="background:#FF6B35; color:#fff; border:none; padding:2px 6px; border-radius:4px; font-weight:bold; cursor:pointer; font-size:11px;">+</button>
+                            </div>
+                        </div>
                     </div>
                     <div style="background:#1E293B; height:8px; border-radius:4px; overflow:hidden;">
                         <div style="background:${isRewardReady ? '#10B981' : 'linear-gradient(90deg, #FF6B35, #F59E0B)'}; height:100%; width:${progressPercent}%; transition:width 0.3s;"></div>
@@ -223,6 +250,47 @@ const CustomersManager = {
                 </div>
             </div>
         `;
+    },
+
+    // Ajusta carimbos manualmente no Supabase
+    async updateCustomerStamps(index, delta) {
+        const c = this.allCustomers[index];
+        if (!c) return;
+
+        const currentStamps = c.loyaltyStamps || 0;
+        const newStamps = Math.max(0, Math.min(10, currentStamps + delta));
+
+        if (currentStamps === newStamps) return;
+
+        try {
+            if (typeof dbClient !== 'undefined' && dbClient) {
+                const cleanPhone = c.phone ? String(c.phone).replace(/\D/g, '') : '';
+                
+                // Atualiza ou cria o registro no Supabase
+                const payload = {
+                    name: c.name,
+                    phone: c.phone || cleanPhone,
+                    address: c.address || '',
+                    loyalty_stamps: newStamps
+                };
+
+                if (c.id) payload.id = c.id;
+                else payload.id = `cust_${Date.now()}`;
+
+                const { error } = await dbClient.from('customers').upsert([payload]);
+                if (error) throw error;
+            }
+
+            c.loyaltyStamps = newStamps;
+            c.dbStamps = newStamps;
+
+            if (typeof showToast === 'function') showToast(`Carimbos de ${c.name} atualizados para ${newStamps}/10!`);
+            this.fetchCustomers();
+
+        } catch (e) {
+            console.error('Erro ao atualizar carimbos:', e);
+            if (typeof showToast === 'function') showToast('Erro ao atualizar carimbos no banco.', 'error');
+        }
     },
 
     openNewCustomerModal() {
