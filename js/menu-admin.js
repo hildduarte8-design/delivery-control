@@ -1,4 +1,4 @@
-// js/menu-admin.js - Gestão, CRUD e Reordenação Agrupada por Categorias (Estilo iFood)
+// js/menu-admin.js - Gestão, CRUD, Reordenação por Drag & Drop e Categorias Expansíveis/Recolhíveis
 
 function escapeHtml(text) {
     const div = document.createElement('div');
@@ -53,6 +53,24 @@ const MenuAdminManager = {
         list.appendChild(row);
     },
 
+    toggleCategoryCollapse(btn) {
+        const catBlock = btn.closest('.category-block');
+        if (!catBlock) return;
+        const container = catBlock.querySelector('.category-products-container');
+        if (!container) return;
+
+        const isCollapsed = container.style.display === 'none';
+        if (isCollapsed) {
+            container.style.display = 'flex';
+            btn.innerHTML = '▼';
+            btn.title = 'Recolher Categoria';
+        } else {
+            container.style.display = 'none';
+            btn.innerHTML = '▶';
+            btn.title = 'Expandir Categoria';
+        }
+    },
+
     async renderAdminProductsList() {
         const container = document.getElementById('admin-products-list');
         if (!container) return;
@@ -94,10 +112,10 @@ const MenuAdminManager = {
                 const activeCount = catProducts.filter(p => p.is_active).length;
 
                 html += `
-                    <div class="category-block" data-category="${safeCat}" draggable="true" style="margin-bottom:20px; background:#0F172A; border:1px solid #334155; border-radius:12px; padding:12px; transition: all 0.2s;">
+                    <div class="category-block" data-category="${safeCat}" draggable="true" style="margin-bottom:16px; background:#0F172A; border:1px solid #334155; border-radius:12px; padding:12px; transition: all 0.2s;">
                         
-                        <!-- Cabeçalho da Categoria com Alça Master -->
-                        <div class="category-header" style="display:flex; justify-content:space-between; align-items:center; padding-bottom:10px; margin-bottom:10px; border-bottom:1px solid #1E293B;">
+                        <!-- Cabeçalho da Categoria com Alça Master e Botão de Recolher/Expandir -->
+                        <div class="category-header" style="display:flex; justify-content:space-between; align-items:center;">
                             <div style="display:flex; align-items:center; gap:10px;">
                                 <div class="category-drag-handle" style="cursor:grab; padding:6px 10px; background:#1E293B; color:#FF6B35; border-radius:6px; font-size:18px; user-select:none; touch-action:none; border:1px solid #334155;" title="Segure e arraste para reordenar esta CATEGORIA inteira">
                                     ⣿ <span style="font-size:11px; font-weight:bold; color:#F1F5F9;">Categoria</span>
@@ -107,10 +125,14 @@ const MenuAdminManager = {
                                     <span style="font-size:11px; color:#94A3B8; display:block;">${catProducts.length} item(ns) • ${activeCount} ativo(s)</span>
                                 </div>
                             </div>
+
+                            <button type="button" class="btn-toggle-category" onclick="MenuAdminManager.toggleCategoryCollapse(this)" style="background:#1E293B; border:1px solid #334155; color:#F1F5F9; border-radius:8px; width:36px; height:36px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:14px; font-weight:bold; transition: background 0.2s;" title="Recolher / Expandir Categoria">
+                                ▼
+                            </button>
                         </div>
 
                         <!-- Lista dos Pratos desta Categoria -->
-                        <div class="category-products-container" style="display:flex; flex-direction:column; gap:8px;">
+                        <div class="category-products-container" style="display:flex; flex-direction:column; gap:8px; margin-top:12px; padding-top:10px; border-top:1px solid #1E293B;">
                             ${catProducts.map(p => {
                                 const discount = Number(p.discount_pct || 0);
                                 const originalPrice = Number(p.price || 0);
