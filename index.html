@@ -79,6 +79,7 @@
             </div>
             <div style="display:flex; gap:6px;">
                 <button class="btn btn-sm btn-secondary" onclick="if (navigator.clipboard) { navigator.clipboard.writeText(window.location.origin + '/cardapio.html'); showToast('Link copiado!'); } else { showToast('Copie manualmente: ' + window.location.origin + '/cardapio.html'); }">📋 Copiar Link</button>
+                <button class="btn btn-sm btn-secondary" onclick="exportMenuPDF()" title="Baixar Cardápio em PDF">📄 Baixar PDF</button>
                 <button class="btn btn-sm" style="background:#F59E0B;" onclick="window.location.href='cardapio.html'">Abrir</button>
             </div>
         </div>
