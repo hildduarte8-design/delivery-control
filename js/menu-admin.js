@@ -1,6 +1,5 @@
-// js/menu-admin.js - Gestão, CRUD, Reordenação por Drag & Drop e Seleção Dinâmica de Categorias
+// js/menu-admin.js - Gestão, CRUD e Reordenação Agrupada por Categorias (Estilo iFood)
 
-// Auxiliar de sanitização contra XSS
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.appendChild(document.createTextNode(String(text || '')));
@@ -39,7 +38,6 @@ const MenuAdminManager = {
         }
     },
 
-    // Adiciona uma linha dinâmica de adicional (Nome + Preço)
     addComplementRow(name = '', price = '') {
         const list = document.getElementById('complements_list');
         if (!list) return;
@@ -59,7 +57,7 @@ const MenuAdminManager = {
         const container = document.getElementById('admin-products-list');
         if (!container) return;
 
-        container.innerHTML = '<div style="text-align:center; color:#94A3B8; padding:20px;">Carregando pratos...</div>';
+        container.innerHTML = '<div style="text-align:center; color:#94A3B8; padding:20px;">Carregando pratos e categorias...</div>';
 
         try {
             if (typeof dbClient === 'undefined') return;
@@ -82,143 +80,269 @@ const MenuAdminManager = {
 
             window.currentAdminProducts = products;
 
-            container.innerHTML = products.map((p, index) => {
-                const discount = Number(p.discount_pct || 0);
-                const originalPrice = Number(p.price || 0);
-                const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
-                const safeName = escapeHtml(p.name);
-                const safeCat = escapeHtml(p.category || 'Geral');
+            // Agrupa produtos por Categoria preservando a ordem do display_order
+            const grouped = {};
+            products.forEach(p => {
+                const cat = p.category || 'Geral';
+                if (!grouped[cat]) grouped[cat] = [];
+                grouped[cat].push(p);
+            });
 
-                return `
-                    <div class="card product-admin-card" draggable="true" data-id="${escapeHtml(p.id)}" style="margin-bottom:10px; padding:12px; display:flex; justify-content:space-between; align-items:center; background:#1E293B; border-left:4px solid ${p.is_active ? '#10B981' : '#64748B'}; cursor:grab; user-select:none; transition: transform 0.15s, box-shadow 0.15s;">
-                        <div style="display:flex; align-items:center; gap:10px; flex:1;">
-                            <div class="drag-handle" style="cursor:grab; padding:6px 8px; color:#64748B; font-size:20px; user-select:none; touch-action:none;" title="Segure e arraste para reordenar">
-                                ⣿
-                            </div>
-                            ${p.image_url ? `<img src="${escapeHtml(p.image_url)}" style="width:48px; height:48px; border-radius:8px; object-fit:cover; pointer-events:none;">` : '<span style="font-size:24px;">🍽️</span>'}
-                            <div>
-                                <strong style="color:#F1F5F9; font-size:14px; display:block;">
-                                    ${safeName} ${p.is_cross_sell ? '<small style="color:#60A5FA;">[Peça Junto]</small>' : ''}
-                                </strong>
-                                <span style="font-size:11px; color:#94A3B8;">
-                                    ${safeCat} • R$ ${finalPrice.toFixed(2)} 
-                                    ${discount > 0 ? `<span style="color:#10B981;">(-${discount}%)</span>` : ''}
-                                </span>
+            let html = '';
+            for (const [catName, catProducts] of Object.entries(grouped)) {
+                const safeCat = escapeHtml(catName);
+                const activeCount = catProducts.filter(p => p.is_active).length;
+
+                html += `
+                    <div class="category-block" data-category="${safeCat}" draggable="true" style="margin-bottom:20px; background:#0F172A; border:1px solid #334155; border-radius:12px; padding:12px; transition: all 0.2s;">
+                        
+                        <!-- Cabeçalho da Categoria com Alça Master -->
+                        <div class="category-header" style="display:flex; justify-content:space-between; align-items:center; padding-bottom:10px; margin-bottom:10px; border-bottom:1px solid #1E293B;">
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <div class="category-drag-handle" style="cursor:grab; padding:6px 10px; background:#1E293B; color:#FF6B35; border-radius:6px; font-size:18px; user-select:none; touch-action:none; border:1px solid #334155;" title="Segure e arraste para reordenar esta CATEGORIA inteira">
+                                    ⣿ <span style="font-size:11px; font-weight:bold; color:#F1F5F9;">Categoria</span>
+                                </div>
+                                <div>
+                                    <strong style="color:#F59E0B; font-size:15px; text-transform:uppercase; letter-spacing:0.5px;">📌 ${safeCat}</strong>
+                                    <span style="font-size:11px; color:#94A3B8; display:block;">${catProducts.length} item(ns) • ${activeCount} ativo(s)</span>
+                                </div>
                             </div>
                         </div>
 
-                        <div style="display:flex; gap:6px; align-items:center;" onclick="event.stopPropagation();">
-                            <button class="btn btn-sm ${p.is_active ? 'btn-success' : 'btn-secondary'}" onclick="MenuAdminManager.toggleProductActive('${escapeHtml(p.id)}', ${!p.is_active})" title="${p.is_active ? 'Pausar item' : 'Ativar item'}">
-                                ${p.is_active ? '🟢' : '⚪'}
-                            </button>
-                            <button class="btn btn-sm btn-secondary" onclick="MenuAdminManager.openProductModal('${escapeHtml(p.id)}')" title="Editar">✏️</button>
-                            <button class="btn btn-sm btn-danger" onclick="MenuAdminManager.deleteProduct('${escapeHtml(p.id)}')" title="Excluir">🗑️</button>
+                        <!-- Lista dos Pratos desta Categoria -->
+                        <div class="category-products-container" style="display:flex; flex-direction:column; gap:8px;">
+                            ${catProducts.map(p => {
+                                const discount = Number(p.discount_pct || 0);
+                                const originalPrice = Number(p.price || 0);
+                                const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
+                                const safeName = escapeHtml(p.name);
+
+                                return `
+                                    <div class="card product-admin-card" draggable="true" data-id="${escapeHtml(p.id)}" style="padding:10px 12px; display:flex; justify-content:space-between; align-items:center; background:#1E293B; border-left:4px solid ${p.is_active ? '#10B981' : '#64748B'}; cursor:grab; user-select:none; transition: transform 0.15s;">
+                                        <div style="display:flex; align-items:center; gap:10px; flex:1;">
+                                            <div class="product-drag-handle" style="cursor:grab; padding:4px 6px; color:#64748B; font-size:18px; user-select:none; touch-action:none;" title="Arrastar prato">
+                                                ⣿
+                                            </div>
+                                            ${p.image_url ? `<img src="${escapeHtml(p.image_url)}" style="width:42px; height:42px; border-radius:8px; object-fit:cover; pointer-events:none;">` : '<span style="font-size:20px;">🍽️</span>'}
+                                            <div>
+                                                <strong style="color:#F1F5F9; font-size:13px; display:block;">
+                                                    ${safeName} ${p.is_cross_sell ? '<small style="color:#60A5FA;">[Peça Junto]</small>' : ''}
+                                                </strong>
+                                                <span style="font-size:11px; color:#94A3B8;">
+                                                    R$ ${finalPrice.toFixed(2)} 
+                                                    ${discount > 0 ? `<span style="color:#10B981;">(-${discount}%)</span>` : ''}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div style="display:flex; gap:6px; align-items:center;" onclick="event.stopPropagation();">
+                                            <button class="btn btn-sm ${p.is_active ? 'btn-success' : 'btn-secondary'}" onclick="MenuAdminManager.toggleProductActive('${escapeHtml(p.id)}', ${!p.is_active})" title="${p.is_active ? 'Pausar item' : 'Ativar item'}">
+                                                ${p.is_active ? '🟢' : '⚪'}
+                                            </button>
+                                            <button class="btn btn-sm btn-secondary" onclick="MenuAdminManager.openProductModal('${escapeHtml(p.id)}')" title="Editar">✏️</button>
+                                            <button class="btn btn-sm btn-danger" onclick="MenuAdminManager.deleteProduct('${escapeHtml(p.id)}')" title="Excluir">🗑️</button>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
                         </div>
                     </div>
                 `;
-            }).join('');
+            }
 
-            this.initDragAndDrop();
+            container.innerHTML = html;
+
+            // Inicializa Drag & Drop para Categorias e para Pratos
+            this.initCategoryAndProductDrag();
 
         } catch (e) {
             console.error('Erro ao renderizar lista administrativa:', e);
         }
     },
 
-    initDragAndDrop() {
-        const container = document.getElementById('admin-products-list');
-        if (!container) return;
+    initCategoryAndProductDrag() {
+        const mainContainer = document.getElementById('admin-products-list');
+        if (!mainContainer) return;
 
-        const cards = container.querySelectorAll('.product-admin-card');
-        let draggedCard = null;
+        // 1. REORDENAÇÃO DE CATEGORIAS (Desktop & Touch)
+        const categoryBlocks = mainContainer.querySelectorAll('.category-block');
+        let draggedCategory = null;
 
-        cards.forEach(card => {
-            card.addEventListener('dragstart', (e) => {
-                draggedCard = card;
-                card.style.opacity = '0.4';
-                card.style.cursor = 'grabbing';
+        categoryBlocks.forEach(catBlock => {
+            catBlock.addEventListener('dragstart', (e) => {
+                if (!e.target.closest('.category-drag-handle')) {
+                    if (!e.target.closest('.product-admin-card')) e.preventDefault();
+                    return;
+                }
+                draggedCategory = catBlock;
+                catBlock.style.opacity = '0.5';
+                catBlock.style.border = '2px dashed #FF6B35';
                 e.dataTransfer.effectAllowed = 'move';
             });
 
-            card.addEventListener('dragend', async () => {
-                if (draggedCard) {
-                    draggedCard.style.opacity = '1';
-                    draggedCard.style.cursor = 'grab';
-                    draggedCard = null;
-                    await this.saveNewOrderFromDOM();
+            catBlock.addEventListener('dragend', async () => {
+                if (draggedCategory) {
+                    draggedCategory.style.opacity = '1';
+                    draggedCategory.style.border = '1px solid #334155';
+                    draggedCategory = null;
+                    await this.saveGlobalSequenceFromDOM();
                 }
             });
 
-            card.addEventListener('dragover', (e) => {
+            catBlock.addEventListener('dragover', (e) => {
+                if (!draggedCategory || draggedCategory === catBlock) return;
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'move';
-                if (!draggedCard || draggedCard === card) return;
 
-                const rect = card.getBoundingClientRect();
+                const rect = catBlock.getBoundingClientRect();
                 const midPoint = rect.top + rect.height / 2;
 
                 if (e.clientY < midPoint) {
-                    container.insertBefore(draggedCard, card);
+                    mainContainer.insertBefore(draggedCategory, catBlock);
                 } else {
-                    container.insertBefore(draggedCard, card.nextSibling);
+                    mainContainer.insertBefore(draggedCategory, catBlock.nextSibling);
                 }
             });
         });
 
-        let touchActiveCard = null;
-        cards.forEach(card => {
-            const handle = card.querySelector('.drag-handle');
+        // Suporte Touch para Categorias
+        let touchActiveCategory = null;
+        categoryBlocks.forEach(catBlock => {
+            const handle = catBlock.querySelector('.category-drag-handle');
             if (!handle) return;
 
-            handle.addEventListener('touchstart', (e) => {
-                touchActiveCard = card;
-                card.style.opacity = '0.6';
-                card.style.border = '2px dashed #FF6B35';
+            handle.addEventListener('touchstart', () => {
+                touchActiveCategory = catBlock;
+                catBlock.style.opacity = '0.6';
+                catBlock.style.border = '2px dashed #FF6B35';
             }, { passive: true });
 
             handle.addEventListener('touchmove', (e) => {
-                if (!touchActiveCard) return;
+                if (!touchActiveCategory) return;
                 const touch = e.touches[0];
                 const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
                 if (!targetEl) return;
 
-                const targetCard = targetEl.closest('.product-admin-card');
-                if (targetCard && targetCard !== touchActiveCard && targetCard.parentNode === container) {
-                    const rect = targetCard.getBoundingClientRect();
+                const targetCat = targetEl.closest('.category-block');
+                if (targetCat && targetCat !== touchActiveCategory && targetCat.parentNode === mainContainer) {
+                    const rect = targetCat.getBoundingClientRect();
                     const midPoint = rect.top + rect.height / 2;
 
                     if (touch.clientY < midPoint) {
-                        container.insertBefore(touchActiveCard, targetCard);
+                        mainContainer.insertBefore(touchActiveCategory, targetCat);
                     } else {
-                        container.insertBefore(touchActiveCard, targetCard.nextSibling);
+                        mainContainer.insertBefore(touchActiveCategory, targetCat.nextSibling);
                     }
                 }
             }, { passive: true });
 
             handle.addEventListener('touchend', async () => {
-                if (touchActiveCard) {
-                    touchActiveCard.style.opacity = '1';
-                    touchActiveCard.style.border = '';
-                    touchActiveCard = null;
-                    await this.saveNewOrderFromDOM();
+                if (touchActiveCategory) {
+                    touchActiveCategory.style.opacity = '1';
+                    touchActiveCategory.style.border = '1px solid #334155';
+                    touchActiveCategory = null;
+                    await this.saveGlobalSequenceFromDOM();
+                }
+            });
+        });
+
+        // 2. REORDENAÇÃO DE PRATOS DENTRO DAS CATEGORIAS (Desktop & Touch)
+        const productCards = mainContainer.querySelectorAll('.product-admin-card');
+        let draggedProduct = null;
+
+        productCards.forEach(prodCard => {
+            prodCard.addEventListener('dragstart', (e) => {
+                draggedProduct = prodCard;
+                prodCard.style.opacity = '0.4';
+                e.stopPropagation();
+                e.dataTransfer.effectAllowed = 'move';
+            });
+
+            prodCard.addEventListener('dragend', async (e) => {
+                e.stopPropagation();
+                if (draggedProduct) {
+                    draggedProduct.style.opacity = '1';
+                    draggedProduct = null;
+                    await this.saveGlobalSequenceFromDOM();
+                }
+            });
+
+            prodCard.addEventListener('dragover', (e) => {
+                if (!draggedProduct || draggedProduct === prodCard) return;
+                e.preventDefault();
+                e.stopPropagation();
+
+                const parentContainer = prodCard.parentNode;
+                const rect = prodCard.getBoundingClientRect();
+                const midPoint = rect.top + rect.height / 2;
+
+                if (e.clientY < midPoint) {
+                    parentContainer.insertBefore(draggedProduct, prodCard);
+                } else {
+                    parentContainer.insertBefore(draggedProduct, prodCard.nextSibling);
+                }
+            });
+        });
+
+        // Suporte Touch para Pratos
+        let touchActiveProduct = null;
+        productCards.forEach(prodCard => {
+            const handle = prodCard.querySelector('.product-drag-handle');
+            if (!handle) return;
+
+            handle.addEventListener('touchstart', (e) => {
+                e.stopPropagation();
+                touchActiveProduct = prodCard;
+                prodCard.style.opacity = '0.6';
+            }, { passive: true });
+
+            handle.addEventListener('touchmove', (e) => {
+                if (!touchActiveProduct) return;
+                e.stopPropagation();
+                const touch = e.touches[0];
+                const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
+                if (!targetEl) return;
+
+                const targetProd = targetEl.closest('.product-admin-card');
+                const parentCat = touchActiveProduct.parentNode;
+
+                if (targetProd && targetProd !== touchActiveProduct && targetProd.parentNode === parentCat) {
+                    const rect = targetProd.getBoundingClientRect();
+                    const midPoint = rect.top + rect.height / 2;
+
+                    if (touch.clientY < midPoint) {
+                        parentCat.insertBefore(touchActiveProduct, targetProd);
+                    } else {
+                        parentCat.insertBefore(touchActiveProduct, targetProd.nextSibling);
+                    }
+                }
+            }, { passive: true });
+
+            handle.addEventListener('touchend', async (e) => {
+                e.stopPropagation();
+                if (touchActiveProduct) {
+                    touchActiveProduct.style.opacity = '1';
+                    touchActiveProduct = null;
+                    await this.saveGlobalSequenceFromDOM();
                 }
             });
         });
     },
 
-    async saveNewOrderFromDOM() {
-        const container = document.getElementById('admin-products-list');
-        if (!container) return;
+    async saveGlobalSequenceFromDOM() {
+        const mainContainer = document.getElementById('admin-products-list');
+        if (!mainContainer) return;
 
-        const cards = Array.from(container.querySelectorAll('.product-admin-card'));
-        if (cards.length === 0) return;
+        const productCards = Array.from(mainContainer.querySelectorAll('.product-admin-card'));
+        if (productCards.length === 0) return;
 
         try {
             if (typeof dbClient === 'undefined') return;
 
-            const updatePromises = cards.map((card, index) => {
+            const updatePromises = productCards.map((card, index) => {
                 const id = card.getAttribute('data-id');
                 if (!id) return Promise.resolve();
+
                 return dbClient
                     .from('products')
                     .update({ display_order: index })
@@ -228,12 +352,12 @@ const MenuAdminManager = {
             await Promise.all(updatePromises);
 
             if (typeof showToast === 'function') {
-                showToast(' Nova ordem do cardápio salva!', 'success');
+                showToast('Nova ordem salva com sucesso!', 'success');
             }
         } catch (e) {
             console.error('Erro ao salvar nova ordem:', e);
             if (typeof showToast === 'function') {
-                showToast('Erro ao salvar ordem das categorias', 'error');
+                showToast('Erro ao salvar ordem no banco de dados.', 'error');
             }
         }
     },
@@ -458,11 +582,9 @@ const MenuAdminManager = {
     }
 };
 
-// Compatibilidade global para chamadas via HTML
 window.MenuAdminManager = MenuAdminManager;
 window.openNewProductModal = () => MenuAdminManager.openProductModal();
 
-// Inicialização automática do painel
 document.addEventListener('DOMContentLoaded', () => {
     MenuAdminManager.init();
 });
