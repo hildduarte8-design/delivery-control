@@ -36,7 +36,7 @@ function getIFoodWeeklyCycle(referenceDate = new Date()) {
 
 async function exportMenuPDF() {
     try {
-        if (typeof showToast === 'function') showToast('⌛ Gerando PDF do cardápio...', 'info');
+        if (typeof showToast === 'function') showToast('⌛ Gerando PDF do cardápio ampliado...', 'info');
 
         let products = [];
         if (typeof dbClient !== 'undefined' && dbClient) {
@@ -62,7 +62,7 @@ async function exportMenuPDF() {
             grouped[cat].push(p);
         });
 
-        // Container com preenchimento interno reduzido e largura total
+        // Container com preenchimento ajustado e fonte base bem visível
         const pdfContainer = document.createElement('div');
         pdfContainer.style.cssText = 'padding: 8px; font-family: Arial, sans-serif; color: #1E293B; background: #FFFFFF; width: 100%; box-sizing: border-box;';
 
@@ -74,21 +74,21 @@ async function exportMenuPDF() {
                 const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
                 const safeDesc = p.description ? escapeHtml(p.description) : '';
                 
-                // Exibe a foto se ela existir
+                // Foto ampliada para 85px x 85px com cantos arredondados
                 const imgHtml = p.image_url 
-                    ? `<img src="${escapeHtml(p.image_url)}" style="width: 52px; height: 52px; border-radius: 8px; object-fit: cover; flex-shrink: 0;" crossorigin="anonymous">` 
+                    ? `<img src="${escapeHtml(p.image_url)}" style="width: 85px; height: 85px; border-radius: 10px; object-fit: cover; flex-shrink: 0;" crossorigin="anonymous">` 
                     : '';
 
                 return `
-                    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding: 10px 0; border-bottom: 1px dashed #CBD5E1; page-break-inside: avoid;">
-                        <div style="display:flex; align-items:center; gap:12px; flex:1;">
+                    <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding: 14px 0; border-bottom: 1px dashed #CBD5E1; page-break-inside: avoid;">
+                        <div style="display:flex; align-items:flex-start; gap:14px; flex:1;">
                             ${imgHtml}
-                            <div>
-                                <strong style="font-size:16px; color:#0F172A; display:block; line-height:1.2;">${escapeHtml(p.name)}</strong>
-                                ${safeDesc ? `<span style="font-size:13px; color:#475569; display:block; margin-top:3px; line-height:1.3;">${safeDesc}</span>` : ''}
+                            <div style="flex:1;">
+                                <strong style="font-size:20px; color:#0F172A; display:block; line-height:1.25; margin-bottom:4px;">${escapeHtml(p.name)}</strong>
+                                ${safeDesc ? `<span style="font-size:15px; color:#475569; display:block; line-height:1.4;">${safeDesc}</span>` : ''}
                             </div>
                         </div>
-                        <div style="font-size:17px; font-weight:bold; color:#0F172A; white-space:nowrap; padding-left:6px;">
+                        <div style="font-size:22px; font-weight:800; color:#0F172A; white-space:nowrap; padding-left:8px; align-self: flex-start;">
                             R$ ${finalPrice.toFixed(2).replace('.', ',')}
                         </div>
                     </div>
@@ -96,8 +96,8 @@ async function exportMenuPDF() {
             }).join('');
 
             categoriesHtml += `
-                <div style="margin-bottom:22px; page-break-inside: avoid;">
-                    <h3 style="font-size:20px; color:#FF6B35; text-transform:uppercase; border-bottom:2px solid #FF6B35; padding-bottom:4px; margin-bottom:10px; margin-top:14px;">
+                <div style="margin-bottom:26px; page-break-inside: avoid;">
+                    <h3 style="font-size:24px; color:#FF6B35; text-transform:uppercase; border-bottom:3px solid #FF6B35; padding-bottom:6px; margin-bottom:12px; margin-top:18px;">
                         📌 ${escapeHtml(catName)}
                     </h3>
                     ${itemsHtml}
@@ -106,9 +106,9 @@ async function exportMenuPDF() {
         }
 
         pdfContainer.innerHTML = `
-            <div style="text-align:center; margin-bottom:18px; border-bottom:2px solid #E2E8F0; padding-bottom:12px;">
-                <h1 style="margin:0; font-size:28px; color:#0F172A; font-weight:800;">📋 Cardápio Digital</h1>
-                <p style="margin:4px 0 0 0; font-size:13px; color:#64748B;">Atualizado em ${new Date().toLocaleDateString('pt-BR')}</p>
+            <div style="text-align:center; margin-bottom:22px; border-bottom:3px solid #E2E8F0; padding-bottom:14px;">
+                <h1 style="margin:0; font-size:32px; color:#0F172A; font-weight:800;">📋 Cardápio Digital</h1>
+                <p style="margin:6px 0 0 0; font-size:15px; color:#64748B;">Atualizado em ${new Date().toLocaleDateString('pt-BR')}</p>
             </div>
             ${categoriesHtml}
         `;
@@ -124,7 +124,7 @@ async function exportMenuPDF() {
         }
 
         const opt = {
-            margin: [4, 4, 4, 4], // Margem de 4mm (apenas 3% a 4% da página)
+            margin: [4, 4, 4, 4], // Margem mínima (4mm)
             filename: 'Cardapio_Digital.pdf',
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: { scale: 2, useCORS: true, allowTaint: true },
@@ -139,7 +139,6 @@ async function exportMenuPDF() {
         if (typeof showToast === 'function') showToast('Erro ao gerar PDF.', 'error');
     }
 }
-
 async function renderDashboard() {
     const balanceValue = document.getElementById('balanceValue');
     const balanceTrend = document.getElementById('balanceTrend');
