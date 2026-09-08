@@ -1,4 +1,4 @@
-// js/menu-admin.js - Gestão e CRUD do Cardápio Digital (Modo Gestor)
+// js/menu-admin.js - Gestão, CRUD e Reordenação por Drag & Drop do Cardápio Digital
 
 // Auxiliar de sanitização contra XSS
 function escapeHtml(text) {
@@ -90,13 +90,12 @@ const MenuAdminManager = {
                 const safeCat = escapeHtml(p.category || 'Geral');
 
                 return `
-                    <div class="card product-admin-card" style="margin-bottom:10px; padding:12px; display:flex; justify-content:space-between; align-items:center; background:#1E293B; border-left:4px solid ${p.is_active ? '#10B981' : '#64748B'};">
+                    <div class="card product-admin-card" draggable="true" data-id="${escapeHtml(p.id)}" style="margin-bottom:10px; padding:12px; display:flex; justify-content:space-between; align-items:center; background:#1E293B; border-left:4px solid ${p.is_active ? '#10B981' : '#64748B'}; cursor:grab; user-select:none; transition: transform 0.15s, box-shadow 0.15s;">
                         <div style="display:flex; align-items:center; gap:10px; flex:1;">
-                            <div class="reorder-btns" style="display:flex; flex-direction:column; gap:2px;">
-                                <button class="btn-arrow" onclick="MenuAdminManager.moveProductOrder('${escapeHtml(p.id)}', ${p.display_order ?? index}, -1)" title="Subir Posição" style="background:none; border:none; color:#94A3B8; cursor:pointer; font-size:10px;">▲</button>
-                                <button class="btn-arrow" onclick="MenuAdminManager.moveProductOrder('${escapeHtml(p.id)}', ${p.display_order ?? index}, 1)" title="Descer Posição" style="background:none; border:none; color:#94A3B8; cursor:pointer; font-size:10px;">▼</button>
+                            <div class="drag-handle" style="cursor:grab; padding:6px 8px; color:#64748B; font-size:20px; user-select:none; touch-action:none;" title="Segure e arraste para reordenar">
+                                ⣿
                             </div>
-                            ${p.image_url ? `<img src="${escapeHtml(p.image_url)}" style="width:48px; height:48px; border-radius:8px; object-fit:cover;">` : '<span style="font-size:24px;">🍽️</span>'}
+                            ${p.image_url ? `<img src="${escapeHtml(p.image_url)}" style="width:48px; height:48px; border-radius:8px; object-fit:cover; pointer-events:none;">` : '<span style="font-size:24px;">🍽️</span>'}
                             <div>
                                 <strong style="color:#F1F5F9; font-size:14px; display:block;">
                                     ${safeName} ${p.is_cross_sell ? '<small style="color:#60A5FA;">[Peça Junto]</small>' : ''}
@@ -108,7 +107,7 @@ const MenuAdminManager = {
                             </div>
                         </div>
 
-                        <div style="display:flex; gap:6px; align-items:center;">
+                        <div style="display:flex; gap:6px; align-items:center;" onclick="event.stopPropagation();">
                             <button class="btn btn-sm ${p.is_active ? 'btn-success' : 'btn-secondary'}" onclick="MenuAdminManager.toggleProductActive('${escapeHtml(p.id)}', ${!p.is_active})" title="${p.is_active ? 'Pausar item' : 'Ativar item'}">
                                 ${p.is_active ? '🟢' : '⚪'}
                             </button>
@@ -119,8 +118,132 @@ const MenuAdminManager = {
                 `;
             }).join('');
 
+            // Ativa o suporte a Arrastar e Soltar (Desktop e Touch)
+            this.initDragAndDrop();
+
         } catch (e) {
             console.error('Erro ao renderizar lista administrativa:', e);
+        }
+    },
+
+    initDragAndDrop() {
+        const container = document.getElementById('admin-products-list');
+        if (!container) return;
+
+        const cards = container.querySelectorAll('.product-admin-card');
+        let draggedCard = null;
+
+        // Suporte Mouse / Desktop
+        cards.forEach(card => {
+            card.addEventListener('dragstart', (e) => {
+                draggedCard = card;
+                card.style.opacity = '0.4';
+                card.style.cursor = 'grabbing';
+                e.dataTransfer.effectAllowed = 'move';
+            });
+
+            card.addEventListener('dragend', async () => {
+                if (draggedCard) {
+                    draggedCard.style.opacity = '1';
+                    draggedCard.style.cursor = 'grab';
+                    draggedCard = null;
+                    await this.saveNewOrderFromDOM();
+                }
+            });
+
+            card.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                if (!draggedCard || draggedCard === card) return;
+
+                const rect = card.getBoundingClientRect();
+                const midPoint = rect.top + rect.height / 2;
+
+                if (e.clientY < midPoint) {
+                    container.insertBefore(draggedCard, card);
+                } else {
+                    container.insertBefore(draggedCard, card.nextSibling);
+                }
+            });
+        });
+
+        // Suporte Touch / Celular
+        let touchActiveCard = null;
+        let touchOffsetY = 0;
+
+        cards.forEach(card => {
+            const handle = card.querySelector('.drag-handle');
+            if (!handle) return;
+
+            handle.addEventListener('touchstart', (e) => {
+                touchActiveCard = card;
+                const touch = e.touches[0];
+                const rect = card.getBoundingClientRect();
+                touchOffsetY = touch.clientY - rect.top;
+
+                card.style.opacity = '0.6';
+                card.style.border = '2px dashed #FF6B35';
+            }, { passive: true });
+
+            handle.addEventListener('touchmove', (e) => {
+                if (!touchActiveCard) return;
+                const touch = e.touches[0];
+                const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
+                if (!targetEl) return;
+
+                const targetCard = targetEl.closest('.product-admin-card');
+                if (targetCard && targetCard !== touchActiveCard && targetCard.parentNode === container) {
+                    const rect = targetCard.getBoundingClientRect();
+                    const midPoint = rect.top + rect.height / 2;
+
+                    if (touch.clientY < midPoint) {
+                        container.insertBefore(touchActiveCard, targetCard);
+                    } else {
+                        container.insertBefore(touchActiveCard, targetCard.nextSibling);
+                    }
+                }
+            }, { passive: true });
+
+            handle.addEventListener('touchend', async () => {
+                if (touchActiveCard) {
+                    touchActiveCard.style.opacity = '1';
+                    touchActiveCard.style.border = '';
+                    touchActiveCard = null;
+                    await this.saveNewOrderFromDOM();
+                }
+            });
+        });
+    },
+
+    async saveNewOrderFromDOM() {
+        const container = document.getElementById('admin-products-list');
+        if (!container) return;
+
+        const cards = Array.from(container.querySelectorAll('.product-admin-card'));
+        if (cards.length === 0) return;
+
+        try {
+            if (typeof dbClient === 'undefined') return;
+
+            const updatePromises = cards.map((card, index) => {
+                const id = card.getAttribute('data-id');
+                if (!id) return Promise.resolve();
+                return dbClient
+                    .from('products')
+                    .update({ display_order: index })
+                    .eq('id', id);
+            });
+
+            await Promise.all(updatePromises);
+
+            if (typeof showToast === 'function') {
+                showToast(' Nova ordem do cardápio salva!', 'success');
+            }
+        } catch (e) {
+            console.error('Erro ao salvar nova ordem:', e);
+            if (typeof showToast === 'function') {
+                showToast('Erro ao salvar ordem das categorias', 'error');
+            }
         }
     },
 
@@ -139,7 +262,6 @@ const MenuAdminManager = {
         const uniqueCategories = [...new Set([...defaultCategories, ...customCategories])];
         const categoryOptionsHtml = uniqueCategories.map(cat => `<option value="${escapeHtml(cat)}">`).join('');
 
-        // Monta a lista inicial de adicionais caso o produto já tenha alguns
         let compsList = [];
         if (Array.isArray(p.complements)) {
             compsList = p.complements;
@@ -182,7 +304,6 @@ const MenuAdminManager = {
                 <textarea id="prod_desc" rows="2" placeholder="Ex: Carne moída especial e tempero da casa">${escapeHtml(p.description || '')}</textarea>
             </div>
 
-            <!-- BLOCO ORGANIZADO DE ADICIONAIS COM CAMPOS SEPARADOS -->
             <div class="form-group" style="background:#0F172A; padding:12px; border-radius:8px; border:1px solid #334155;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                     <div>
@@ -238,7 +359,6 @@ const MenuAdminManager = {
             return;
         }
 
-        // Captura todos os campos de adicionais individuais
         const complementRows = document.querySelectorAll('#complements_list .complement-row');
         const complements = [];
         complementRows.forEach(row => {
@@ -280,41 +400,6 @@ const MenuAdminManager = {
                 saveBtn.disabled = false;
                 saveBtn.textContent = '💾 Salvar Prato';
             }
-        }
-    },
-
-    async moveProductOrder(id, currentOrder, direction) {
-        try {
-            if (typeof dbClient === 'undefined') return;
-
-            const { data: products, error } = await dbClient
-                .from('products')
-                .select('id, display_order')
-                .order('display_order', { ascending: true });
-
-            if (error || !products || products.length === 0) return;
-
-            const currentIndex = products.findIndex(p => p.id === id);
-            if (currentIndex === -1) return;
-
-            const swapIndex = currentIndex + direction;
-            if (swapIndex < 0 || swapIndex >= products.length) return;
-
-            const currentProduct = products[currentIndex];
-            const swapProduct = products[swapIndex];
-
-            const orderA = swapProduct.display_order ?? swapIndex;
-            const orderB = currentProduct.display_order ?? currentIndex;
-
-            await Promise.all([
-                dbClient.from('products').update({ display_order: orderA === orderB ? swapIndex : orderA }).eq('id', currentProduct.id),
-                dbClient.from('products').update({ display_order: orderA === orderB ? currentIndex : orderB }).eq('id', swapProduct.id)
-            ]);
-
-            this.renderAdminProductsList();
-        } catch (e) {
-            console.error('Erro ao reordenar:', e);
-            if (typeof showToast === 'function') showToast('Erro ao reordenar pratos.', 'error');
         }
     },
 
