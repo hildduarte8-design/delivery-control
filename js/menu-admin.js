@@ -112,12 +112,12 @@ const MenuAdminManager = {
                 const activeCount = catProducts.filter(p => p.is_active).length;
 
                 html += `
-                    <div class="category-block" data-category="${safeCat}" draggable="true" style="margin-bottom:16px; background:#0F172A; border:1px solid #334155; border-radius:12px; padding:12px; transition: all 0.2s;">
+                    <div class="category-block" data-category="${safeCat}" style="margin-bottom:16px; background:#0F172A; border:1px solid #334155; border-radius:12px; padding:12px; transition: all 0.2s;">
                         
-                        <!-- Cabeçalho da Categoria com Alça Master e Botão de Recolher/Expandir -->
+                        <!-- Cabeçalho da Categoria com Alça Master -->
                         <div class="category-header" style="display:flex; justify-content:space-between; align-items:center;">
                             <div style="display:flex; align-items:center; gap:10px;">
-                                <div class="category-drag-handle" style="cursor:grab; padding:6px 10px; background:#1E293B; color:#FF6B35; border-radius:6px; font-size:18px; user-select:none; touch-action:none; border:1px solid #334155;" title="Segure e arraste para reordenar esta CATEGORIA inteira">
+                                <div class="category-drag-handle" style="cursor:grab; padding:6px 12px; background:#1E293B; color:#FF6B35; border-radius:6px; font-size:18px; user-select:none; touch-action:none; border:1px solid #334155;" title="Clique e arraste para mover esta CATEGORIA inteira">
                                     ⣿ <span style="font-size:11px; font-weight:bold; color:#F1F5F9;">Categoria</span>
                                 </div>
                                 <div>
@@ -140,9 +140,9 @@ const MenuAdminManager = {
                                 const safeName = escapeHtml(p.name);
 
                                 return `
-                                    <div class="card product-admin-card" draggable="true" data-id="${escapeHtml(p.id)}" style="padding:10px 12px; display:flex; justify-content:space-between; align-items:center; background:#1E293B; border-left:4px solid ${p.is_active ? '#10B981' : '#64748B'}; cursor:grab; user-select:none; transition: transform 0.15s;">
+                                    <div class="card product-admin-card" data-id="${escapeHtml(p.id)}" style="padding:10px 12px; display:flex; justify-content:space-between; align-items:center; background:#1E293B; border-left:4px solid ${p.is_active ? '#10B981' : '#64748B'}; transition: transform 0.15s;">
                                         <div style="display:flex; align-items:center; gap:10px; flex:1;">
-                                            <div class="product-drag-handle" style="cursor:grab; padding:4px 6px; color:#64748B; font-size:18px; user-select:none; touch-action:none;" title="Arrastar prato">
+                                            <div class="product-drag-handle" style="cursor:grab; padding:4px 8px; color:#64748B; font-size:18px; user-select:none; touch-action:none;" title="Arrastar prato">
                                                 ⣿
                                             </div>
                                             ${p.image_url ? `<img src="${escapeHtml(p.image_url)}" style="width:42px; height:42px; border-radius:8px; object-fit:cover; pointer-events:none;">` : '<span style="font-size:20px;">🍽️</span>'}
@@ -174,7 +174,7 @@ const MenuAdminManager = {
 
             container.innerHTML = html;
 
-            // Inicializa Drag & Drop para Categorias e para Pratos
+            // Ativa Drag & Drop independente para Categorias e Pratos
             this.initCategoryAndProductDrag();
 
         } catch (e) {
@@ -186,26 +186,40 @@ const MenuAdminManager = {
         const mainContainer = document.getElementById('admin-products-list');
         if (!mainContainer) return;
 
-        // 1. REORDENAÇÃO DE CATEGORIAS (Desktop & Touch)
-        const categoryBlocks = mainContainer.querySelectorAll('.category-block');
         let draggedCategory = null;
+        let touchActiveCategory = null;
+
+        // 1. REORDENAÇÃO DE CATEGORIAS (Desktop & Mobile)
+        const categoryBlocks = mainContainer.querySelectorAll('.category-block');
 
         categoryBlocks.forEach(catBlock => {
+            const catHandle = catBlock.querySelector('.category-drag-handle');
+            if (!catHandle) return;
+
+            // Habilita drag nativo apenas ao pressionar a alça da categoria
+            catHandle.addEventListener('mousedown', () => {
+                catBlock.setAttribute('draggable', 'true');
+            });
+
+            catHandle.addEventListener('mouseup', () => {
+                if (!draggedCategory) catBlock.removeAttribute('draggable');
+            });
+
             catBlock.addEventListener('dragstart', (e) => {
-                if (!e.target.closest('.category-drag-handle')) {
-                    if (!e.target.closest('.product-admin-card')) e.preventDefault();
-                    return;
-                }
+                if (e.target !== catBlock) return;
                 draggedCategory = catBlock;
                 catBlock.style.opacity = '0.5';
                 catBlock.style.border = '2px dashed #FF6B35';
                 e.dataTransfer.effectAllowed = 'move';
+                e.stopPropagation();
             });
 
-            catBlock.addEventListener('dragend', async () => {
+            catBlock.addEventListener('dragend', async (e) => {
+                e.stopPropagation();
+                catBlock.removeAttribute('draggable');
                 if (draggedCategory) {
-                    draggedCategory.style.opacity = '1';
-                    draggedCategory.style.border = '1px solid #334155';
+                    catBlock.style.opacity = '1';
+                    catBlock.style.border = '1px solid #334155';
                     draggedCategory = null;
                     await this.saveGlobalSequenceFromDOM();
                 }
@@ -214,6 +228,7 @@ const MenuAdminManager = {
             catBlock.addEventListener('dragover', (e) => {
                 if (!draggedCategory || draggedCategory === catBlock) return;
                 e.preventDefault();
+                e.stopPropagation();
                 e.dataTransfer.dropEffect = 'move';
 
                 const rect = catBlock.getBoundingClientRect();
@@ -225,22 +240,17 @@ const MenuAdminManager = {
                     mainContainer.insertBefore(draggedCategory, catBlock.nextSibling);
                 }
             });
-        });
 
-        // Suporte Touch para Categorias
-        let touchActiveCategory = null;
-        categoryBlocks.forEach(catBlock => {
-            const handle = catBlock.querySelector('.category-drag-handle');
-            if (!handle) return;
-
-            handle.addEventListener('touchstart', () => {
+            // Touch para Celulares/Tablets (Categorias)
+            catHandle.addEventListener('touchstart', (e) => {
                 touchActiveCategory = catBlock;
                 catBlock.style.opacity = '0.6';
                 catBlock.style.border = '2px dashed #FF6B35';
             }, { passive: true });
 
-            handle.addEventListener('touchmove', (e) => {
+            catHandle.addEventListener('touchmove', (e) => {
                 if (!touchActiveCategory) return;
+                if (e.cancelable) e.preventDefault(); // Impede rolagem da tela durante arrasto
                 const touch = e.touches[0];
                 const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
                 if (!targetEl) return;
@@ -256,9 +266,9 @@ const MenuAdminManager = {
                         mainContainer.insertBefore(touchActiveCategory, targetCat.nextSibling);
                     }
                 }
-            }, { passive: true });
+            }, { passive: false });
 
-            handle.addEventListener('touchend', async () => {
+            catHandle.addEventListener('touchend', async () => {
                 if (touchActiveCategory) {
                     touchActiveCategory.style.opacity = '1';
                     touchActiveCategory.style.border = '1px solid #334155';
@@ -268,11 +278,23 @@ const MenuAdminManager = {
             });
         });
 
-        // 2. REORDENAÇÃO DE PRATOS DENTRO DAS CATEGORIAS (Desktop & Touch)
-        const productCards = mainContainer.querySelectorAll('.product-admin-card');
+        // 2. REORDENAÇÃO DE PRATOS DENTRO DA CATEGORIA (Desktop & Mobile)
         let draggedProduct = null;
+        let touchActiveProduct = null;
+        const productCards = mainContainer.querySelectorAll('.product-admin-card');
 
         productCards.forEach(prodCard => {
+            const prodHandle = prodCard.querySelector('.product-drag-handle');
+            if (!prodHandle) return;
+
+            prodHandle.addEventListener('mousedown', () => {
+                prodCard.setAttribute('draggable', 'true');
+            });
+
+            prodHandle.addEventListener('mouseup', () => {
+                if (!draggedProduct) prodCard.removeAttribute('draggable');
+            });
+
             prodCard.addEventListener('dragstart', (e) => {
                 draggedProduct = prodCard;
                 prodCard.style.opacity = '0.4';
@@ -282,8 +304,9 @@ const MenuAdminManager = {
 
             prodCard.addEventListener('dragend', async (e) => {
                 e.stopPropagation();
+                prodCard.removeAttribute('draggable');
                 if (draggedProduct) {
-                    draggedProduct.style.opacity = '1';
+                    prodCard.style.opacity = '1';
                     draggedProduct = null;
                     await this.saveGlobalSequenceFromDOM();
                 }
@@ -304,23 +327,18 @@ const MenuAdminManager = {
                     parentContainer.insertBefore(draggedProduct, prodCard.nextSibling);
                 }
             });
-        });
 
-        // Suporte Touch para Pratos
-        let touchActiveProduct = null;
-        productCards.forEach(prodCard => {
-            const handle = prodCard.querySelector('.product-drag-handle');
-            if (!handle) return;
-
-            handle.addEventListener('touchstart', (e) => {
+            // Touch para Celulares/Tablets (Pratos)
+            prodHandle.addEventListener('touchstart', (e) => {
                 e.stopPropagation();
                 touchActiveProduct = prodCard;
                 prodCard.style.opacity = '0.6';
             }, { passive: true });
 
-            handle.addEventListener('touchmove', (e) => {
+            prodHandle.addEventListener('touchmove', (e) => {
                 if (!touchActiveProduct) return;
                 e.stopPropagation();
+                if (e.cancelable) e.preventDefault();
                 const touch = e.touches[0];
                 const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
                 if (!targetEl) return;
@@ -338,9 +356,9 @@ const MenuAdminManager = {
                         parentCat.insertBefore(touchActiveProduct, targetProd.nextSibling);
                     }
                 }
-            }, { passive: true });
+            }, { passive: false });
 
-            handle.addEventListener('touchend', async (e) => {
+            prodHandle.addEventListener('touchend', async (e) => {
                 e.stopPropagation();
                 if (touchActiveProduct) {
                     touchActiveProduct.style.opacity = '1';
