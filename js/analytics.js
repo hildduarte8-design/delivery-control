@@ -42,6 +42,9 @@ const AnalyticsManager = {
             // Processa as estatísticas
             const stats = this.processStats(filteredOrders);
 
+            // Formatação segura de moeda
+            const fmt = (val) => Number(val || 0).toFixed(2).replace('.', ',');
+
             // Renderiza o painel completo
             container.innerHTML = `
                 <!-- Filtros de Período e Exportação -->
@@ -61,7 +64,7 @@ const AnalyticsManager = {
                 <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:10px; margin-bottom:16px;">
                     <div class="card" style="padding:12px; text-align:center; border-top:3px solid #10B981; margin:0;">
                         <span style="font-size:11px; color:#94A3B8;">Faturamento</span>
-                        <strong style="display:block; font-size:17px; color:#10B981; margin-top:2px;">R$ ${stats.totalRevenue.toFixed(2)}</strong>
+                        <strong style="display:block; font-size:17px; color:#10B981; margin-top:2px;">R$ ${fmt(stats.totalRevenue)}</strong>
                     </div>
 
                     <div class="card" style="padding:12px; text-align:center; border-top:3px solid #3B82F6; margin:0;">
@@ -71,7 +74,7 @@ const AnalyticsManager = {
 
                     <div class="card" style="padding:12px; text-align:center; border-top:3px solid #F59E0B; margin:0;">
                         <span style="font-size:11px; color:#94A3B8;">Ticket Médio</span>
-                        <strong style="display:block; font-size:17px; color:#F59E0B; margin-top:2px;">R$ ${stats.ticketMedio.toFixed(2)}</strong>
+                        <strong style="display:block; font-size:17px; color:#F59E0B; margin-top:2px;">R$ ${fmt(stats.ticketMedio)}</strong>
                     </div>
 
                     <div class="card" style="padding:12px; text-align:center; border-top:3px solid var(--primary-color, #FF6B35); margin:0;">
@@ -86,15 +89,15 @@ const AnalyticsManager = {
                     <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; text-align:center;">
                         <div style="background:#0F172A; padding:10px 6px; border-radius:8px; border:1px solid #1E293B;">
                             <span style="font-size:10px; color:#94A3B8; display:block;">⚡ Pix</span>
-                            <strong style="font-size:14px; color:#10B981;">R$ ${stats.paymentBreakdown.Pix.toFixed(2)}</strong>
+                            <strong style="font-size:14px; color:#10B981;">R$ ${fmt(stats.paymentBreakdown.Pix)}</strong>
                         </div>
                         <div style="background:#0F172A; padding:10px 6px; border-radius:8px; border:1px solid #1E293B;">
                             <span style="font-size:10px; color:#94A3B8; display:block;">💳 Cartão</span>
-                            <strong style="font-size:14px; color:#3B82F6;">R$ ${stats.paymentBreakdown.Cartao.toFixed(2)}</strong>
+                            <strong style="font-size:14px; color:#3B82F6;">R$ ${fmt(stats.paymentBreakdown.Cartao)}</strong>
                         </div>
                         <div style="background:#0F172A; padding:10px 6px; border-radius:8px; border:1px solid #1E293B;">
                             <span style="font-size:10px; color:#94A3B8; display:block;">💵 Dinheiro</span>
-                            <strong style="font-size:14px; color:#F59E0B;">R$ ${stats.paymentBreakdown.Dinheiro.toFixed(2)}</strong>
+                            <strong style="font-size:14px; color:#F59E0B;">R$ ${fmt(stats.paymentBreakdown.Dinheiro)}</strong>
                         </div>
                     </div>
                 </div>
@@ -121,7 +124,7 @@ const AnalyticsManager = {
                                     </div>
                                     <div style="text-align:right;">
                                         <strong style="color:var(--primary-color, #FF6B35);">${p.qty} un</strong>
-                                        <span style="font-size:11px; color:#94A3B8; margin-left:6px;">(R$ ${p.revenue.toFixed(2)})</span>
+                                        <span style="font-size:11px; color:#94A3B8; margin-left:6px;">(R$ ${fmt(p.revenue)})</span>
                                     </div>
                                 </div>
                                 <div style="background:#0F172A; height:6px; border-radius:3px; overflow:hidden;">
@@ -202,9 +205,16 @@ const AnalyticsManager = {
 
             if (Array.isArray(items)) {
                 items.forEach(i => {
-                    const qty = Number(i.qty || 1);
-                    const name = i.name || 'Item Avulso';
-                    const unitPrice = Number(i.unit_price || 0);
+                    const qty = Number(i.qty || i.quantity || 1);
+                    const name = i.name || i.title || 'Item Avulso';
+                    
+                    // Busca preço unitário considerando várias chaves possíveis
+                    const unitPrice = Number(i.unit_price || i.price || i.price_unit || i.unitPrice || 0);
+                    
+                    // Se o total do item estiver pré-calculado no objeto, usa ele; senão multiplica preço unitário pela quantidade
+                    const itemTotal = (i.total !== undefined && i.total !== null && Number(i.total) > 0)
+                        ? Number(i.total)
+                        : (qty * unitPrice);
 
                     totalItemsSold += qty;
 
@@ -213,7 +223,7 @@ const AnalyticsManager = {
                     }
 
                     productsMap[name].qty += qty;
-                    productsMap[name].revenue += (qty * unitPrice);
+                    productsMap[name].revenue += itemTotal;
                 });
             }
         });
@@ -267,7 +277,6 @@ const AnalyticsManager = {
         link.click();
         document.body.removeChild(link);
 
-        // Liberação de memória após o clique de download
         setTimeout(() => URL.revokeObjectURL(url), 100);
 
         if (typeof showToast === 'function') showToast('📊 CSV baixado com sucesso!');
