@@ -1,4 +1,4 @@
-// js/orders.js - Gestão Completa de Pedidos ao Vivo com Supabase Realtime, Filtro de Cancelados, Frete, WhatsApp e Fidelidade
+// js/orders.js - Gestão Completa de Pedidos com Total Diário no Cabeçalho
 
 if (typeof window.escapeHtml !== 'function') {
     window.escapeHtml = function(text) {
@@ -213,8 +213,11 @@ const OrdersManager = {
         const y = parts[0] || '', m = parts[1] || '', d = parts[2] || '';
         const displayLabel = isToday ? `Hoje (${d}/${m})` : `${d}/${m}/${y}`;
         
-        // Conta apenas pedidos válidos para o contador do dia
-        const countForDay = this.allOrders.filter(o => o.status !== 'cancelled' && this.getLocalDateStr(o.created_at) === this.selectedDate).length;
+        // Calcula quantidade e valor total dos pedidos válidos do dia
+        const dayOrders = this.allOrders.filter(o => o.status !== 'cancelled' && this.getLocalDateStr(o.created_at) === this.selectedDate);
+        const countForDay = dayOrders.length;
+        const totalForDay = dayOrders.reduce((acc, o) => acc + (Number(o.total || 0)), 0);
+        const totalFormatted = totalForDay.toFixed(2).replace('.', ',');
 
         bar.innerHTML = `
             <button onclick="OrdersManager.selectDatePage('${prevDateStr}')" style="background:#0F172A; color:#F1F5F9; border:1px solid #334155; padding:8px 14px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px; min-height:44px; touch-action:manipulation;">
@@ -224,7 +227,9 @@ const OrdersManager = {
             <div style="position:relative; text-align:center;">
                 <div style="font-size:13px; font-weight:800; color:#FF6B35; display:flex; align-items:center; gap:6px; cursor:pointer;">
                     📅 ${displayLabel}
-                    <span style="font-size:10px; background:#334155; color:#F1F5F9; padding:2px 6px; border-radius:10px;">${countForDay} ${countForDay === 1 ? 'pedido' : 'pedidos'}</span>
+                    <span style="font-size:11px; background:#334155; color:#F1F5F9; padding:3px 8px; border-radius:10px; font-weight:bold;">
+                        ${countForDay} ${countForDay === 1 ? 'pedido' : 'pedidos'} • R$ ${totalFormatted}
+                    </span>
                 </div>
                 <input type="date" value="${this.selectedDate}" onchange="OrdersManager.selectDatePage(this.value)" 
                     style="position:absolute; inset:0; opacity:0; width:100%; height:100%; cursor:pointer;">
@@ -278,7 +283,6 @@ const OrdersManager = {
 
         const clientOrdersCount = this.getClientOrdersCount(o.phone || o.customer_phone, o.client_name || o.customer_name);
 
-        // Verifica status de fidelidade do cliente
         const customer = typeof CustomersManager !== 'undefined' && Array.isArray(CustomersManager.allCustomers)
             ? CustomersManager.allCustomers.find(c => {
                 const cPhone = c.phone ? String(c.phone).replace(/\D/g, '') : '';
@@ -562,20 +566,18 @@ const OrdersManager = {
         window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
     },
 
-    // Calcula total de pedidos VÁLIDOS do cliente (Ignora cancelados)
     getClientOrdersCount(phone, clientName) {
         if (!this.allOrders || this.allOrders.length === 0) return 1;
         const cleanPhone = phone ? String(phone).replace(/\D/g, '') : '';
 
         return this.allOrders.filter(ord => {
-            if (ord.status === 'cancelled') return false; // Ignora cancelados
+            if (ord.status === 'cancelled') return false;
             const ordPhone = (ord.phone || ord.customer_phone) ? String(ord.phone || ord.customer_phone).replace(/\D/g, '') : '';
             const ordName = ord.client_name || ord.customer_name;
             return (cleanPhone && ordPhone === cleanPhone) || (clientName && ordName === clientName);
         }).length;
     },
 
-    // Processa a contagem do Cartão Fidelidade ao concluir o pedido
     async processLoyaltyStamp(phone, orderTotal) {
         if (!phone) return;
         const cleanPhone = String(phone).replace(/\D/g, '');
