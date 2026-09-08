@@ -1,4 +1,4 @@
-// js/menu-admin.js - Gestão, CRUD e Reordenação por Drag & Drop do Cardápio Digital
+// js/menu-admin.js - Gestão, CRUD, Reordenação por Drag & Drop e Seleção Dinâmica de Categorias
 
 // Auxiliar de sanitização contra XSS
 function escapeHtml(text) {
@@ -118,7 +118,6 @@ const MenuAdminManager = {
                 `;
             }).join('');
 
-            // Ativa o suporte a Arrastar e Soltar (Desktop e Touch)
             this.initDragAndDrop();
 
         } catch (e) {
@@ -133,7 +132,6 @@ const MenuAdminManager = {
         const cards = container.querySelectorAll('.product-admin-card');
         let draggedCard = null;
 
-        // Suporte Mouse / Desktop
         cards.forEach(card => {
             card.addEventListener('dragstart', (e) => {
                 draggedCard = card;
@@ -167,20 +165,13 @@ const MenuAdminManager = {
             });
         });
 
-        // Suporte Touch / Celular
         let touchActiveCard = null;
-        let touchOffsetY = 0;
-
         cards.forEach(card => {
             const handle = card.querySelector('.drag-handle');
             if (!handle) return;
 
             handle.addEventListener('touchstart', (e) => {
                 touchActiveCard = card;
-                const touch = e.touches[0];
-                const rect = card.getBoundingClientRect();
-                touchOffsetY = touch.clientY - rect.top;
-
                 card.style.opacity = '0.6';
                 card.style.border = '2px dashed #FF6B35';
             }, { passive: true });
@@ -247,20 +238,41 @@ const MenuAdminManager = {
         }
     },
 
+    handleCategoryChange(val) {
+        const newCatGroup = document.getElementById('new_category_group');
+        if (newCatGroup) {
+            if (val === '__new__') {
+                newCatGroup.style.display = 'block';
+                const input = document.getElementById('prod_custom_category');
+                if (input) input.focus();
+            } else {
+                newCatGroup.style.display = 'none';
+            }
+        }
+    },
+
     async openProductModal(productId = null) {
-        let p = { name: '', description: '', price: '', category: 'Especialidades', discount_pct: 0, is_active: true, is_cross_sell: false, image_url: '', complements: [] };
+        let p = { name: '', description: '', price: '', category: 'Pastéis Especialidades', discount_pct: 0, is_active: true, is_cross_sell: false, image_url: '', complements: [] };
 
         if (productId && typeof dbClient !== 'undefined') {
             const { data } = await dbClient.from('products').select('*').eq('id', productId).single();
             if (data) p = data;
         }
 
-        const defaultCategories = ["Especialidades", "Marmitas", "Batatas Recheadas", "Pastéis", "Bebidas", "Sobremesas"];
+        const defaultCategories = ["Pastéis Especialidades", "Pastéis", "Marmitas", "Batatas Recheadas", "Bebidas", "Sobremesas"];
         const customCategories = window.currentAdminProducts 
             ? window.currentAdminProducts.map(item => item.category).filter(Boolean)
             : [];
+        
+        if (p.category) customCategories.push(p.category);
+
         const uniqueCategories = [...new Set([...defaultCategories, ...customCategories])];
-        const categoryOptionsHtml = uniqueCategories.map(cat => `<option value="${escapeHtml(cat)}">`).join('');
+        const isExistingCategory = uniqueCategories.includes(p.category);
+        const selectedValue = isExistingCategory ? p.category : (p.category ? p.category : uniqueCategories[0]);
+
+        const categoryOptionsHtml = uniqueCategories.map(cat => 
+            `<option value="${escapeHtml(cat)}" ${cat === selectedValue ? 'selected' : ''}>📌 ${escapeHtml(cat)}</option>`
+        ).join('') + `<option value="__new__" style="color:#FF6B35; font-weight:bold;">➕ Nova Categoria...</option>`;
 
         let compsList = [];
         if (Array.isArray(p.complements)) {
@@ -282,13 +294,17 @@ const MenuAdminManager = {
                 <label>Nome do Prato / Item *</label>
                 <input type="text" id="prod_name" value="${escapeHtml(p.name || '')}" placeholder="Ex: Pastel Duplo de Carne">
             </div>
+
             <div class="form-group">
                 <label>Categoria *</label>
-                <input type="text" id="prod_category" value="${escapeHtml(p.category || 'Geral')}" placeholder="Ex: Pastéis, Bebidas..." list="cat_list">
-                <datalist id="cat_list">
+                <select id="select_prod_category" onchange="MenuAdminManager.handleCategoryChange(this.value)" style="width:100%; padding:10px; background:#1E293B; color:#F1F5F9; border:1px solid #334155; border-radius:8px; font-size:14px; cursor:pointer;">
                     ${categoryOptionsHtml}
-                </datalist>
+                </select>
+                <div id="new_category_group" style="display:none; margin-top:8px;">
+                    <input type="text" id="prod_custom_category" placeholder="Digite o nome da nova categoria..." style="width:100%; padding:10px; background:#0F172A; color:#FF6B35; border:1px solid #FF6B35; border-radius:8px; font-size:13px; font-weight:bold;">
+                </div>
             </div>
+
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                 <div class="form-group">
                     <label>Preço (R$) *</label>
@@ -299,6 +315,7 @@ const MenuAdminManager = {
                     <input type="number" id="prod_discount" value="${p.discount_pct || 0}" placeholder="0" min="0" max="100">
                 </div>
             </div>
+
             <div class="form-group">
                 <label>Descrição / Ingredientes</label>
                 <textarea id="prod_desc" rows="2" placeholder="Ex: Carne moída especial e tempero da casa">${escapeHtml(p.description || '')}</textarea>
@@ -325,6 +342,7 @@ const MenuAdminManager = {
                 <label>Ou URL da Imagem</label>
                 <input type="text" id="prod_img" value="${escapeHtml(p.image_url || '')}" placeholder="https://link-da-imagem.com/foto.jpg">
             </div>
+
             <div style="margin-bottom:14px; display:flex; gap:12px; flex-wrap:wrap;">
                 <label style="font-size:12px; color:#CBD5E1; display:flex; align-items:center; gap:6px; cursor:pointer;">
                     <input type="checkbox" id="prod_active" ${p.is_active ? 'checked' : ''}> Item Ativo
@@ -343,7 +361,16 @@ const MenuAdminManager = {
 
     async saveProduct(productId = '') {
         const name = document.getElementById('prod_name')?.value.trim();
-        const category = document.getElementById('prod_category')?.value.trim() || 'Geral';
+        const selectedCat = document.getElementById('select_prod_category')?.value;
+        const customCat = document.getElementById('prod_custom_category')?.value.trim();
+
+        if (selectedCat === '__new__' && !customCat) {
+            if (typeof showToast === 'function') showToast('Por favor, digite o nome da nova categoria!', 'error');
+            else alert('Por favor, digite o nome da nova categoria!');
+            return;
+        }
+
+        const category = (selectedCat === '__new__' ? customCat : selectedCat) || 'Geral';
         const price = parseFloat(document.getElementById('prod_price')?.value) || 0;
         const discount_pct = parseInt(document.getElementById('prod_discount')?.value) || 0;
         const description = document.getElementById('prod_desc')?.value.trim() || '';
