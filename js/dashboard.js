@@ -34,7 +34,6 @@ function getIFoodWeeklyCycle(referenceDate = new Date()) {
     return { cycleStart, cycleEnd };
 }
 
-// Função para gerar e baixar o Cardápio em PDF
 async function exportMenuPDF() {
     try {
         if (typeof showToast === 'function') showToast('⌛ Gerando PDF do cardápio...', 'info');
@@ -56,7 +55,6 @@ async function exportMenuPDF() {
             return;
         }
 
-        // Agrupa pratos por categoria
         const grouped = {};
         products.forEach(p => {
             const cat = p.category || 'Geral';
@@ -64,9 +62,9 @@ async function exportMenuPDF() {
             grouped[cat].push(p);
         });
 
-        // Monta o layout limpo do PDF
+        // Container com preenchimento interno reduzido e largura total
         const pdfContainer = document.createElement('div');
-        pdfContainer.style.cssText = 'padding: 30px; font-family: Arial, sans-serif; color: #1E293B; background: #FFFFFF; width: 700px; margin: 0 auto;';
+        pdfContainer.style.cssText = 'padding: 8px; font-family: Arial, sans-serif; color: #1E293B; background: #FFFFFF; width: 100%; box-sizing: border-box;';
 
         let categoriesHtml = '';
         for (const [catName, catProds] of Object.entries(grouped)) {
@@ -75,14 +73,22 @@ async function exportMenuPDF() {
                 const originalPrice = Number(p.price || 0);
                 const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
                 const safeDesc = p.description ? escapeHtml(p.description) : '';
+                
+                // Exibe a foto se ela existir
+                const imgHtml = p.image_url 
+                    ? `<img src="${escapeHtml(p.image_url)}" style="width: 52px; height: 52px; border-radius: 8px; object-fit: cover; flex-shrink: 0;" crossorigin="anonymous">` 
+                    : '';
 
                 return `
-                    <div style="display:flex; justify-content:space-between; align-items:flex-start; padding: 6px 0; border-bottom: 1px dashed #E2E8F0;">
-                        <div style="flex:1; padding-right:15px;">
-                            <strong style="font-size:13px; color:#0F172A; display:block;">${escapeHtml(p.name)}</strong>
-                            ${safeDesc ? `<span style="font-size:10px; color:#64748B; display:block; margin-top:2px;">${safeDesc}</span>` : ''}
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding: 10px 0; border-bottom: 1px dashed #CBD5E1; page-break-inside: avoid;">
+                        <div style="display:flex; align-items:center; gap:12px; flex:1;">
+                            ${imgHtml}
+                            <div>
+                                <strong style="font-size:16px; color:#0F172A; display:block; line-height:1.2;">${escapeHtml(p.name)}</strong>
+                                ${safeDesc ? `<span style="font-size:13px; color:#475569; display:block; margin-top:3px; line-height:1.3;">${safeDesc}</span>` : ''}
+                            </div>
                         </div>
-                        <div style="font-size:13px; font-weight:bold; color:#0F172A; white-space:nowrap;">
+                        <div style="font-size:17px; font-weight:bold; color:#0F172A; white-space:nowrap; padding-left:6px;">
                             R$ ${finalPrice.toFixed(2).replace('.', ',')}
                         </div>
                     </div>
@@ -90,8 +96,8 @@ async function exportMenuPDF() {
             }).join('');
 
             categoriesHtml += `
-                <div style="margin-bottom:20px; page-break-inside: avoid;">
-                    <h3 style="font-size:14px; color:#FF6B35; text-transform:uppercase; border-bottom:2px solid #FF6B35; padding-bottom:4px; margin-bottom:8px;">
+                <div style="margin-bottom:22px; page-break-inside: avoid;">
+                    <h3 style="font-size:20px; color:#FF6B35; text-transform:uppercase; border-bottom:2px solid #FF6B35; padding-bottom:4px; margin-bottom:10px; margin-top:14px;">
                         📌 ${escapeHtml(catName)}
                     </h3>
                     ${itemsHtml}
@@ -100,14 +106,13 @@ async function exportMenuPDF() {
         }
 
         pdfContainer.innerHTML = `
-            <div style="text-align:center; margin-bottom:20px; border-bottom:2px solid #E2E8F0; padding-bottom:12px;">
-                <h1 style="margin:0; font-size:22px; color:#0F172A;">📋 Cardápio Digital</h1>
-                <p style="margin:4px 0 0 0; font-size:11px; color:#64748B;">Atualizado em ${new Date().toLocaleDateString('pt-BR')}</p>
+            <div style="text-align:center; margin-bottom:18px; border-bottom:2px solid #E2E8F0; padding-bottom:12px;">
+                <h1 style="margin:0; font-size:28px; color:#0F172A; font-weight:800;">📋 Cardápio Digital</h1>
+                <p style="margin:4px 0 0 0; font-size:13px; color:#64748B;">Atualizado em ${new Date().toLocaleDateString('pt-BR')}</p>
             </div>
             ${categoriesHtml}
         `;
 
-        // Carrega dinamicamente a biblioteca html2pdf caso não esteja no projeto
         if (typeof html2pdf === 'undefined') {
             await new Promise((resolve, reject) => {
                 const script = document.createElement('script');
@@ -119,10 +124,10 @@ async function exportMenuPDF() {
         }
 
         const opt = {
-            margin: 10,
+            margin: [4, 4, 4, 4], // Margem de 4mm (apenas 3% a 4% da página)
             filename: 'Cardapio_Digital.pdf',
             image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true },
+            html2canvas: { scale: 2, useCORS: true, allowTaint: true },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
