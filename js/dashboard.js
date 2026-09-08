@@ -1,4 +1,4 @@
-// js/dashboard.js - Painel Principal & Fechamento Financeiro (Com filtro de pedidos cancelados)
+// js/dashboard.js - Painel Principal, Fechamento Financeiro e Exportação de Cardápio em PDF
 
 if (typeof window.escapeHtml !== 'function') {
     window.escapeHtml = function(text) {
@@ -32,6 +32,107 @@ function getIFoodWeeklyCycle(referenceDate = new Date()) {
     cycleEnd.setHours(23, 59, 59, 999);
 
     return { cycleStart, cycleEnd };
+}
+
+// Função para gerar e baixar o Cardápio em PDF
+async function exportMenuPDF() {
+    try {
+        if (typeof showToast === 'function') showToast('⌛ Gerando PDF do cardápio...', 'info');
+
+        let products = [];
+        if (typeof dbClient !== 'undefined' && dbClient) {
+            const { data, error } = await dbClient
+                .from('products')
+                .select('*')
+                .eq('is_active', true)
+                .order('display_order', { ascending: true });
+            if (!error && data) products = data;
+        } else if (window.currentAdminProducts) {
+            products = window.currentAdminProducts.filter(p => p.is_active);
+        }
+
+        if (!products || products.length === 0) {
+            if (typeof showToast === 'function') showToast('Nenhum prato ativo encontrado.', 'error');
+            return;
+        }
+
+        // Agrupa pratos por categoria
+        const grouped = {};
+        products.forEach(p => {
+            const cat = p.category || 'Geral';
+            if (!grouped[cat]) grouped[cat] = [];
+            grouped[cat].push(p);
+        });
+
+        // Monta o layout limpo do PDF
+        const pdfContainer = document.createElement('div');
+        pdfContainer.style.cssText = 'padding: 30px; font-family: Arial, sans-serif; color: #1E293B; background: #FFFFFF; width: 700px; margin: 0 auto;';
+
+        let categoriesHtml = '';
+        for (const [catName, catProds] of Object.entries(grouped)) {
+            const itemsHtml = catProds.map(p => {
+                const discount = Number(p.discount_pct || 0);
+                const originalPrice = Number(p.price || 0);
+                const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
+                const safeDesc = p.description ? escapeHtml(p.description) : '';
+
+                return `
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; padding: 6px 0; border-bottom: 1px dashed #E2E8F0;">
+                        <div style="flex:1; padding-right:15px;">
+                            <strong style="font-size:13px; color:#0F172A; display:block;">${escapeHtml(p.name)}</strong>
+                            ${safeDesc ? `<span style="font-size:10px; color:#64748B; display:block; margin-top:2px;">${safeDesc}</span>` : ''}
+                        </div>
+                        <div style="font-size:13px; font-weight:bold; color:#0F172A; white-space:nowrap;">
+                            R$ ${finalPrice.toFixed(2).replace('.', ',')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            categoriesHtml += `
+                <div style="margin-bottom:20px; page-break-inside: avoid;">
+                    <h3 style="font-size:14px; color:#FF6B35; text-transform:uppercase; border-bottom:2px solid #FF6B35; padding-bottom:4px; margin-bottom:8px;">
+                        📌 ${escapeHtml(catName)}
+                    </h3>
+                    ${itemsHtml}
+                </div>
+            `;
+        }
+
+        pdfContainer.innerHTML = `
+            <div style="text-align:center; margin-bottom:20px; border-bottom:2px solid #E2E8F0; padding-bottom:12px;">
+                <h1 style="margin:0; font-size:22px; color:#0F172A;">📋 Cardápio Digital</h1>
+                <p style="margin:4px 0 0 0; font-size:11px; color:#64748B;">Atualizado em ${new Date().toLocaleDateString('pt-BR')}</p>
+            </div>
+            ${categoriesHtml}
+        `;
+
+        // Carrega dinamicamente a biblioteca html2pdf caso não esteja no projeto
+        if (typeof html2pdf === 'undefined') {
+            await new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+
+        const opt = {
+            margin: 10,
+            filename: 'Cardapio_Digital.pdf',
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        await html2pdf().set(opt).from(pdfContainer).save();
+
+        if (typeof showToast === 'function') showToast('📄 PDF baixado com sucesso!', 'success');
+    } catch (e) {
+        console.error('Erro ao gerar PDF do cardápio:', e);
+        if (typeof showToast === 'function') showToast('Erro ao gerar PDF.', 'error');
+    }
 }
 
 async function renderDashboard() {
@@ -190,6 +291,7 @@ async function renderDashboard() {
 }
 
 window.renderDashboard = renderDashboard;
+window.exportMenuPDF = exportMenuPDF;
 
 document.addEventListener('DOMContentLoaded', () => {
     renderDashboard();
