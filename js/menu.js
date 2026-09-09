@@ -1,4 +1,4 @@
-// js/menu.js - Lógica Completa do Cardápio Digital (Integração de Frete & Fluxo de Aprovacao)
+// js/menu.js - Lógica Completa do Cardápio Digital (Com Modal de Detalhes & Fluxo de Aprovacao)
 
 function escapeHtml(text) {
     const div = document.createElement('div');
@@ -13,6 +13,13 @@ const MenuApp = {
     rawProductsList: [],
     selectedCategory: 'all',
     storeData: {},
+    
+    // Estado temporário do Modal de Detalhes do Prato
+    currentModalState: {
+        productId: null,
+        tempQty: 1,
+        selectedComplements: []
+    },
 
     async init() {
         await this.loadStoreSettings();
@@ -91,7 +98,10 @@ const MenuApp = {
                 }
 
                 this.products[p.id] = { 
+                    id: p.id,
                     name: p.name, 
+                    description: p.description,
+                    imageUrl: p.image_url,
                     price: finalPrice, 
                     originalPrice: originalPrice,
                     discountPct: discount,
@@ -160,13 +170,11 @@ const MenuApp = {
                 const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
                 const qty = this.products[p.id]?.qty || 0;
 
-                let priceHtml = `<span class="price-normal">R$ ${finalPrice.toFixed(2).replace('.', ',')}</span>`;
+                let priceHtml = `<span class="price-normal" style="font-size:15px; font-weight:800; color:#10B981;">R$ ${finalPrice.toFixed(2).replace('.', ',')}</span>`;
                 if (discount > 0) {
                     priceHtml = `
-                        <span style="font-size:11px; color:#94A3B8;">De </span>
-                        <span class="price-old">R$ ${originalPrice.toFixed(2).replace('.', ',')}</span>
-                        <span style="font-size:11px; color:#94A3B8;"> por </span>
-                        <span class="price-discount">R$ ${finalPrice.toFixed(2).replace('.', ',')}</span>
+                        <span style="font-size:11px; color:#94A3B8; text-decoration:line-through;">R$ ${originalPrice.toFixed(2).replace('.', ',')}</span>
+                        <span style="font-size:15px; font-weight:800; color:#10B981; margin-left:4px;">R$ ${finalPrice.toFixed(2).replace('.', ',')}</span>
                     `;
                 }
 
@@ -175,45 +183,29 @@ const MenuApp = {
                 const safeImg = escapeHtml(p.image_url || '');
 
                 const imgHtml = p.image_url ? `
-                    <div class="menu-product-img-box" onclick="MenuApp.openLightbox('${safeImg}', '${safeName}')">
-                        <img src="${safeImg}" class="menu-product-img" alt="${safeName}">
-                        ${discount > 0 ? '<div class="promo-badge">%</div>' : ''}
+                    <div style="position:relative; width:80px; height:80px; flex-shrink:0; border-radius:10px; overflow:hidden; background:#0F172A;">
+                        <img src="${safeImg}" style="width:100%; height:100%; object-fit:cover;" alt="${safeName}">
+                        ${discount > 0 ? '<div style="position:absolute; top:2px; left:2px; background:#EF4444; color:#fff; font-size:10px; font-weight:bold; padding:2px 4px; border-radius:4px;">%</div>' : ''}
                     </div>
                 ` : `
-                    <div class="menu-product-img-box" style="background:#0F172A; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:32px;">
+                    <div style="width:80px; height:80px; flex-shrink:0; border-radius:10px; background:#0F172A; display:flex; align-items:center; justify-content:center; font-size:32px; border:1px solid #334155;">
                         🍽️
                     </div>
                 `;
 
-                const hasComplements = Array.isArray(p.complements) && p.complements.length > 0;
-                let actionBtnHtml = '';
-
-                if (hasComplements) {
-                    actionBtnHtml = `
-                        <button onclick="MenuApp.openComplementsModal('${escapeHtml(p.id)}')" style="background:#3B82F6; color:#fff; border:none; padding:10px 12px; border-radius:8px; font-size:12px; font-weight:bold; cursor:pointer; min-height:44px; touch-action:manipulation;">
-                            + Opções ${qty > 0 ? `(${qty})` : ''}
-                        </button>
-                    `;
-                } else {
-                    actionBtnHtml = `
-                        <div style="display:flex; align-items:center; gap:6px; background:#0F172A; padding:4px; border-radius:8px; border:1px solid #334155;">
-                            <button onclick="MenuApp.updateQty('${escapeHtml(p.id)}', -1)" style="width:44px; height:44px; min-width:44px; min-height:44px; background:#1E293B; color:#fff; border:none; border-radius:6px; font-weight:bold; font-size:18px; cursor:pointer; touch-action:manipulation;">-</button>
-                            <span id="qty-${escapeHtml(p.id)}" style="font-size:14px; font-weight:bold; color:#F1F5F9; min-width:20px; text-align:center;">${qty}</span>
-                            <button onclick="MenuApp.updateQty('${escapeHtml(p.id)}', 1)" style="width:44px; height:44px; min-width:44px; min-height:44px; background:#FF6B35; color:#fff; border:none; border-radius:6px; font-weight:bold; font-size:18px; cursor:pointer; touch-action:manipulation;">+</button>
-                        </div>
-                    `;
-                }
-
                 html += `
-                    <div class="menu-product-card">
+                    <div class="menu-product-card" onclick="MenuApp.openProductModal('${escapeHtml(p.id)}')" style="display:flex; align-items:center; gap:12px; padding:12px; background:#1E293B; border-radius:12px; margin-bottom:10px; border:1px solid #334155; cursor:pointer; touch-action:manipulation; position:relative;">
                         ${imgHtml}
-                        <div class="menu-product-details">
-                            <div class="menu-product-title">${safeName}</div>
-                            <div class="menu-product-desc">${safeDesc}</div>
-                            <div class="menu-product-price">${priceHtml}</div>
+                        <div style="flex:1; min-width:0; padding-right:4px;">
+                            <div style="font-size:15px; font-weight:800; color:#F1F5F9; line-height:1.3; margin-bottom:4px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${safeName}</div>
+                            <div style="font-size:12px; color:#94A3B8; line-height:1.4; margin-bottom:6px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${safeDesc}</div>
+                            <div>${priceHtml}</div>
                         </div>
-                        <div style="margin-left:8px;">
-                            ${actionBtnHtml}
+                        <div style="display:flex; flex-direction:column; align-items:flex-end; justify-content:center; gap:6px;">
+                            ${qty > 0 ? `<span style="background:#10B981; color:#fff; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:12px;">${qty}x</span>` : ''}
+                            <button style="background:#FF6B35; color:#fff; border:none; padding:8px 12px; border-radius:8px; font-size:12px; font-weight:bold; white-space:nowrap; cursor:pointer; pointer-events:none;">
+                                ${qty > 0 ? 'Editar' : '+ Ver'}
+                            </button>
                         </div>
                     </div>
                 `;
@@ -223,110 +215,165 @@ const MenuApp = {
         container.innerHTML = html;
     },
 
-    openComplementsModal(productId) {
+    // --- NOVO MODAL DE DETALHES DO PRATO (ESTILO IFOOD / ZÉ DELIVERY) ---
+    openProductModal(productId) {
         const p = this.products[productId];
-        if (!p || !Array.isArray(p.complements)) return;
+        if (!p) return;
 
-        let compsHtml = p.complements.map((c) => `
-            <label style="display:flex; justify-content:space-between; align-items:center; padding:12px; background:#0F172A; border-radius:8px; border:1px solid #334155; margin-bottom:8px; cursor:pointer;">
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <input type="checkbox" class="comp-checkbox" data-name="${escapeHtml(c.name)}" data-price="${c.price}" style="width:20px; height:20px;">
-                    <span style="font-size:13px; color:#F1F5F9;">${escapeHtml(c.name)}</span>
+        // Se o produto já estiver no carrinho, usa a quantidade existente. Senão, inicia com 1.
+        const currentQty = p.qty > 0 ? p.qty : 1;
+        
+        this.currentModalState = {
+            productId: productId,
+            tempQty: currentQty,
+            selectedComplements: [...(p.selectedComplements || [])]
+        };
+
+        const safeName = escapeHtml(p.name);
+        const safeDesc = escapeHtml(p.description || 'Sem descrição cadastrada.');
+        const safeImg = escapeHtml(p.imageUrl || '');
+
+        // Cabeçalho / Foto do Modal
+        const headerImgHtml = p.imageUrl 
+            ? `<div style="width:100%; height:180px; overflow:hidden; position:relative; border-radius:12px 12px 0 0;">
+                <img src="${safeImg}" style="width:100%; height:100%; object-fit:cover;" alt="${safeName}">
+               </div>`
+            : `<div style="width:100%; height:100px; background:#0F172A; display:flex; align-items:center; justify-content:center; font-size:48px; border-radius:12px 12px 0 0;">
+                🍽️
+               </div>`;
+
+        // Bloco de Opcionais/Adicionais
+        let complementsHtml = '';
+        if (Array.isArray(p.complements) && p.complements.length > 0) {
+            const compsList = p.complements.map(c => {
+                const isChecked = this.currentModalState.selectedComplements.some(sc => sc.name === c.name);
+                const checkedAttr = isChecked ? 'checked' : '';
+                return `
+                    <label style="display:flex; justify-content:space-between; align-items:center; padding:12px; background:#0F172A; border-radius:8px; border:1px solid #334155; margin-bottom:8px; cursor:pointer;">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <input type="checkbox" class="modal-comp-cb" data-name="${escapeHtml(c.name)}" data-price="${c.price}" ${checkedAttr} onchange="MenuApp.toggleModalComplement('${escapeHtml(productId)}')" style="width:20px; height:20px; accent-color:#FF6B35;">
+                            <span style="font-size:13px; color:#F1F5F9;">${escapeHtml(c.name)}</span>
+                        </div>
+                        <strong style="color:#10B981; font-size:13px;">+ R$ ${Number(c.price).toFixed(2).replace('.', ',')}</strong>
+                    </label>
+                `;
+            }).join('');
+
+            complementsHtml = `
+                <div style="margin-top:16px; border-top:1px dashed #334155; padding-top:14px;">
+                    <strong style="font-size:13px; color:#F59E0B; text-transform:uppercase; display:block; margin-bottom:10px;">📌 Opcionais & Adicionais</strong>
+                    ${compsList}
                 </div>
-                <strong style="color:#10B981; font-size:13px;">+ R$ ${Number(c.price).toFixed(2)}</strong>
-            </label>
-        `).join('');
-
-        const modalBody = `
-            <div style="margin-bottom:12px;">
-                <h3 style="color:#F1F5F9; font-size:16px; margin-bottom:4px;">${escapeHtml(p.name)}</h3>
-                <p style="color:#94A3B8; font-size:12px;">Escolha os adicionais desejados:</p>
-            </div>
-            <div id="modal_complements_list">${compsHtml}</div>
-            <button onclick="MenuApp.saveComplementsSelection('${escapeHtml(productId)}')" style="background:#FF6B35; color:#fff; width:100%; padding:14px; border:none; border-radius:8px; font-weight:bold; margin-top:10px; cursor:pointer; font-size:14px; min-height:44px; touch-action:manipulation;">
-                🛒 Adicionar ao Pedido
-            </button>
-        `;
-
-        let compContainer = document.getElementById('complements-modal-box');
-        if (!compContainer) {
-            compContainer = document.createElement('div');
-            compContainer.id = 'complements-modal-box';
-            compContainer.className = 'modal-overlay';
-            compContainer.style.zIndex = '99999';
-            document.body.appendChild(compContainer);
+            `;
         }
 
-        compContainer.innerHTML = `
-            <div class="modal-body" style="background:#1E293B; border:1px solid #334155; padding:16px; border-radius:12px; max-width:380px; width:100%;">
-                <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                    <strong style="color:#FF6B35;">Opcionais do Prato</strong>
-                    <button onclick="MenuApp.closeComplementsModal()" style="background:none; border:none; color:#94A3B8; font-size:22px; cursor:pointer; padding:4px;">✕</button>
+        let container = document.getElementById('product-detail-modal-box');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'product-detail-modal-box';
+            container.className = 'modal-overlay';
+            container.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:99999; display:none; align-items:center; justify-content:center; padding:16px;';
+            document.body.appendChild(container);
+        }
+
+        container.innerHTML = `
+            <div style="background:#1E293B; border:1px solid #334155; border-radius:16px; max-width:440px; width:100%; max-height:90vh; display:flex; flex-direction:column; overflow:hidden; position:relative; box-shadow:0 10px 25px rgba(0,0,0,0.5);">
+                
+                <button onclick="MenuApp.closeProductModal()" style="position:absolute; top:10px; right:10px; background:rgba(15,23,42,0.8); border:none; color:#fff; width:36px; height:36px; border-radius:50%; font-size:18px; cursor:pointer; z-index:10; display:flex; align-items:center; justify-content:center;">✕</button>
+
+                <!-- CONTEÚDO ROLÁVEL DO PRATO -->
+                <div style="overflow-y:auto; padding:0; flex:1;">
+                    ${headerImgHtml}
+                    <div style="padding:16px;">
+                        <h2 style="color:#F1F5F9; font-size:20px; font-weight:800; line-height:1.3; margin:0 0 8px 0;">${safeName}</h2>
+                        <p style="color:#CBD5E1; font-size:14px; line-height:1.5; margin:0 0 12px 0;">${safeDesc}</p>
+                        
+                        <div style="font-size:18px; font-weight:800; color:#10B981; margin-bottom:4px;">
+                            R$ ${p.price.toFixed(2).replace('.', ',')}
+                        </div>
+
+                        ${complementsHtml}
+                    </div>
                 </div>
-                ${modalBody}
+
+                <!-- RODAPÉ FIXO DO MODAL COM SELETOR DE QTD E BOTAO -->
+                <div style="background:#0F172A; padding:14px; border-top:1px solid #334155; display:flex; align-items:center; gap:12px;">
+                    
+                    <!-- Seletor - 1 + -->
+                    <div style="display:flex; align-items:center; gap:8px; background:#1E293B; padding:4px 8px; border-radius:8px; border:1px solid #334155;">
+                        <button onclick="MenuApp.updateModalQty(-1)" style="width:36px; height:36px; background:#0F172A; color:#fff; border:none; border-radius:6px; font-weight:bold; font-size:18px; cursor:pointer; touch-action:manipulation;">-</button>
+                        <span id="modal-qty-val" style="font-size:15px; font-weight:bold; color:#F1F5F9; min-width:22px; text-align:center;">${this.currentModalState.tempQty}</span>
+                        <button onclick="MenuApp.updateModalQty(1)" style="width:36px; height:36px; background:#FF6B35; color:#fff; border:none; border-radius:6px; font-weight:bold; font-size:18px; cursor:pointer; touch-action:manipulation;">+</button>
+                    </div>
+
+                    <!-- Botão de Ação -->
+                    <button onclick="MenuApp.confirmModalAdd()" style="flex:1; background:#10B981; color:#fff; border:none; padding:12px; border-radius:8px; font-weight:bold; font-size:14px; cursor:pointer; touch-action:manipulation; display:flex; justify-content:space-between; align-items:center;">
+                        <span>🛒 Confirmar</span>
+                        <span id="modal-btn-total-val">R$ 0,00</span>
+                    </button>
+                </div>
             </div>
         `;
 
-        compContainer.classList.add('active');
-        compContainer.style.display = 'flex';
+        container.style.display = 'flex';
+        this.recalculateModalTotal();
     },
 
-    closeComplementsModal() {
-        const box = document.getElementById('complements-modal-box');
-        if (box) {
-            box.classList.remove('active');
-            box.style.display = 'none';
+    closeProductModal() {
+        const box = document.getElementById('product-detail-modal-box');
+        if (box) box.style.display = 'none';
+    },
+
+    updateModalQty(delta) {
+        if (this.currentModalState.tempQty + delta >= 1) {
+            this.currentModalState.tempQty += delta;
+            const el = document.getElementById('modal-qty-val');
+            if (el) el.textContent = this.currentModalState.tempQty;
+            this.recalculateModalTotal();
         }
     },
 
-    saveComplementsSelection(productId) {
-        const checkboxes = document.querySelectorAll('#modal_complements_list .comp-checkbox:checked');
+    toggleModalComplement(productId) {
+        const checkboxes = document.querySelectorAll('#product-detail-modal-box .modal-comp-cb:checked');
         const selected = [];
 
         checkboxes.forEach(cb => {
-            const name = cb.dataset.name;
-            const price = parseFloat(cb.dataset.price) || 0;
-            selected.push({ name, price });
+            selected.push({
+                name: cb.dataset.name,
+                price: parseFloat(cb.dataset.price) || 0
+            });
         });
 
-        if (this.products[productId]) {
-            this.products[productId].qty += 1;
-            this.products[productId].selectedComplements = selected;
+        this.currentModalState.selectedComplements = selected;
+        this.recalculateModalTotal();
+    },
+
+    recalculateModalTotal() {
+        const p = this.products[this.currentModalState.productId];
+        if (!p) return;
+
+        let unitPrice = p.price;
+        if (Array.isArray(this.currentModalState.selectedComplements)) {
+            unitPrice += this.currentModalState.selectedComplements.reduce((acc, c) => acc + Number(c.price || 0), 0);
         }
 
-        this.closeComplementsModal();
+        const total = unitPrice * this.currentModalState.tempQty;
+        const btnTotalEl = document.getElementById('modal-btn-total-val');
+        if (btnTotalEl) {
+            btnTotalEl.textContent = `R$ ${total.toFixed(2).replace('.', ',')}`;
+        }
+    },
+
+    confirmModalAdd() {
+        const productId = this.currentModalState.productId;
+        if (this.products[productId]) {
+            this.products[productId].qty = this.currentModalState.tempQty;
+            this.products[productId].selectedComplements = [...this.currentModalState.selectedComplements];
+        }
+
+        this.closeProductModal();
         this.calculateTotals();
         this.renderProductsList();
-    },
-
-    openLightbox(imageUrl, title) {
-        if (!imageUrl) return;
-        let modal = document.getElementById('image-lightbox');
-        if (!modal) {
-            modal = document.createElement('div');
-            modal.id = 'image-lightbox';
-            modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:999999; display:none; flex-direction:column; align-items:center; justify-content:center; padding:20px;';
-            modal.innerHTML = `
-                <button onclick="MenuApp.closeLightbox()" style="position:absolute; top:20px; right:20px; background:none; border:none; color:#fff; font-size:30px; cursor:pointer;">✕</button>
-                <img id="lightbox-img" style="max-width:90%; max-height:80vh; border-radius:12px; object-fit:contain;">
-                <div id="lightbox-caption" style="color:#fff; font-size:16px; font-weight:bold; margin-top:12px;"></div>
-            `;
-            document.body.appendChild(modal);
-        }
-        const img = document.getElementById('lightbox-img');
-        const caption = document.getElementById('lightbox-caption');
-        if (img) img.src = imageUrl;
-        if (caption) caption.textContent = title || '';
-        modal.classList.add('active');
-        modal.style.display = 'flex';
-    },
-
-    closeLightbox() {
-        const modal = document.getElementById('image-lightbox');
-        if (modal) {
-            modal.classList.remove('active');
-            modal.style.display = 'none';
-        }
     },
 
     getStoreCoordinates() {
@@ -340,15 +387,6 @@ const MenuApp = {
             phone: phoneVal.toString().replace(/\D/g, ''),
             storeName: nameVal
         };
-    },
-
-    updateQty(id, delta) {
-        if (this.products[id] && this.products[id].qty + delta >= 0) {
-            this.products[id].qty += delta;
-            const el = document.getElementById(`qty-${id}`);
-            if (el) el.textContent = this.products[id].qty;
-            this.calculateTotals();
-        }
     },
 
     getTotalItemsCount() {
@@ -428,7 +466,7 @@ const MenuApp = {
                 <div class="cross-item-card">
                     <div class="cross-item-name">${escapeHtml(p.name)}</div>
                     <div class="cross-item-price">R$ ${price.toFixed(2)}</div>
-                    <button class="btn btn-sm" onclick="MenuApp.updateQty('${escapeHtml(p.id)}', 1); MenuApp.renderCrossSellOffers();" style="font-size:12px; padding:8px; width:100%; min-height:44px; touch-action:manipulation;">
+                    <button class="btn btn-sm" onclick="MenuApp.products['${escapeHtml(p.id)}'].qty = 1; MenuApp.calculateTotals(); MenuApp.renderProductsList(); MenuApp.renderCrossSellOffers();" style="font-size:12px; padding:8px; width:100%; min-height:44px; touch-action:manipulation;">
                         + Adicionar
                     </button>
                 </div>
