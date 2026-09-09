@@ -1,4 +1,14 @@
-// js/menu.js - Atualizado com fecho corrigido, botões 'ver +' e 'Adicionar' compactos
+// js/menu.js - Lógica Completa do Cardápio Digital (Corrigido)
+
+if (typeof window.escapeHtml !== 'function') {
+    window.escapeHtml = function(text) {
+        const div = document.createElement('div');
+        div.appendChild(document.createTextNode(String(text ?? '')));
+        return div.innerHTML;
+    };
+}
+
+const escapeHtml = window.escapeHtml;
 
 const MenuApp = {
     orderType: 'delivery',
@@ -190,24 +200,20 @@ const MenuApp = {
                     <div class="menu-product-card" onclick="MenuApp.openProductModal('${escapeHtml(p.id)}')" style="display:flex; align-items:center; gap:10px; padding:10px; background:#1E293B; border-radius:12px; margin-bottom:10px; border:1px solid #334155; cursor:pointer; touch-action:manipulation;">
                         ${imgHtml}
                         
-                        <!-- ÁREA DE TEXTO EXPANDIDA DA ESQUERDA/CENTRO -->
                         <div style="flex:1; min-width:0; padding-right:2px;">
                             <div style="font-size:15px; font-weight:800; color:#F1F5F9; line-height:1.25; margin-bottom:3px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${safeName}</div>
                             <div style="font-size:12px; color:#94A3B8; line-height:1.35; margin-bottom:5px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${safeDesc}</div>
                             <div>${priceHtml}</div>
                         </div>
 
-                        <!-- BOTOES COMPACTOS NA DIREITA ('+' e 'ver +') -->
                         <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex-shrink:0;" onclick="event.stopPropagation();">
                             ${qty > 0 ? `<span style="background:#10B981; color:#fff; font-size:10px; font-weight:bold; padding:1px 6px; border-radius:10px;">${qty}x no pedido</span>` : ''}
                             
                             <div style="display:flex; align-items:center; gap:5px;">
-                                <!-- Botão Adicionar Rápido (+) -->
                                 <button onclick="MenuApp.quickAdd('${escapeHtml(p.id)}')" title="Adicionar 1 item" style="background:#10B981; color:#fff; border:none; width:34px; height:34px; border-radius:8px; font-weight:bold; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; touch-action:manipulation;">
                                     +
                                 </button>
                                 
-                                <!-- Botão ver + -->
                                 <button onclick="MenuApp.openProductModal('${escapeHtml(p.id)}')" style="background:#FF6B35; color:#fff; border:none; padding:8px 10px; border-radius:8px; font-size:12px; font-weight:bold; white-space:nowrap; cursor:pointer; touch-action:manipulation;">
                                     ver +
                                 </button>
@@ -225,13 +231,11 @@ const MenuApp = {
         const p = this.products[productId];
         if (!p) return;
 
-        // Se tiver opcionais obrigatórios/configurados, abre o modal de seleção
         if (Array.isArray(p.complements) && p.complements.length > 0) {
             this.openProductModal(productId);
             return;
         }
 
-        // Se não tiver opcionais, adiciona direto
         p.qty += 1;
         this.calculateTotals();
         this.renderProductsList();
@@ -291,7 +295,6 @@ const MenuApp = {
             container.id = 'product-detail-modal-box';
             container.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:99999; display:none; align-items:center; justify-content:center; padding:16px;';
             
-            // Fecha ao clicar no fundo escuro
             container.addEventListener('click', (e) => {
                 if (e.target === container) MenuApp.closeProductModal();
             });
@@ -302,10 +305,8 @@ const MenuApp = {
         container.innerHTML = `
             <div style="background:#1E293B; border:1px solid #334155; border-radius:16px; max-width:440px; width:100%; max-height:90vh; display:flex; flex-direction:column; overflow:hidden; position:relative; box-shadow:0 10px 25px rgba(0,0,0,0.5);" onclick="event.stopPropagation();">
                 
-                <!-- BOTÃO FECHAR CORRIGIDO -->
                 <button type="button" onclick="window.MenuApp.closeProductModal()" style="position:absolute; top:10px; right:10px; background:rgba(15,23,42,0.85); border:1px solid #334155; color:#fff; width:36px; height:36px; border-radius:50%; font-size:18px; cursor:pointer; z-index:99; display:flex; align-items:center; justify-content:center;">✕</button>
 
-                <!-- DETALHES ROLÁVEIS DO PRATO -->
                 <div style="overflow-y:auto; padding:0; flex:1;">
                     ${headerImgHtml}
                     <div style="padding:16px;">
@@ -320,7 +321,6 @@ const MenuApp = {
                     </div>
                 </div>
 
-                <!-- RODAPÉ DO MODAL -->
                 <div style="background:#0F172A; padding:14px; border-top:1px solid #334155; display:flex; align-items:center; gap:12px;">
                     <div style="display:flex; align-items:center; gap:8px; background:#1E293B; padding:4px 8px; border-radius:8px; border:1px solid #334155;">
                         <button type="button" onclick="MenuApp.updateModalQty(-1)" style="width:36px; height:36px; background:#0F172A; color:#fff; border:none; border-radius:6px; font-weight:bold; font-size:18px; cursor:pointer;">-</button>
@@ -893,7 +893,6 @@ const MenuApp = {
     }
 };
 
-// VINCULO GLOBAL OBRIGATÓRIO PARA O NAVEGADOR ENCONTRAR OS ONCLICKs
 window.MenuApp = MenuApp;
 
 document.addEventListener('DOMContentLoaded', () => {
