@@ -1,10 +1,4 @@
-// js/menu.js - Lógica Completa do Cardápio Digital (Com Modal de Detalhes & Fluxo de Aprovacao)
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.appendChild(document.createTextNode(String(text ?? '')));
-    return div.innerHTML;
-}
+// js/menu.js - Atualizado com fecho corrigido, botões 'ver +' e 'Adicionar' compactos
 
 const MenuApp = {
     orderType: 'delivery',
@@ -14,7 +8,6 @@ const MenuApp = {
     selectedCategory: 'all',
     storeData: {},
     
-    // Estado temporário do Modal de Detalhes do Prato
     currentModalState: {
         productId: null,
         tempQty: 1,
@@ -170,7 +163,7 @@ const MenuApp = {
                 const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
                 const qty = this.products[p.id]?.qty || 0;
 
-                let priceHtml = `<span class="price-normal" style="font-size:15px; font-weight:800; color:#10B981;">R$ ${finalPrice.toFixed(2).replace('.', ',')}</span>`;
+                let priceHtml = `<span style="font-size:15px; font-weight:800; color:#10B981;">R$ ${finalPrice.toFixed(2).replace('.', ',')}</span>`;
                 if (discount > 0) {
                     priceHtml = `
                         <span style="font-size:11px; color:#94A3B8; text-decoration:line-through;">R$ ${originalPrice.toFixed(2).replace('.', ',')}</span>
@@ -183,29 +176,42 @@ const MenuApp = {
                 const safeImg = escapeHtml(p.image_url || '');
 
                 const imgHtml = p.image_url ? `
-                    <div style="position:relative; width:80px; height:80px; flex-shrink:0; border-radius:10px; overflow:hidden; background:#0F172A;">
+                    <div style="position:relative; width:75px; height:75px; flex-shrink:0; border-radius:10px; overflow:hidden; background:#0F172A;">
                         <img src="${safeImg}" style="width:100%; height:100%; object-fit:cover;" alt="${safeName}">
                         ${discount > 0 ? '<div style="position:absolute; top:2px; left:2px; background:#EF4444; color:#fff; font-size:10px; font-weight:bold; padding:2px 4px; border-radius:4px;">%</div>' : ''}
                     </div>
                 ` : `
-                    <div style="width:80px; height:80px; flex-shrink:0; border-radius:10px; background:#0F172A; display:flex; align-items:center; justify-content:center; font-size:32px; border:1px solid #334155;">
+                    <div style="width:75px; height:75px; flex-shrink:0; border-radius:10px; background:#0F172A; display:flex; align-items:center; justify-content:center; font-size:30px; border:1px solid #334155;">
                         🍽️
                     </div>
                 `;
 
                 html += `
-                    <div class="menu-product-card" onclick="MenuApp.openProductModal('${escapeHtml(p.id)}')" style="display:flex; align-items:center; gap:12px; padding:12px; background:#1E293B; border-radius:12px; margin-bottom:10px; border:1px solid #334155; cursor:pointer; touch-action:manipulation; position:relative;">
+                    <div class="menu-product-card" onclick="MenuApp.openProductModal('${escapeHtml(p.id)}')" style="display:flex; align-items:center; gap:10px; padding:10px; background:#1E293B; border-radius:12px; margin-bottom:10px; border:1px solid #334155; cursor:pointer; touch-action:manipulation;">
                         ${imgHtml}
-                        <div style="flex:1; min-width:0; padding-right:4px;">
-                            <div style="font-size:15px; font-weight:800; color:#F1F5F9; line-height:1.3; margin-bottom:4px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${safeName}</div>
-                            <div style="font-size:12px; color:#94A3B8; line-height:1.4; margin-bottom:6px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${safeDesc}</div>
+                        
+                        <!-- ÁREA DE TEXTO EXPANDIDA DA ESQUERDA/CENTRO -->
+                        <div style="flex:1; min-width:0; padding-right:2px;">
+                            <div style="font-size:15px; font-weight:800; color:#F1F5F9; line-height:1.25; margin-bottom:3px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${safeName}</div>
+                            <div style="font-size:12px; color:#94A3B8; line-height:1.35; margin-bottom:5px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${safeDesc}</div>
                             <div>${priceHtml}</div>
                         </div>
-                        <div style="display:flex; flex-direction:column; align-items:flex-end; justify-content:center; gap:6px;">
-                            ${qty > 0 ? `<span style="background:#10B981; color:#fff; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:12px;">${qty}x</span>` : ''}
-                            <button style="background:#FF6B35; color:#fff; border:none; padding:8px 12px; border-radius:8px; font-size:12px; font-weight:bold; white-space:nowrap; cursor:pointer; pointer-events:none;">
-                                ${qty > 0 ? 'Editar' : '+ Ver'}
-                            </button>
+
+                        <!-- BOTOES COMPACTOS NA DIREITA ('+' e 'ver +') -->
+                        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex-shrink:0;" onclick="event.stopPropagation();">
+                            ${qty > 0 ? `<span style="background:#10B981; color:#fff; font-size:10px; font-weight:bold; padding:1px 6px; border-radius:10px;">${qty}x no pedido</span>` : ''}
+                            
+                            <div style="display:flex; align-items:center; gap:5px;">
+                                <!-- Botão Adicionar Rápido (+) -->
+                                <button onclick="MenuApp.quickAdd('${escapeHtml(p.id)}')" title="Adicionar 1 item" style="background:#10B981; color:#fff; border:none; width:34px; height:34px; border-radius:8px; font-weight:bold; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; touch-action:manipulation;">
+                                    +
+                                </button>
+                                
+                                <!-- Botão ver + -->
+                                <button onclick="MenuApp.openProductModal('${escapeHtml(p.id)}')" style="background:#FF6B35; color:#fff; border:none; padding:8px 10px; border-radius:8px; font-size:12px; font-weight:bold; white-space:nowrap; cursor:pointer; touch-action:manipulation;">
+                                    ver +
+                                </button>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -215,12 +221,26 @@ const MenuApp = {
         container.innerHTML = html;
     },
 
-    // --- NOVO MODAL DE DETALHES DO PRATO (ESTILO IFOOD / ZÉ DELIVERY) ---
+    quickAdd(productId) {
+        const p = this.products[productId];
+        if (!p) return;
+
+        // Se tiver opcionais obrigatórios/configurados, abre o modal de seleção
+        if (Array.isArray(p.complements) && p.complements.length > 0) {
+            this.openProductModal(productId);
+            return;
+        }
+
+        // Se não tiver opcionais, adiciona direto
+        p.qty += 1;
+        this.calculateTotals();
+        this.renderProductsList();
+    },
+
     openProductModal(productId) {
         const p = this.products[productId];
         if (!p) return;
 
-        // Se o produto já estiver no carrinho, usa a quantidade existente. Senão, inicia com 1.
         const currentQty = p.qty > 0 ? p.qty : 1;
         
         this.currentModalState = {
@@ -233,16 +253,14 @@ const MenuApp = {
         const safeDesc = escapeHtml(p.description || 'Sem descrição cadastrada.');
         const safeImg = escapeHtml(p.imageUrl || '');
 
-        // Cabeçalho / Foto do Modal
         const headerImgHtml = p.imageUrl 
-            ? `<div style="width:100%; height:180px; overflow:hidden; position:relative; border-radius:12px 12px 0 0;">
+            ? `<div style="width:100%; height:180px; overflow:hidden; position:relative; border-radius:16px 16px 0 0;">
                 <img src="${safeImg}" style="width:100%; height:100%; object-fit:cover;" alt="${safeName}">
                </div>`
-            : `<div style="width:100%; height:100px; background:#0F172A; display:flex; align-items:center; justify-content:center; font-size:48px; border-radius:12px 12px 0 0;">
+            : `<div style="width:100%; height:90px; background:#0F172A; display:flex; align-items:center; justify-content:center; font-size:42px; border-radius:16px 16px 0 0;">
                 🍽️
                </div>`;
 
-        // Bloco de Opcionais/Adicionais
         let complementsHtml = '';
         if (Array.isArray(p.complements) && p.complements.length > 0) {
             const compsList = p.complements.map(c => {
@@ -271,17 +289,23 @@ const MenuApp = {
         if (!container) {
             container = document.createElement('div');
             container.id = 'product-detail-modal-box';
-            container.className = 'modal-overlay';
             container.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:99999; display:none; align-items:center; justify-content:center; padding:16px;';
+            
+            // Fecha ao clicar no fundo escuro
+            container.addEventListener('click', (e) => {
+                if (e.target === container) MenuApp.closeProductModal();
+            });
+
             document.body.appendChild(container);
         }
 
         container.innerHTML = `
-            <div style="background:#1E293B; border:1px solid #334155; border-radius:16px; max-width:440px; width:100%; max-height:90vh; display:flex; flex-direction:column; overflow:hidden; position:relative; box-shadow:0 10px 25px rgba(0,0,0,0.5);">
+            <div style="background:#1E293B; border:1px solid #334155; border-radius:16px; max-width:440px; width:100%; max-height:90vh; display:flex; flex-direction:column; overflow:hidden; position:relative; box-shadow:0 10px 25px rgba(0,0,0,0.5);" onclick="event.stopPropagation();">
                 
-                <button onclick="MenuApp.closeProductModal()" style="position:absolute; top:10px; right:10px; background:rgba(15,23,42,0.8); border:none; color:#fff; width:36px; height:36px; border-radius:50%; font-size:18px; cursor:pointer; z-index:10; display:flex; align-items:center; justify-content:center;">✕</button>
+                <!-- BOTÃO FECHAR CORRIGIDO -->
+                <button type="button" onclick="window.MenuApp.closeProductModal()" style="position:absolute; top:10px; right:10px; background:rgba(15,23,42,0.85); border:1px solid #334155; color:#fff; width:36px; height:36px; border-radius:50%; font-size:18px; cursor:pointer; z-index:99; display:flex; align-items:center; justify-content:center;">✕</button>
 
-                <!-- CONTEÚDO ROLÁVEL DO PRATO -->
+                <!-- DETALHES ROLÁVEIS DO PRATO -->
                 <div style="overflow-y:auto; padding:0; flex:1;">
                     ${headerImgHtml}
                     <div style="padding:16px;">
@@ -296,18 +320,15 @@ const MenuApp = {
                     </div>
                 </div>
 
-                <!-- RODAPÉ FIXO DO MODAL COM SELETOR DE QTD E BOTAO -->
+                <!-- RODAPÉ DO MODAL -->
                 <div style="background:#0F172A; padding:14px; border-top:1px solid #334155; display:flex; align-items:center; gap:12px;">
-                    
-                    <!-- Seletor - 1 + -->
                     <div style="display:flex; align-items:center; gap:8px; background:#1E293B; padding:4px 8px; border-radius:8px; border:1px solid #334155;">
-                        <button onclick="MenuApp.updateModalQty(-1)" style="width:36px; height:36px; background:#0F172A; color:#fff; border:none; border-radius:6px; font-weight:bold; font-size:18px; cursor:pointer; touch-action:manipulation;">-</button>
+                        <button type="button" onclick="MenuApp.updateModalQty(-1)" style="width:36px; height:36px; background:#0F172A; color:#fff; border:none; border-radius:6px; font-weight:bold; font-size:18px; cursor:pointer;">-</button>
                         <span id="modal-qty-val" style="font-size:15px; font-weight:bold; color:#F1F5F9; min-width:22px; text-align:center;">${this.currentModalState.tempQty}</span>
-                        <button onclick="MenuApp.updateModalQty(1)" style="width:36px; height:36px; background:#FF6B35; color:#fff; border:none; border-radius:6px; font-weight:bold; font-size:18px; cursor:pointer; touch-action:manipulation;">+</button>
+                        <button type="button" onclick="MenuApp.updateModalQty(1)" style="width:36px; height:36px; background:#FF6B35; color:#fff; border:none; border-radius:6px; font-weight:bold; font-size:18px; cursor:pointer;">+</button>
                     </div>
 
-                    <!-- Botão de Ação -->
-                    <button onclick="MenuApp.confirmModalAdd()" style="flex:1; background:#10B981; color:#fff; border:none; padding:12px; border-radius:8px; font-weight:bold; font-size:14px; cursor:pointer; touch-action:manipulation; display:flex; justify-content:space-between; align-items:center;">
+                    <button type="button" onclick="MenuApp.confirmModalAdd()" style="flex:1; background:#10B981; color:#fff; border:none; padding:12px; border-radius:8px; font-weight:bold; font-size:14px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
                         <span>🛒 Confirmar</span>
                         <span id="modal-btn-total-val">R$ 0,00</span>
                     </button>
@@ -871,6 +892,9 @@ const MenuApp = {
         }
     }
 };
+
+// VINCULO GLOBAL OBRIGATÓRIO PARA O NAVEGADOR ENCONTRAR OS ONCLICKs
+window.MenuApp = MenuApp;
 
 document.addEventListener('DOMContentLoaded', () => {
     MenuApp.init();
