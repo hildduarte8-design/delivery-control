@@ -139,17 +139,17 @@ const SalesManager = {
         }).join('');
 
         const modalBody = `
-            <div style="padding:2px;">
+            <div style="padding:2px; box-sizing:border-box; width:100%;">
                 <!-- CAMPO DE SELEÇÃO DE DATA RETROATIVA -->
                 <div class="form-group" style="margin-bottom:10px;">
                     <label style="font-size:11px; color:#F59E0B; font-weight:700;">📅 Data e Hora do Pedido *</label>
-                    <input type="datetime-local" id="sale_created_at" value="${defaultDateTime}" style="font-size:12px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px;">
+                    <input type="datetime-local" id="sale_created_at" value="${defaultDateTime}" style="font-size:12px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; box-sizing:border-box;">
                 </div>
 
                 <!-- 1. WHATSAPP EM DESTAQUE PARA BUSCA AUTOMÁTICA -->
                 <div class="form-group" style="margin-bottom:10px;">
                     <label style="font-size:12px; color:#25D366; font-weight:800;">📱 WhatsApp / Telefone do Cliente *</label>
-                    <input type="tel" id="sale_phone" placeholder="Digite o DDD + Número (ex: 33999999999)" oninput="SalesManager.lookupCustomerByPhone(this.value)" autofocus style="font-size:14px; font-weight:bold; padding:10px; background:#0F172A; color:#25D366; border:2px solid #25D366; border-radius:8px; width:100%;">
+                    <input type="tel" id="sale_phone" placeholder="Digite o DDD + Número (ex: 33999999999)" oninput="SalesManager.lookupCustomerByPhone(this.value)" autofocus style="font-size:14px; font-weight:bold; padding:10px; background:#0F172A; color:#25D366; border:2px solid #25D366; border-radius:8px; width:100%; box-sizing:border-box;">
                     <small style="color:#94A3B8; font-size:10px; display:block; margin-top:2px;">
                         Digite o número para puxar o nome, endereço e pontos do cliente automaticamente.
                     </small>
@@ -161,11 +161,11 @@ const SalesManager = {
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:10px;">
                     <div class="form-group" style="margin:0;">
                         <label style="font-size:11px; color:#94A3B8;">Nome do Cliente *</label>
-                        <input type="text" id="sale_client_name" placeholder="Ex: Maria Souza" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px;">
+                        <input type="text" id="sale_client_name" placeholder="Ex: Maria Souza" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%; box-sizing:border-box;">
                     </div>
                     <div class="form-group" style="margin:0;">
                         <label style="font-size:11px; color:#94A3B8;">Buscar por Nome (Opção)</label>
-                        <select id="sale_customer_select" onchange="SalesManager.onSelectCustomer(this.value)" style="font-size:12px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px;">
+                        <select id="sale_customer_select" onchange="SalesManager.onSelectCustomer(this.value)" style="font-size:12px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; box-sizing:border-box;">
                             <option value="">-- Ou selecione da lista --</option>
                             ${customerOptions}
                         </select>
@@ -174,27 +174,29 @@ const SalesManager = {
 
                 <div class="form-group" style="margin-bottom:10px;">
                     <label style="font-size:11px; color:#94A3B8;">Endereço de Entrega / Observação</label>
-                    <input type="text" id="sale_address" placeholder="Rua, Número, Bairro (ou Balcão)" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%;">
+                    <input type="text" id="sale_address" placeholder="Rua, Número, Bairro (ou Balcão)" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%; box-sizing:border-box;">
                 </div>
 
                 <div class="form-group" style="margin-bottom:12px;">
                     <label style="font-size:11px; color:#94A3B8;">Forma de Pagamento *</label>
-                    <select id="sale_payment_method" style="font-size:12px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px;">
+                    <select id="sale_payment_method" style="font-size:12px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; box-sizing:border-box;">
                         <option value="Pix">⚡ Pix</option>
                         <option value="Cartão">💳 Cartão de Débito/Crédito</option>
                         <option value="Dinheiro">💵 Dinheiro (Em espécie)</option>
                     </select>
                 </div>
 
+                <!-- SEÇÃO COMPACTA DE ADIÇÃO DE ITENS COM ENCAIXE PERFEITO EM DISPOSITIVOS MÓVEIS -->
                 <div style="border-top:1px solid #334155; padding-top:10px; margin-top:10px;">
                     <div style="font-size:12px; font-weight:700; color:#FF6B35; margin-bottom:8px;">🛍️ Adicionar Itens do Cardápio</div>
-                    <div style="display:flex; gap:6px; margin-bottom:10px;">
-                        <select id="sale_product_select" style="flex:1; font-size:12px; padding:8px; background:#1E293B; color:#F1F5F9; border:1px solid #475569; border-radius:6px;">
+                    
+                    <div style="display:flex; gap:6px; margin-bottom:10px; width:100%; align-items:center; box-sizing:border-box;">
+                        <select id="sale_product_select" style="flex:1; min-width:0; font-size:12px; padding:8px 6px; background:#1E293B; color:#F1F5F9; border:1px solid #475569; border-radius:6px; text-overflow:ellipsis;">
                             <option value="">-- Selecione o Prato/Item --</option>
                             ${productOptions}
                         </select>
-                        <input type="number" id="sale_product_qty" value="1" min="1" style="width:60px; font-size:12px; padding:8px; text-align:center; background:#1E293B; color:#F1F5F9; border:1px solid #475569; border-radius:6px;">
-                        <button class="btn btn-sm btn-success" onclick="SalesManager.addItemToSale()" style="width:auto; padding:0 14px; font-weight:700; min-height:40px; touch-action:manipulation;">+ Add</button>
+                        <input type="number" id="sale_product_qty" value="1" min="1" style="width:48px; flex-shrink:0; font-size:12px; padding:8px 4px; text-align:center; background:#1E293B; color:#F1F5F9; border:1px solid #475569; border-radius:6px; box-sizing:border-box;">
+                        <button class="btn btn-sm btn-success" onclick="SalesManager.addItemToSale()" style="flex-shrink:0; width:auto; padding:0 12px; font-weight:700; min-height:36px; touch-action:manipulation;">+ Add</button>
                     </div>
 
                     <div id="sale_selected_items_list" style="background:#0F172A; border:1px solid #334155; border-radius:8px; padding:8px; min-height:60px; margin-bottom:12px;">
@@ -211,11 +213,11 @@ const SalesManager = {
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; align-items:center;">
                         <div>
                             <label style="font-size:11px; color:#94A3B8;">Desconto (R$)</label>
-                            <input type="number" step="0.01" id="sale_discount_input" value="0.00" oninput="SalesManager.updateSaleTotals()" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%;">
+                            <input type="number" step="0.01" id="sale_discount_input" value="0.00" oninput="SalesManager.updateSaleTotals()" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%; box-sizing:border-box;">
                         </div>
                         <div>
                             <label style="font-size:11px; color:#94A3B8;">Valor Final a Cobrar</label>
-                            <input type="number" step="0.01" id="sale_final_total" value="0.00" style="font-size:14px; font-weight:800; color:#10B981; padding:8px; background:#0F172A; border:1px solid #334155; border-radius:6px; width:100%;">
+                            <input type="number" step="0.01" id="sale_final_total" value="0.00" style="font-size:14px; font-weight:800; color:#10B981; padding:8px; background:#0F172A; border:1px solid #334155; border-radius:6px; width:100%; box-sizing:border-box;">
                         </div>
                     </div>
                 </div>
