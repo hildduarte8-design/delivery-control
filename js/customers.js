@@ -8,6 +8,16 @@ if (typeof window.escapeHtml !== 'function') {
     };
 }
 
+function generateUUID() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
 const CustomersManager = {
     allCustomers: [],
 
@@ -274,8 +284,11 @@ const CustomersManager = {
                     loyalty_stamps: newStamps
                 };
 
-                if (c.id) payload.id = c.id;
-                else payload.id = `cust_${Date.now()}`;
+                if (c.id && !String(c.id).startsWith('cust_')) {
+                    payload.id = c.id;
+                } else {
+                    payload.id = generateUUID();
+                }
 
                 const { error } = await dbClient.from('customers').upsert([payload]);
                 if (error) throw error;
@@ -328,7 +341,7 @@ const CustomersManager = {
         }
 
         const customerPayload = {
-            id: `cust_${Date.now()}`,
+            id: generateUUID(),
             name,
             phone,
             address,
