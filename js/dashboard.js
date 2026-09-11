@@ -16,15 +16,6 @@ function parseDateSafe(dateInput) {
     return isNaN(d.getTime()) ? new Date() : d;
 }
 
-// Retorna a data no formato YYYY-MM-DD considerando o fuso horário local do navegador
-function getLocalDateString(dateInput) {
-    const d = parseDateSafe(dateInput);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-}
-
 function getIFoodWeeklyCycle(referenceDate = new Date()) {
     const d = parseDateSafe(referenceDate);
     d.setHours(0, 0, 0, 0);
@@ -71,6 +62,7 @@ async function exportMenuPDF() {
             grouped[cat].push(p);
         });
 
+        // Container com preenchimento ajustado e fonte base bem visível
         const pdfContainer = document.createElement('div');
         pdfContainer.style.cssText = 'padding: 8px; font-family: Arial, sans-serif; color: #1E293B; background: #FFFFFF; width: 100%; box-sizing: border-box;';
 
@@ -82,6 +74,7 @@ async function exportMenuPDF() {
                 const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
                 const safeDesc = p.description ? escapeHtml(p.description) : '';
                 
+                // Foto ampliada para 85px x 85px com cantos arredondados
                 const imgHtml = p.image_url 
                     ? `<img src="${escapeHtml(p.image_url)}" style="width: 85px; height: 85px; border-radius: 10px; object-fit: cover; flex-shrink: 0;" crossorigin="anonymous">` 
                     : '';
@@ -131,7 +124,7 @@ async function exportMenuPDF() {
         }
 
         const opt = {
-            margin: [4, 4, 4, 4],
+            margin: [4, 4, 4, 4], // Margem mínima (4mm)
             filename: 'Cardapio_Digital.pdf',
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: { scale: 2, useCORS: true, allowTaint: true },
@@ -146,7 +139,6 @@ async function exportMenuPDF() {
         if (typeof showToast === 'function') showToast('Erro ao gerar PDF.', 'error');
     }
 }
-
 async function renderDashboard() {
     const balanceValue = document.getElementById('balanceValue');
     const balanceTrend = document.getElementById('balanceTrend');
@@ -179,22 +171,26 @@ async function renderDashboard() {
         }
 
         const now = new Date();
-        const todayStr = getLocalDateString(now);
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-        // Descarte de pedidos cancelados ou cadastros de perfis fictícios
-        const validOrders = orders.filter(o => 
-            o.status !== 'cancelled' && 
-            o.status !== 'customer_profile' && 
-            o.order_type !== 'customer_register' &&
-            Number(o.total || o.amount || 0) > 0
-        );
+        // Filtro centralizado para descartar pedidos cancelados
+        const validOrders = orders.filter(o => o.status !== 'cancelled');
 
-        // 1. Entradas de Hoje (Apenas Válidos e com fuso local)
-        const todayOrders = validOrders.filter(o => getLocalDateString(o.created_at || o.date) === todayStr);
+        // 1. Entradas de Hoje (Apenas Válidos)
+        const todayOrders = validOrders.filter(o => {
+            const orderDate = parseDateSafe(o.created_at || o.date);
+            const orderDateStr = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${String(orderDate.getDate()).padStart(2, '0')}`;
+            return orderDateStr === todayStr;
+        });
         const todayIn = todayOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
 
         // 2. Gastos de Hoje
-        const todayExp = expenses.filter(e => getLocalDateString(e.expense_date || e.created_at || e.date) === todayStr);
+        const todayExp = expenses.filter(e => {
+            const dateVal = e.expense_date || e.created_at || e.date;
+            const expDate = parseDateSafe(dateVal);
+            const expDateStr = `${expDate.getFullYear()}-${String(expDate.getMonth() + 1).padStart(2, '0')}-${String(expDate.getDate()).padStart(2, '0')}`;
+            return expDateStr === todayStr;
+        });
         const todayOut = todayExp.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
 
         if (inToday) inToday.textContent = `R$ ${todayIn.toFixed(2).replace('.', ',')}`;
@@ -288,9 +284,9 @@ async function renderDashboard() {
             }
         }
 
-        // 7. Repassa apenas pedidos válidos para o Analytics
+        // 7. Renderiza Analytics repassando o array de pedidos
         if (window.AnalyticsManager && typeof window.AnalyticsManager.render === 'function') {
-            window.AnalyticsManager.render(validOrders);
+            window.AnalyticsManager.render(orders);
         }
 
     } catch (e) {
