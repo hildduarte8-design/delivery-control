@@ -1,5 +1,15 @@
 // js/analytics.js - Módulo de Desempenho, Faturamento por Pagamento, Ranking e Exportação CSV
 
+function getLocalDateString(dateInput) {
+    if (!dateInput) return '';
+    const d = dateInput instanceof Date ? dateInput : new Date(String(dateInput).replace(' ', 'T'));
+    if (isNaN(d.getTime())) return '';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 const AnalyticsManager = {
     currentPeriod: 'all', // 'today', '7days', 'month', 'all'
     lastFilteredOrders: [],
@@ -32,8 +42,13 @@ const AnalyticsManager = {
                 }
             }
 
-            // Filtra por pedidos concluídos / válidos
-            const completedOrders = orders.filter(o => o.status === 'completed' || Number(o.total || 0) > 0);
+            // Filtra descartando pedidos cancelados ou cadastros de sistema
+            const completedOrders = orders.filter(o => 
+                o.status !== 'cancelled' && 
+                o.status !== 'customer_profile' && 
+                o.order_type !== 'customer_register' &&
+                Number(o.total || o.amount || 0) > 0
+            );
 
             // Filtra por período selecionado
             const filteredOrders = this.filterOrdersByPeriod(completedOrders, this.currentPeriod);
@@ -151,21 +166,23 @@ const AnalyticsManager = {
         if (period === 'all') return orders;
 
         const now = new Date();
-        const todayStr = now.toISOString().split('T')[0];
+        const todayStr = getLocalDateString(now);
 
         return orders.filter(o => {
-            const dateStr = o.created_at || o.date;
-            if (!dateStr) return false;
+            const dateVal = o.created_at || o.date;
+            if (!dateVal) return false;
 
-            const orderDate = new Date(dateStr);
-            const orderDayStr = orderDate.toISOString().split('T')[0];
+            const orderDate = dateVal instanceof Date ? dateVal : new Date(String(dateVal).replace(' ', 'T'));
+            if (isNaN(orderDate.getTime())) return false;
+
+            const orderDayStr = getLocalDateString(orderDate);
 
             if (period === 'today') {
                 return orderDayStr === todayStr;
             }
 
             if (period === '7days') {
-                const sevenDaysAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+                const sevenDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
                 return orderDate >= sevenDaysAgo && orderDate <= now;
             }
 
@@ -208,10 +225,8 @@ const AnalyticsManager = {
                     const qty = Number(i.qty || i.quantity || 1);
                     const name = i.name || i.title || 'Item Avulso';
                     
-                    // Busca preço unitário considerando várias chaves possíveis
                     const unitPrice = Number(i.unit_price || i.price || i.price_unit || i.unitPrice || 0);
                     
-                    // Se o total do item estiver pré-calculado no objeto, usa ele; senão multiplica preço unitário pela quantidade
                     const itemTotal = (i.total !== undefined && i.total !== null && Number(i.total) > 0)
                         ? Number(i.total)
                         : (qty * unitPrice);
