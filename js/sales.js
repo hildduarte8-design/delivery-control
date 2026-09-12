@@ -1,4 +1,4 @@
-// js/sales.js - Vendas Manuais de Balcão (Busca por WhatsApp + Fidelidade + Tratamento de Pedidos Retroativos)
+// js/sales.js - Vendas Manuais de Balcão (Busca por WhatsApp + Fidelidade + Cardápio Visual)
 
 if (typeof window.escapeHtml !== 'function') {
     window.escapeHtml = function(text) {
@@ -20,6 +20,8 @@ const SalesManager = {
     currentSaleItems: [],
     customersCache: [],
     productsCache: [],
+    draftForm: null, // Guarda temporariamente os dados digitados ao abrir o cardápio visual
+    selectedCategory: 'all',
 
     async getCustomersList() {
         let list = [];
@@ -109,8 +111,23 @@ const SalesManager = {
         return products;
     },
 
-    async openSaleModal() {
-        this.currentSaleItems = [];
+    saveDraftForm() {
+        this.draftForm = {
+            createdAt: document.getElementById('sale_created_at')?.value || '',
+            phone: document.getElementById('sale_phone')?.value || '',
+            clientName: document.getElementById('sale_client_name')?.value || '',
+            customerSelect: document.getElementById('sale_customer_select')?.value || '',
+            address: document.getElementById('sale_address')?.value || '',
+            paymentMethod: document.getElementById('sale_payment_method')?.value || 'Pix',
+            discount: document.getElementById('sale_discount_input')?.value || '0.00'
+        };
+    },
+
+    async openSaleModal(isRestoring = false) {
+        if (!isRestoring) {
+            this.currentSaleItems = [];
+            this.draftForm = null;
+        }
 
         const customers = await this.getCustomersList();
         const products = await this.getProductsList();
@@ -118,10 +135,9 @@ const SalesManager = {
         this.customersCache = customers;
         this.productsCache = products;
 
-        // Data e hora local padrão para o input
         const now = new Date();
         now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-        const defaultDateTime = now.toISOString().slice(0, 16);
+        const defaultDateTime = this.draftForm?.createdAt || now.toISOString().slice(0, 16);
 
         const customerOptions = customers.map(c => {
             const name = escapeHtml(c.name || 'Cliente');
@@ -186,18 +202,24 @@ const SalesManager = {
                     </select>
                 </div>
 
-                <!-- SEÇÃO COMPACTA DE ADIÇÃO DE ITENS COM ENCAIXE PERFEITO EM DISPOSITIVOS MÓVEIS -->
+                <!-- BOTÃO DE DESTAQUE: CARDÁPIO VISUAL POR CATEGORIAS -->
                 <div style="border-top:1px solid #334155; padding-top:10px; margin-top:10px;">
-                    <div style="font-size:12px; font-weight:700; color:#FF6B35; margin-bottom:8px;">🛍️ Adicionar Itens do Cardápio</div>
-                    
-                    <div style="display:flex; gap:6px; margin-bottom:10px; width:100%; align-items:center; box-sizing:border-box;">
-                        <select id="sale_product_select" style="flex:1; min-width:0; font-size:12px; padding:8px 6px; background:#1E293B; color:#F1F5F9; border:1px solid #475569; border-radius:6px; text-overflow:ellipsis;">
-                            <option value="">-- Selecione o Prato/Item --</option>
-                            ${productOptions}
-                        </select>
-                        <input type="number" id="sale_product_qty" value="1" min="1" style="width:48px; flex-shrink:0; font-size:12px; padding:8px 4px; text-align:center; background:#1E293B; color:#F1F5F9; border:1px solid #475569; border-radius:6px; box-sizing:border-box;">
-                        <button class="btn btn-sm btn-success" onclick="SalesManager.addItemToSale()" style="flex-shrink:0; width:auto; padding:0 12px; font-weight:700; min-height:36px; touch-action:manipulation;">+ Add</button>
-                    </div>
+                    <button type="button" class="btn" onclick="SalesManager.openVisualMenuModal()" style="width:100%; margin-bottom:10px; background:linear-gradient(135deg, #FF6B35, #F59E0B); color:#fff; font-weight:800; padding:12px; border-radius:8px; border:none; display:flex; align-items:center; justify-content:center; gap:8px; font-size:13px; box-shadow:0 4px 12px rgba(255,107,53,0.3); touch-action:manipulation;">
+                        📱 🖼️ Selecionar pelo Cardápio Visual (Categorias & Fotos)
+                    </button>
+
+                    <!-- OPÇÃO RÁPIDA SECUNDÁRIA POR LISTA -->
+                    <details style="margin-bottom:10px; background:#0F172A; border:1px solid #334155; border-radius:6px; padding:6px 10px;">
+                        <summary style="font-size:11px; color:#94A3B8; cursor:pointer; font-weight:600;">Ou adicione rapidamente por lista suspensa</summary>
+                        <div style="display:flex; gap:6px; margin-top:8px; width:100%; align-items:center; box-sizing:border-box;">
+                            <select id="sale_product_select" style="flex:1; min-width:0; font-size:12px; padding:8px 6px; background:#1E293B; color:#F1F5F9; border:1px solid #475569; border-radius:6px; text-overflow:ellipsis;">
+                                <option value="">-- Selecione o Prato/Item --</option>
+                                ${productOptions}
+                            </select>
+                            <input type="number" id="sale_product_qty" value="1" min="1" style="width:48px; flex-shrink:0; font-size:12px; padding:8px 4px; text-align:center; background:#1E293B; color:#F1F5F9; border:1px solid #475569; border-radius:6px; box-sizing:border-box;">
+                            <button class="btn btn-sm btn-success" onclick="SalesManager.addItemToSale()" style="flex-shrink:0; width:auto; padding:0 12px; font-weight:700; min-height:36px; touch-action:manipulation;">+ Add</button>
+                        </div>
+                    </details>
 
                     <div id="sale_selected_items_list" style="background:#0F172A; border:1px solid #334155; border-radius:8px; padding:8px; min-height:60px; margin-bottom:12px;">
                         <div style="color:#94A3B8; font-size:11px; text-align:center; padding:15px;">Nenhum item adicionado ainda.</div>
@@ -213,7 +235,7 @@ const SalesManager = {
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; align-items:center;">
                         <div>
                             <label style="font-size:11px; color:#94A3B8;">Desconto (R$)</label>
-                            <input type="number" step="0.01" id="sale_discount_input" value="0.00" oninput="SalesManager.updateSaleTotals()" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%; box-sizing:border-box;">
+                            <input type="number" step="0.01" id="sale_discount_input" value="${this.draftForm?.discount || '0.00'}" oninput="SalesManager.updateSaleTotals()" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%; box-sizing:border-box;">
                         </div>
                         <div>
                             <label style="font-size:11px; color:#94A3B8;">Valor Final a Cobrar</label>
@@ -229,6 +251,178 @@ const SalesManager = {
         if (typeof openModal === 'function') {
             openModal('💰 Nova Venda / Entrada Manual', modalBody);
         }
+
+        // Restaura campos preenchidos previamente se estiver voltando do Cardápio Visual
+        if (this.draftForm) {
+            if (document.getElementById('sale_phone')) document.getElementById('sale_phone').value = this.draftForm.phone;
+            if (document.getElementById('sale_client_name')) document.getElementById('sale_client_name').value = this.draftForm.clientName;
+            if (document.getElementById('sale_customer_select')) document.getElementById('sale_customer_select').value = this.draftForm.customerSelect;
+            if (document.getElementById('sale_address')) document.getElementById('sale_address').value = this.draftForm.address;
+            if (document.getElementById('sale_payment_method')) document.getElementById('sale_payment_method').value = this.draftForm.paymentMethod;
+            if (document.getElementById('sale_discount_input')) document.getElementById('sale_discount_input').value = this.draftForm.discount;
+
+            if (this.draftForm.phone) {
+                this.lookupCustomerByPhone(this.draftForm.phone);
+            }
+        }
+
+        this.renderSelectedItemsList();
+        this.updateSaleTotals();
+    },
+
+    // ABRIR O CARDÁPIO VISUAL CATEGORIZADO
+    openVisualMenuModal() {
+        this.saveDraftForm();
+
+        const categories = Array.from(new Set((this.productsCache || []).map(p => p.category || 'Geral')));
+        
+        const categoryPills = `
+            <button class="btn btn-sm ${this.selectedCategory === 'all' ? '' : 'btn-secondary'}" onclick="SalesManager.filterCategory('all')" style="font-size:11px; padding:6px 12px; border-radius:14px; white-space:nowrap;">🔥 Todos</button>
+            ${categories.map(cat => `
+                <button class="btn btn-sm ${this.selectedCategory === cat ? '' : 'btn-secondary'}" onclick="SalesManager.filterCategory('${escapeHtml(cat)}')" style="font-size:11px; padding:6px 12px; border-radius:14px; white-space:nowrap;">📌 ${escapeHtml(cat)}</button>
+            `).join('')}
+        `;
+
+        const modalBody = `
+            <div style="padding:2px; box-sizing:border-box; width:100%;">
+                <!-- BUSCA RÁPIDA E CATEGORIAS -->
+                <div style="margin-bottom:10px;">
+                    <input type="text" id="visual_menu_search" placeholder="🔍 Buscar prato..." oninput="SalesManager.renderVisualGrid()" style="width:100%; padding:10px; font-size:13px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:8px; box-sizing:border-box; margin-bottom:8px;">
+                    
+                    <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:6px; scrollbar-width:none;">
+                        ${categoryPills}
+                    </div>
+                </div>
+
+                <!-- GRADE DE PRATOS CATEGORIZADOS -->
+                <div id="visual_products_grid" style="max-height:55vh; overflow-y:auto; padding-right:2px; display:grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap:10px; margin-bottom:60px;">
+                </div>
+
+                <!-- BARRA FIXA INFERIOR DE CONFIRMAÇÃO -->
+                <div style="position:sticky; bottom:0; left:0; right:0; background:#0F172A; border-top:2px solid #FF6B35; padding:10px; display:flex; justify-content:space-between; align-items:center; border-radius:0 0 10px 10px; box-shadow:0 -4px 12px rgba(0,0,0,0.5);">
+                    <div>
+                        <span id="visual_footer_count" style="color:#94A3B8; font-size:11px; display:block;">0 item(ns)</span>
+                        <strong id="visual_footer_total" style="color:#10B981; font-size:15px;">R$ 0,00</strong>
+                    </div>
+                    <button class="btn btn-success" onclick="SalesManager.confirmVisualSelection()" style="padding:10px 16px; font-weight:800; font-size:13px; touch-action:manipulation;">
+                        ✅ Confirmar e Voltar
+                    </button>
+                </div>
+            </div>
+        `;
+
+        if (typeof openModal === 'function') {
+            openModal('🛍️ Cardápio Visual - Seleção Rápida', modalBody);
+        }
+
+        this.renderVisualGrid();
+    },
+
+    filterCategory(cat) {
+        this.selectedCategory = cat;
+        this.openVisualMenuModal();
+    },
+
+    renderVisualGrid() {
+        const grid = document.getElementById('visual_products_grid');
+        const searchTerm = (document.getElementById('visual_menu_search')?.value || '').toLowerCase().trim();
+        if (!grid) return;
+
+        let filtered = this.productsCache || [];
+
+        if (this.selectedCategory !== 'all') {
+            filtered = filtered.filter(p => (p.category || 'Geral') === this.selectedCategory);
+        }
+
+        if (searchTerm) {
+            filtered = filtered.filter(p => p.name.toLowerCase().includes(searchTerm) || (p.description && p.description.toLowerCase().includes(searchTerm)));
+        }
+
+        if (filtered.length === 0) {
+            grid.innerHTML = `<div style="grid-column: 1 / -1; color:#94A3B8; text-align:center; padding:30px; font-size:12px;">Nenhum item encontrado.</div>`;
+            this.updateVisualFooter();
+            return;
+        }
+
+        grid.innerHTML = filtered.map(p => {
+            const price = Number(p.price || 0);
+            const priceFormatted = price.toFixed(2).replace('.', ',');
+            const safeName = escapeHtml(p.name);
+            const safeId = escapeHtml(p.id);
+
+            // Verifica quantidade atual deste item no carrinho
+            const cartItem = this.currentSaleItems.find(i => String(i.id) === String(p.id));
+            const currentQty = cartItem ? cartItem.qty : 0;
+
+            const imgHtml = p.image_url 
+                ? `<img src="${escapeHtml(p.image_url)}" style="width:100%; height:80px; object-fit:cover; border-radius:6px; margin-bottom:6px;">`
+                : `<div style="width:100%; height:60px; background:#0F172A; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:24px; margin-bottom:6px;">🥟</div>`;
+
+            return `
+                <div style="background:#1E293B; border:1px solid ${currentQty > 0 ? '#10B981' : '#334155'}; border-radius:8px; padding:8px; display:flex; flex-direction:column; justify-space-between; text-align:center; position:relative;">
+                    ${imgHtml}
+                    <strong style="font-size:11px; color:#F1F5F9; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; height:28px; line-height:1.2; margin-bottom:4px;">${safeName}</strong>
+                    <span style="font-size:12px; font-weight:800; color:#10B981; margin-bottom:8px;">R$ ${priceFormatted}</span>
+
+                    ${currentQty > 0 ? `
+                        <div style="display:flex; justify-content:center; align-items:center; gap:6px; background:#0F172A; padding:4px; border-radius:6px;">
+                            <button onclick="SalesManager.updateVisualQty('${safeId}', -1)" style="background:#EF4444; color:#fff; border:none; border-radius:4px; width:26px; height:26px; font-weight:bold; cursor:pointer;">-</button>
+                            <span style="color:#F1F5F9; font-weight:800; font-size:13px;">${currentQty}</span>
+                            <button onclick="SalesManager.updateVisualQty('${safeId}', 1)" style="background:#10B981; color:#fff; border:none; border-radius:4px; width:26px; height:26px; font-weight:bold; cursor:pointer;">+</button>
+                        </div>
+                    ` : `
+                        <button onclick="SalesManager.updateVisualQty('${safeId}', 1)" style="background:#FF6B35; color:#fff; border:none; padding:6px; border-radius:6px; font-size:11px; font-weight:bold; width:100%; cursor:pointer; touch-action:manipulation;">
+                            + Adicionar
+                        </button>
+                    `}
+                </div>
+            `;
+        }).join('');
+
+        this.updateVisualFooter();
+    },
+
+    updateVisualQty(productId, delta) {
+        const product = (this.productsCache || []).find(p => String(p.id) === String(productId));
+        if (!product) return;
+
+        const price = parseFloat(product.price || 0);
+        const existingItem = this.currentSaleItems.find(i => String(i.id) === String(productId));
+
+        if (existingItem) {
+            existingItem.qty += delta;
+            if (existingItem.qty <= 0) {
+                this.currentSaleItems = this.currentSaleItems.filter(i => String(i.id) !== String(productId));
+            } else {
+                existingItem.total = existingItem.price * existingItem.qty;
+            }
+        } else if (delta > 0) {
+            this.currentSaleItems.push({
+                uid: `item_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+                id: product.id,
+                name: product.name,
+                price: price,
+                qty: 1,
+                total: price
+            });
+        }
+
+        this.renderVisualGrid();
+    },
+
+    updateVisualFooter() {
+        const countEl = document.getElementById('visual_footer_count');
+        const totalEl = document.getElementById('visual_footer_total');
+
+        const totalItems = this.currentSaleItems.reduce((acc, i) => acc + i.qty, 0);
+        const totalValue = this.currentSaleItems.reduce((acc, i) => acc + i.total, 0);
+
+        if (countEl) countEl.textContent = `${totalItems} item(ns) selecionado(s)`;
+        if (totalEl) totalEl.textContent = `R$ ${totalValue.toFixed(2).replace('.', ',')}`;
+    },
+
+    confirmVisualSelection() {
+        this.openSaleModal(true);
     },
 
     lookupCustomerByPhone(val) {
@@ -409,7 +603,6 @@ const SalesManager = {
             ? `sale_${crypto.randomUUID()}` 
             : `sale_${Date.now()}`;
 
-        // Processa data do pedido e identifica se é lançamento retroativo
         const orderDateObj = createdAtInput ? new Date(createdAtInput) : new Date();
         const orderDate = orderDateObj.toISOString();
 
@@ -447,7 +640,6 @@ const SalesManager = {
                     console.warn('Erro retornado pelo Supabase:', error);
                 }
 
-                // Sincroniza tabela de clientes automaticamente
                 if (phone || client_name !== 'Cliente Balcão') {
                     try {
                         await dbClient.from('customers').upsert([{
@@ -461,7 +653,6 @@ const SalesManager = {
                     }
                 }
 
-                // Computa o carimbo de fidelidade se o pedido for retroativo e já finalizado
                 if (autoStatus === 'completed' && phone && typeof OrdersManager !== 'undefined' && OrdersManager.processLoyaltyStamp) {
                     await OrdersManager.processLoyaltyStamp(phone, total);
                 }
