@@ -1,4 +1,4 @@
-// js/sales.js - Vendas Manuais de Balcão (Busca por WhatsApp + Fidelidade + Cardápio Visual)
+// js/sales.js - Vendas Manuais de Balcão (Busca por WhatsApp + Fidelidade + Cardápio Visual + Controle de Frete)
 
 if (typeof window.escapeHtml !== 'function') {
     window.escapeHtml = function(text) {
@@ -20,7 +20,7 @@ const SalesManager = {
     currentSaleItems: [],
     customersCache: [],
     productsCache: [],
-    draftForm: null, // Guarda temporariamente os dados digitados ao abrir o cardápio visual
+    draftForm: null,
     selectedCategory: 'all',
 
     async getCustomersList() {
@@ -119,6 +119,8 @@ const SalesManager = {
             customerSelect: document.getElementById('sale_customer_select')?.value || '',
             address: document.getElementById('sale_address')?.value || '',
             paymentMethod: document.getElementById('sale_payment_method')?.value || 'Pix',
+            deliveryFee: document.getElementById('sale_delivery_fee')?.value || '0.00',
+            deliveryType: document.getElementById('sale_delivery_type')?.value || 'own',
             discount: document.getElementById('sale_discount_input')?.value || '0.00'
         };
     },
@@ -156,19 +158,16 @@ const SalesManager = {
 
         const modalBody = `
             <div style="padding:2px; box-sizing:border-box; width:100%;">
-                <!-- CAMPO DE SELEÇÃO DE DATA RETROATIVA -->
+                <!-- DATA E HORA DO PEDIDO -->
                 <div class="form-group" style="margin-bottom:10px;">
                     <label style="font-size:11px; color:#F59E0B; font-weight:700;">📅 Data e Hora do Pedido *</label>
                     <input type="datetime-local" id="sale_created_at" value="${defaultDateTime}" style="font-size:12px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; box-sizing:border-box;">
                 </div>
 
-                <!-- 1. WHATSAPP EM DESTAQUE PARA BUSCA AUTOMÁTICA -->
+                <!-- WHATSAPP / TELEFONE -->
                 <div class="form-group" style="margin-bottom:10px;">
                     <label style="font-size:12px; color:#25D366; font-weight:800;">📱 WhatsApp / Telefone do Cliente *</label>
                     <input type="tel" id="sale_phone" placeholder="Digite o DDD + Número (ex: 33999999999)" oninput="SalesManager.lookupCustomerByPhone(this.value)" autofocus style="font-size:14px; font-weight:bold; padding:10px; background:#0F172A; color:#25D366; border:2px solid #25D366; border-radius:8px; width:100%; box-sizing:border-box;">
-                    <small style="color:#94A3B8; font-size:10px; display:block; margin-top:2px;">
-                        Digite o número para puxar o nome, endereço e pontos do cliente automaticamente.
-                    </small>
                 </div>
 
                 <!-- ALERTA DE FIDELIDADE / NOVO CLIENTE -->
@@ -180,9 +179,9 @@ const SalesManager = {
                         <input type="text" id="sale_client_name" placeholder="Ex: Maria Souza" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%; box-sizing:border-box;">
                     </div>
                     <div class="form-group" style="margin:0;">
-                        <label style="font-size:11px; color:#94A3B8;">Buscar por Nome (Opção)</label>
+                        <label style="font-size:11px; color:#94A3B8;">Buscar da Lista</label>
                         <select id="sale_customer_select" onchange="SalesManager.onSelectCustomer(this.value)" style="font-size:12px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; box-sizing:border-box;">
-                            <option value="">-- Ou selecione da lista --</option>
+                            <option value="">-- Selecionar --</option>
                             ${customerOptions}
                         </select>
                     </div>
@@ -191,6 +190,21 @@ const SalesManager = {
                 <div class="form-group" style="margin-bottom:10px;">
                     <label style="font-size:11px; color:#94A3B8;">Endereço de Entrega / Observação</label>
                     <input type="text" id="sale_address" placeholder="Rua, Número, Bairro (ou Balcão)" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%; box-sizing:border-box;">
+                </div>
+
+                <!-- CAMPOS DE FRETE E PAGAMENTO -->
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:10px;">
+                    <div class="form-group" style="margin:0;">
+                        <label style="font-size:11px; color:#3B82F6; font-weight:700;">🛵 Valor do Frete (R$)</label>
+                        <input type="number" step="0.50" id="sale_delivery_fee" value="${this.draftForm?.deliveryFee || '0.00'}" oninput="SalesManager.updateSaleTotals()" style="font-size:12px; padding:8px; background:#0F172A; color:#3B82F6; font-weight:bold; border:1px solid #3B82F6; border-radius:6px; width:100%; box-sizing:border-box;">
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label style="font-size:11px; color:#3B82F6; font-weight:700;">🚚 Tipo de Entrega</label>
+                        <select id="sale_delivery_type" onchange="SalesManager.updateSaleTotals()" style="font-size:12px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; box-sizing:border-box;">
+                            <option value="own">🛵 Entregador Próprio (Caixa)</option>
+                            <option value="third_party">👤 Terceiros / Motoqueiro (Repasse)</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="form-group" style="margin-bottom:12px;">
@@ -202,13 +216,12 @@ const SalesManager = {
                     </select>
                 </div>
 
-                <!-- BOTÃO DE DESTAQUE: CARDÁPIO VISUAL POR CATEGORIAS -->
+                <!-- SELEÇÃO VISUAL DE ITENS -->
                 <div style="border-top:1px solid #334155; padding-top:10px; margin-top:10px;">
                     <button type="button" class="btn" onclick="SalesManager.openVisualMenuModal()" style="width:100%; margin-bottom:10px; background:linear-gradient(135deg, #FF6B35, #F59E0B); color:#fff; font-weight:800; padding:12px; border-radius:8px; border:none; display:flex; align-items:center; justify-content:center; gap:8px; font-size:13px; box-shadow:0 4px 12px rgba(255,107,53,0.3); touch-action:manipulation;">
                         📱 🖼️ Selecionar pelo Cardápio Visual (Categorias & Fotos)
                     </button>
 
-                    <!-- OPÇÃO RÁPIDA SECUNDÁRIA POR LISTA -->
                     <details style="margin-bottom:10px; background:#0F172A; border:1px solid #334155; border-radius:6px; padding:6px 10px;">
                         <summary style="font-size:11px; color:#94A3B8; cursor:pointer; font-weight:600;">Ou adicione rapidamente por lista suspensa</summary>
                         <div style="display:flex; gap:6px; margin-top:8px; width:100%; align-items:center; box-sizing:border-box;">
@@ -226,22 +239,30 @@ const SalesManager = {
                     </div>
                 </div>
 
+                <!-- CÁLCULO FINANCEIRO DETALHADO -->
                 <div style="background:#1E293B; border-radius:8px; padding:10px; border:1px solid #334155;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#CBD5E1; margin-bottom:6px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#CBD5E1; margin-bottom:4px;">
                         <span>Subtotal dos Itens:</span>
                         <strong id="sale_subtotal_display" style="color:#F1F5F9;">R$ 0,00</strong>
                     </div>
 
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; align-items:center;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#3B82F6; margin-bottom:6px;">
+                        <span>Frete (Cobrado do Cliente):</span>
+                        <strong id="sale_freight_display">R$ 0,00</strong>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; align-items:center; border-top:1px solid #334155; padding-top:6px;">
                         <div>
                             <label style="font-size:11px; color:#94A3B8;">Desconto (R$)</label>
                             <input type="number" step="0.01" id="sale_discount_input" value="${this.draftForm?.discount || '0.00'}" oninput="SalesManager.updateSaleTotals()" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%; box-sizing:border-box;">
                         </div>
                         <div>
-                            <label style="font-size:11px; color:#94A3B8;">Valor Final a Cobrar</label>
+                            <label style="font-size:11px; color:#10B981; font-weight:700;">Total a Cobrar</label>
                             <input type="number" step="0.01" id="sale_final_total" value="0.00" style="font-size:14px; font-weight:800; color:#10B981; padding:8px; background:#0F172A; border:1px solid #334155; border-radius:6px; width:100%; box-sizing:border-box;">
                         </div>
                     </div>
+
+                    <div id="sale_store_net_info" style="font-size:10px; color:#94A3B8; margin-top:6px; text-align:right;"></div>
                 </div>
 
                 <button class="btn btn-large" onclick="SalesManager.saveManualSale()" style="margin-top:14px; background:#FF6B35; color:#fff; width:100%; min-height:48px; touch-action:manipulation;">💾 Lançar Pedido</button>
@@ -252,13 +273,14 @@ const SalesManager = {
             openModal('💰 Nova Venda / Entrada Manual', modalBody);
         }
 
-        // Restaura campos preenchidos previamente se estiver voltando do Cardápio Visual
         if (this.draftForm) {
             if (document.getElementById('sale_phone')) document.getElementById('sale_phone').value = this.draftForm.phone;
             if (document.getElementById('sale_client_name')) document.getElementById('sale_client_name').value = this.draftForm.clientName;
             if (document.getElementById('sale_customer_select')) document.getElementById('sale_customer_select').value = this.draftForm.customerSelect;
             if (document.getElementById('sale_address')) document.getElementById('sale_address').value = this.draftForm.address;
             if (document.getElementById('sale_payment_method')) document.getElementById('sale_payment_method').value = this.draftForm.paymentMethod;
+            if (document.getElementById('sale_delivery_fee')) document.getElementById('sale_delivery_fee').value = this.draftForm.deliveryFee;
+            if (document.getElementById('sale_delivery_type')) document.getElementById('sale_delivery_type').value = this.draftForm.deliveryType;
             if (document.getElementById('sale_discount_input')) document.getElementById('sale_discount_input').value = this.draftForm.discount;
 
             if (this.draftForm.phone) {
@@ -270,7 +292,6 @@ const SalesManager = {
         this.updateSaleTotals();
     },
 
-    // ABRIR O CARDÁPIO VISUAL CATEGORIZADO
     openVisualMenuModal() {
         this.saveDraftForm();
 
@@ -285,7 +306,6 @@ const SalesManager = {
 
         const modalBody = `
             <div style="padding:2px; box-sizing:border-box; width:100%;">
-                <!-- BUSCA RÁPIDA E CATEGORIAS -->
                 <div style="margin-bottom:10px;">
                     <input type="text" id="visual_menu_search" placeholder="🔍 Buscar prato..." oninput="SalesManager.renderVisualGrid()" style="width:100%; padding:10px; font-size:13px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:8px; box-sizing:border-box; margin-bottom:8px;">
                     
@@ -294,11 +314,9 @@ const SalesManager = {
                     </div>
                 </div>
 
-                <!-- GRADE DE PRATOS CATEGORIZADOS -->
                 <div id="visual_products_grid" style="max-height:55vh; overflow-y:auto; padding-right:2px; display:grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap:10px; margin-bottom:60px;">
                 </div>
 
-                <!-- BARRA FIXA INFERIOR DE CONFIRMAÇÃO -->
                 <div style="position:sticky; bottom:0; left:0; right:0; background:#0F172A; border-top:2px solid #FF6B35; padding:10px; display:flex; justify-content:space-between; align-items:center; border-radius:0 0 10px 10px; box-shadow:0 -4px 12px rgba(0,0,0,0.5);">
                     <div>
                         <span id="visual_footer_count" style="color:#94A3B8; font-size:11px; display:block;">0 item(ns)</span>
@@ -350,7 +368,6 @@ const SalesManager = {
             const safeName = escapeHtml(p.name);
             const safeId = escapeHtml(p.id);
 
-            // Verifica quantidade atual deste item no carrinho
             const cartItem = this.currentSaleItems.find(i => String(i.id) === String(p.id));
             const currentQty = cartItem ? cartItem.qty : 0;
 
@@ -572,14 +589,30 @@ const SalesManager = {
 
     updateSaleTotals() {
         const subtotal = this.currentSaleItems.reduce((acc, i) => acc + i.total, 0);
+        const deliveryFee = parseFloat(document.getElementById('sale_delivery_fee')?.value) || 0;
         const discount = parseFloat(document.getElementById('sale_discount_input')?.value) || 0;
-        const finalTotal = Math.max(0, subtotal - discount);
+        const deliveryType = document.getElementById('sale_delivery_type')?.value || 'own';
+
+        // Total cobrado do cliente no recibo/comanda
+        const finalTotal = Math.max(0, subtotal + deliveryFee - discount);
 
         const subtotalEl = document.getElementById('sale_subtotal_display');
+        const freightEl = document.getElementById('sale_freight_display');
         const finalTotalInput = document.getElementById('sale_final_total');
+        const netInfoEl = document.getElementById('sale_store_net_info');
 
         if (subtotalEl) subtotalEl.textContent = `R$ ${subtotal.toFixed(2).replace('.', ',')}`;
+        if (freightEl) freightEl.textContent = `+ R$ ${deliveryFee.toFixed(2).replace('.', ',')}`;
         if (finalTotalInput) finalTotalInput.value = finalTotal.toFixed(2);
+
+        if (netInfoEl) {
+            if (deliveryType === 'third_party' && deliveryFee > 0) {
+                const storeNet = Math.max(0, subtotal - discount);
+                netInfoEl.innerHTML = `ℹ️ <strong>Entregador Terceirizado:</strong> R$ ${deliveryFee.toFixed(2).replace('.', ',')} vai para o motoqueiro. Entra no caixa da loja: <strong style="color:#10B981;">R$ ${storeNet.toFixed(2).replace('.', ',')}</strong>`;
+            } else {
+                netInfoEl.innerHTML = `ℹ️ <strong>Entrega Própria:</strong> Valor integral entra no caixa da loja.`;
+            }
+        }
     },
 
     async saveManualSale() {
@@ -588,6 +621,8 @@ const SalesManager = {
         const phone = document.getElementById('sale_phone')?.value.trim() || '';
         const address = document.getElementById('sale_address')?.value.trim() || 'Venda no Balcão';
         const payment_method = document.getElementById('sale_payment_method')?.value || 'Pix';
+        const delivery_fee = parseFloat(document.getElementById('sale_delivery_fee')?.value) || 0;
+        const delivery_type = document.getElementById('sale_delivery_type')?.value || 'own';
         const discount = parseFloat(document.getElementById('sale_discount_input')?.value) || 0;
         const total = parseFloat(document.getElementById('sale_final_total')?.value) || 0;
 
@@ -609,6 +644,9 @@ const SalesManager = {
         const isRetroactive = (new Date() - orderDateObj) > (5 * 60 * 1000);
         const autoStatus = isRetroactive ? 'completed' : 'preparing';
 
+        // Faturamento líquido da loja (se for terceiro, exclui o frete do faturamento interno)
+        const netStoreAmount = delivery_type === 'third_party' ? Math.max(0, subtotal - discount) : total;
+
         const orderData = {
             id: orderId,
             client_name,
@@ -617,13 +655,15 @@ const SalesManager = {
             customer_phone: phone,
             address,
             delivery_address: address,
-            order_type: 'pickup',
+            order_type: delivery_fee > 0 ? 'delivery' : 'pickup',
             payment_method: payment_method,
             items: this.currentSaleItems,
             subtotal: subtotal > 0 ? subtotal : total,
-            delivery_fee: 0,
+            delivery_fee: delivery_fee,
+            delivery_type: delivery_type, // 'own' ou 'third_party'
             discount: discount,
             total: total,
+            net_amount: netStoreAmount,
             status: autoStatus,
             source: 'Manual',
             created_at: orderDate
@@ -637,7 +677,7 @@ const SalesManager = {
                 if (!error) {
                     savedToCloud = true;
                 } else {
-                    console.warn('Erro retornado pelo Supabase:', error);
+                    console.warn('Erro retornado pelo Supabase ao salvar frete:', error);
                 }
 
                 if (phone || client_name !== 'Cliente Balcão') {
@@ -731,7 +771,9 @@ async function renderSalesList() {
         const itemsCount = Array.isArray(itemsList) ? itemsList.length : 0;
 
         const totalFormatted = Number(s.total || 0).toFixed(2).replace('.', ',');
+        const feeFormatted = Number(s.delivery_fee || 0).toFixed(2).replace('.', ',');
         const dateStr = parseDateSafe(s.created_at || s.createdAt).toLocaleDateString('pt-BR');
+        const isThirdParty = s.delivery_type === 'third_party';
 
         return `
             <div class="card" style="margin-bottom:8px; padding:12px; background:#1E293B; border-left:4px solid #10B981; border-radius:10px;">
@@ -740,6 +782,7 @@ async function renderSalesList() {
                         <strong style="color:#F1F5F9; font-size:13px; display:block;">👤 ${escapeHtml(s.client_name || s.customer_name || s.customerName || 'Cliente Balcão')}</strong>
                         <span style="font-size:11px; color:#94A3B8;">
                             ${dateStr} • ${escapeHtml(s.payment_method || 'Pix')} • ${itemsCount} item(ns)
+                            ${Number(s.delivery_fee || 0) > 0 ? ` • Frete: R$ ${feeFormatted} (${isThirdParty ? 'Motoqueiro' : 'Próprio'})` : ''}
                         </span>
                     </div>
                     <strong style="color:#10B981; font-size:15px;">R$ ${totalFormatted}</strong>
