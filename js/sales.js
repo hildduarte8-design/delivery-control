@@ -16,6 +16,16 @@ function parseDateSafe(dateInput) {
     return isNaN(d.getTime()) ? new Date() : d;
 }
 
+function generateUUID() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
 const SalesManager = {
     currentSaleItems: [],
     customersCache: [],
@@ -141,13 +151,23 @@ const SalesManager = {
         now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
         const defaultDateTime = this.draftForm?.createdAt || now.toISOString().slice(0, 16);
 
+        const phoneVal = escapeHtml(this.draftForm?.phone || '');
+        const clientNameVal = escapeHtml(this.draftForm?.clientName || '');
+        const addressVal = escapeHtml(this.draftForm?.address || '');
+        const deliveryFeeVal = escapeHtml(this.draftForm?.deliveryFee || '0.00');
+        const discountVal = escapeHtml(this.draftForm?.discount || '0.00');
+        const paymentMethodVal = this.draftForm?.paymentMethod || 'Pix';
+        const deliveryTypeVal = this.draftForm?.deliveryType || 'own';
+        const customerSelectVal = this.draftForm?.customerSelect || '';
+
         const customerOptions = customers.map(c => {
             const name = escapeHtml(c.name || 'Cliente');
             const phone = escapeHtml(c.phone || c.whatsapp || '');
             const stamps = Number(c.loyalty_stamps || c.loyaltyStamps || 0);
             const badge = stamps >= 10 ? ' 🎁 (PASTEL GRÁTIS!)' : stamps > 0 ? ` 🎟️ (${stamps}/10)` : '';
+            const selected = String(c.id || name) === customerSelectVal ? 'selected' : '';
 
-            return `<option value="${escapeHtml(c.id || name)}">${name} ${phone ? '(' + phone + ')' : ''}${badge}</option>`;
+            return `<option value="${escapeHtml(c.id || name)}" ${selected}>${name} ${phone ? '(' + phone + ')' : ''}${badge}</option>`;
         }).join('');
 
         const productOptions = products.map(p => {
@@ -167,7 +187,7 @@ const SalesManager = {
                 <!-- WHATSAPP / TELEFONE -->
                 <div class="form-group" style="margin-bottom:10px;">
                     <label style="font-size:12px; color:#25D366; font-weight:800;">📱 WhatsApp / Telefone do Cliente *</label>
-                    <input type="tel" id="sale_phone" placeholder="Digite o DDD + Número (ex: 33999999999)" oninput="SalesManager.lookupCustomerByPhone(this.value)" autofocus style="font-size:14px; font-weight:bold; padding:10px; background:#0F172A; color:#25D366; border:2px solid #25D366; border-radius:8px; width:100%; box-sizing:border-box;">
+                    <input type="tel" id="sale_phone" value="${phoneVal}" placeholder="Digite o DDD + Número (ex: 33999999999)" oninput="SalesManager.lookupCustomerByPhone(this.value)" autofocus style="font-size:14px; font-weight:bold; padding:10px; background:#0F172A; color:#25D366; border:2px solid #25D366; border-radius:8px; width:100%; box-sizing:border-box;">
                 </div>
 
                 <!-- ALERTA DE FIDELIDADE / NOVO CLIENTE -->
@@ -176,7 +196,7 @@ const SalesManager = {
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:10px;">
                     <div class="form-group" style="margin:0;">
                         <label style="font-size:11px; color:#94A3B8;">Nome do Cliente *</label>
-                        <input type="text" id="sale_client_name" placeholder="Ex: Maria Souza" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%; box-sizing:border-box;">
+                        <input type="text" id="sale_client_name" value="${clientNameVal}" placeholder="Ex: Maria Souza" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%; box-sizing:border-box;">
                     </div>
                     <div class="form-group" style="margin:0;">
                         <label style="font-size:11px; color:#94A3B8;">Buscar da Lista</label>
@@ -189,20 +209,20 @@ const SalesManager = {
 
                 <div class="form-group" style="margin-bottom:10px;">
                     <label style="font-size:11px; color:#94A3B8;">Endereço de Entrega / Observação</label>
-                    <input type="text" id="sale_address" placeholder="Rua, Número, Bairro (ou Balcão)" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%; box-sizing:border-box;">
+                    <input type="text" id="sale_address" value="${addressVal}" placeholder="Rua, Número, Bairro (ou Balcão)" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%; box-sizing:border-box;">
                 </div>
 
                 <!-- CAMPOS DE FRETE E PAGAMENTO -->
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:10px;">
                     <div class="form-group" style="margin:0;">
                         <label style="font-size:11px; color:#3B82F6; font-weight:700;">🛵 Valor do Frete (R$)</label>
-                        <input type="number" step="0.50" id="sale_delivery_fee" value="${this.draftForm?.deliveryFee || '0.00'}" oninput="SalesManager.updateSaleTotals()" style="font-size:12px; padding:8px; background:#0F172A; color:#3B82F6; font-weight:bold; border:1px solid #3B82F6; border-radius:6px; width:100%; box-sizing:border-box;">
+                        <input type="number" step="0.50" id="sale_delivery_fee" value="${deliveryFeeVal}" oninput="SalesManager.updateSaleTotals()" style="font-size:12px; padding:8px; background:#0F172A; color:#3B82F6; font-weight:bold; border:1px solid #3B82F6; border-radius:6px; width:100%; box-sizing:border-box;">
                     </div>
                     <div class="form-group" style="margin:0;">
                         <label style="font-size:11px; color:#3B82F6; font-weight:700;">🚚 Tipo de Entrega</label>
                         <select id="sale_delivery_type" onchange="SalesManager.updateSaleTotals()" style="font-size:12px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; box-sizing:border-box;">
-                            <option value="own">🛵 Entregador Próprio (Caixa)</option>
-                            <option value="third_party">👤 Terceiros / Motoqueiro (Repasse)</option>
+                            <option value="own" ${deliveryTypeVal === 'own' ? 'selected' : ''}>🛵 Entregador Próprio (Caixa)</option>
+                            <option value="third_party" ${deliveryTypeVal === 'third_party' ? 'selected' : ''}>👤 Terceiros / Motoqueiro (Repasse)</option>
                         </select>
                     </div>
                 </div>
@@ -210,9 +230,9 @@ const SalesManager = {
                 <div class="form-group" style="margin-bottom:12px;">
                     <label style="font-size:11px; color:#94A3B8;">Forma de Pagamento *</label>
                     <select id="sale_payment_method" style="font-size:12px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; box-sizing:border-box;">
-                        <option value="Pix">⚡ Pix</option>
-                        <option value="Cartão">💳 Cartão de Débito/Crédito</option>
-                        <option value="Dinheiro">💵 Dinheiro (Em espécie)</option>
+                        <option value="Pix" ${paymentMethodVal === 'Pix' ? 'selected' : ''}>⚡ Pix</option>
+                        <option value="Cartão" ${paymentMethodVal === 'Cartão' ? 'selected' : ''}>💳 Cartão de Débito/Crédito</option>
+                        <option value="Dinheiro" ${paymentMethodVal === 'Dinheiro' ? 'selected' : ''}>💵 Dinheiro (Em espécie)</option>
                     </select>
                 </div>
 
@@ -254,7 +274,7 @@ const SalesManager = {
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; align-items:center; border-top:1px solid #334155; padding-top:6px;">
                         <div>
                             <label style="font-size:11px; color:#94A3B8;">Desconto (R$)</label>
-                            <input type="number" step="0.01" id="sale_discount_input" value="${this.draftForm?.discount || '0.00'}" oninput="SalesManager.updateSaleTotals()" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%; box-sizing:border-box;">
+                            <input type="number" step="0.01" id="sale_discount_input" value="${discountVal}" oninput="SalesManager.updateSaleTotals()" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%; box-sizing:border-box;">
                         </div>
                         <div>
                             <label style="font-size:11px; color:#10B981; font-weight:700;">Total a Cobrar</label>
@@ -273,19 +293,8 @@ const SalesManager = {
             openModal('💰 Nova Venda / Entrada Manual', modalBody);
         }
 
-        if (this.draftForm) {
-            if (document.getElementById('sale_phone')) document.getElementById('sale_phone').value = this.draftForm.phone;
-            if (document.getElementById('sale_client_name')) document.getElementById('sale_client_name').value = this.draftForm.clientName;
-            if (document.getElementById('sale_customer_select')) document.getElementById('sale_customer_select').value = this.draftForm.customerSelect;
-            if (document.getElementById('sale_address')) document.getElementById('sale_address').value = this.draftForm.address;
-            if (document.getElementById('sale_payment_method')) document.getElementById('sale_payment_method').value = this.draftForm.paymentMethod;
-            if (document.getElementById('sale_delivery_fee')) document.getElementById('sale_delivery_fee').value = this.draftForm.deliveryFee;
-            if (document.getElementById('sale_delivery_type')) document.getElementById('sale_delivery_type').value = this.draftForm.deliveryType;
-            if (document.getElementById('sale_discount_input')) document.getElementById('sale_discount_input').value = this.draftForm.discount;
-
-            if (this.draftForm.phone) {
-                this.lookupCustomerByPhone(this.draftForm.phone);
-            }
+        if (phoneVal) {
+            this.lookupCustomerByPhone(phoneVal, true);
         }
 
         this.renderSelectedItemsList();
@@ -442,7 +451,7 @@ const SalesManager = {
         this.openSaleModal(true);
     },
 
-    lookupCustomerByPhone(val) {
+    lookupCustomerByPhone(val, isRestoring = false) {
         const clean = String(val || '').replace(/\D/g, '');
         const alertBox = document.getElementById('sale_loyalty_alert');
 
@@ -461,8 +470,10 @@ const SalesManager = {
             const addressInput = document.getElementById('sale_address');
             const selectEl = document.getElementById('sale_customer_select');
 
-            if (nameInput) nameInput.value = customer.name || '';
-            if (addressInput) addressInput.value = customer.address || customer.delivery_address || '';
+            if (!isRestoring) {
+                if (nameInput && !nameInput.value.trim()) nameInput.value = customer.name || '';
+                if (addressInput && !addressInput.value.trim()) addressInput.value = customer.address || customer.delivery_address || '';
+            }
             if (selectEl) selectEl.value = customer.id || customer.name;
 
             this.displayLoyaltyAlert(customer);
@@ -593,7 +604,6 @@ const SalesManager = {
         const discount = parseFloat(document.getElementById('sale_discount_input')?.value) || 0;
         const deliveryType = document.getElementById('sale_delivery_type')?.value || 'own';
 
-        // Total cobrado do cliente no recibo/comanda
         const finalTotal = Math.max(0, subtotal + deliveryFee - discount);
 
         const subtotalEl = document.getElementById('sale_subtotal_display');
@@ -608,7 +618,7 @@ const SalesManager = {
         if (netInfoEl) {
             if (deliveryType === 'third_party' && deliveryFee > 0) {
                 const storeNet = Math.max(0, subtotal - discount);
-                netInfoEl.innerHTML = `ℹ️ <strong>Entregador Terceirizado:</strong> R$ ${deliveryFee.toFixed(2).replace('.', ',')} vai para o motoqueiro. Entra no caixa da loja: <strong style="color:#10B981;">R$ ${storeNet.toFixed(2).replace('.', ',')}</strong>`;
+                netInfoEl.innerHTML = `ℹ️ <strong>Entregador Terceirizado:</strong> R$ ${deliveryFee.toFixed(2).replace('.', ',')} repassado. Caixa da loja: <strong style="color:#10B981;">R$ ${storeNet.toFixed(2).replace('.', ',')}</strong>`;
             } else {
                 netInfoEl.innerHTML = `ℹ️ <strong>Entrega Própria:</strong> Valor integral entra no caixa da loja.`;
             }
@@ -644,9 +654,9 @@ const SalesManager = {
         const isRetroactive = (new Date() - orderDateObj) > (5 * 60 * 1000);
         const autoStatus = isRetroactive ? 'completed' : 'preparing';
 
-        // Faturamento líquido da loja (se for terceiro, exclui o frete do faturamento interno)
         const netStoreAmount = delivery_type === 'third_party' ? Math.max(0, subtotal - discount) : total;
 
+        // Objeto local completo para estado e localStorage
         const orderData = {
             id: orderId,
             client_name,
@@ -660,7 +670,7 @@ const SalesManager = {
             items: this.currentSaleItems,
             subtotal: subtotal > 0 ? subtotal : total,
             delivery_fee: delivery_fee,
-            delivery_type: delivery_type, // 'own' ou 'third_party'
+            delivery_type: delivery_type,
             discount: discount,
             total: total,
             net_amount: netStoreAmount,
@@ -669,25 +679,54 @@ const SalesManager = {
             created_at: orderDate
         };
 
-        let savedToCloud = false;
+        // Payload limpo estritamente alinhado às colunas nativas do Supabase para evitar erro 400
+        const supabasePayload = {
+            id: orderId,
+            client_name,
+            customer_name: client_name,
+            phone: phone || null,
+            customer_phone: phone || null,
+            address: address || null,
+            delivery_address: address || null,
+            order_type: delivery_fee > 0 ? 'delivery' : 'pickup',
+            payment_method: payment_method,
+            items: this.currentSaleItems,
+            subtotal: subtotal > 0 ? subtotal : total,
+            delivery_fee: delivery_fee,
+            discount: discount,
+            total: total,
+            status: autoStatus,
+            source: 'Manual',
+            created_at: orderDate
+        };
 
         try {
             if (typeof dbClient !== 'undefined') {
-                const { error } = await dbClient.from('orders').insert([orderData]);
-                if (!error) {
-                    savedToCloud = true;
-                } else {
-                    console.warn('Erro retornado pelo Supabase ao salvar frete:', error);
+                const { error } = await dbClient.from('orders').insert([supabasePayload]);
+                if (error) {
+                    console.error('Erro ao inserir pedido no Supabase:', error);
+                    if (typeof showToast === 'function') showToast(`Aviso banco: ${error.message}`, 'error');
                 }
 
                 if (phone || client_name !== 'Cliente Balcão') {
                     try {
-                        await dbClient.from('customers').upsert([{
+                        const cleanPhone = phone ? String(phone).replace(/\D/g, '') : '';
+                        const existingCustomer = (this.customersCache || []).find(c => {
+                            const cPhone = String(c.phone || c.whatsapp || '').replace(/\D/g, '');
+                            return cleanPhone && cPhone === cleanPhone;
+                        });
+
+                        const custPayload = {
+                            id: (existingCustomer && existingCustomer.id && !String(existingCustomer.id).startsWith('cust_')) 
+                                ? existingCustomer.id 
+                                : generateUUID(),
                             name: client_name,
                             phone: phone || null,
                             address: address !== 'Venda no Balcão' ? address : null,
                             last_order_at: orderDate
-                        }], { onConflict: 'phone' });
+                        };
+
+                        await dbClient.from('customers').upsert([custPayload]);
                     } catch (errCust) {
                         console.warn('Erro ao atualizar cadastro do cliente:', errCust);
                     }
@@ -730,6 +769,7 @@ const SalesManager = {
 
         if (typeof renderSalesList === 'function') renderSalesList();
         if (typeof renderDashboard === 'function') renderDashboard();
+        if (typeof CustomersManager !== 'undefined' && CustomersManager.fetchCustomers) CustomersManager.fetchCustomers();
         if (typeof OrdersManager !== 'undefined' && OrdersManager.fetchOrders) OrdersManager.fetchOrders();
     }
 };
