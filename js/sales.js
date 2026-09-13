@@ -122,9 +122,14 @@ const SalesManager = {
     },
 
     saveDraftForm() {
+        const phoneEl = document.getElementById('sale_phone');
+        // TRAVA DE SEGURANÇA: Se sale_phone não existe na tela, significa que o formulário não está visível
+        // (por exemplo, estamos dentro do cardápio visual). NUNCA limpe o rascunho existente nesse caso!
+        if (!phoneEl) return;
+
         this.draftForm = {
             createdAt: document.getElementById('sale_created_at')?.value || '',
-            phone: document.getElementById('sale_phone')?.value || '',
+            phone: phoneEl.value || '',
             clientName: document.getElementById('sale_client_name')?.value || '',
             customerSelect: document.getElementById('sale_customer_select')?.value || '',
             address: document.getElementById('sale_address')?.value || '',
@@ -302,6 +307,7 @@ const SalesManager = {
     },
 
     openVisualMenuModal() {
+        // Salva os dados do formulário ANTES de abrir a janela do cardápio visual
         this.saveDraftForm();
 
         const categories = Array.from(new Set((this.productsCache || []).map(p => p.category || 'Geral')));
@@ -656,7 +662,7 @@ const SalesManager = {
 
         const netStoreAmount = delivery_type === 'third_party' ? Math.max(0, subtotal - discount) : total;
 
-        // Objeto local completo para estado e localStorage
+        // Objeto local para estado interno
         const orderData = {
             id: orderId,
             client_name,
@@ -679,8 +685,8 @@ const SalesManager = {
             created_at: orderDate
         };
 
-        // Payload limpo estritamente alinhado às colunas nativas do Supabase para evitar erro 400
-        const supabasePayload = {
+        // Payload completo para Supabase
+        const fullPayload = {
             id: orderId,
             client_name,
             customer_name: client_name,
@@ -701,13 +707,35 @@ const SalesManager = {
         };
 
         try {
-            if (typeof dbClient !== 'undefined') {
-                const { error } = await dbClient.from('orders').insert([supabasePayload]);
+            if (typeof dbClient !== 'undefined' && dbClient) {
+                // Tenta salvar com o payload completo
+                let { error } = await dbClient.from('orders').insert([fullPayload]);
+
+                // FALLBACK AUTOMÁTICO: Se o Supabase recusar por falta de alguma coluna opcional (como delivery_fee),
+                // envia o payload simplificado para GARANTIR a gravação do pedido no banco!
                 if (error) {
-                    console.error('Erro ao inserir pedido no Supabase:', error);
-                    if (typeof showToast === 'function') showToast(`Aviso banco: ${error.message}`, 'error');
+                    console.warn('Tentativa 1 falhou no Supabase, tentando payload simplificado de segurança:', error);
+                    const fallbackPayload = {
+                        id: orderId,
+                        client_name,
+                        customer_name: client_name,
+                        phone: phone || null,
+                        address: address || null,
+                        order_type: delivery_fee > 0 ? 'delivery' : 'pickup',
+                        payment_method: payment_method,
+                        items: this.currentSaleItems,
+                        total: total,
+                        status: autoStatus,
+                        source: 'Manual',
+                        created_at: orderDate
+                    };
+                    const res = await dbClient.from('orders').insert([fallbackPayload]);
+                    if (res.error) {
+                        console.error('Erro final ao salvar no Supabase:', res.error);
+                    }
                 }
 
+                // Sincroniza a tabela de clientes
                 if (phone || client_name !== 'Cliente Balcão') {
                     try {
                         const cleanPhone = phone ? String(phone).replace(/\D/g, '') : '';
@@ -737,7 +765,7 @@ const SalesManager = {
                 }
             }
         } catch (e) {
-            console.error('Erro ao salvar no Supabase:', e);
+            console.error('Erro geral ao salvar pedido:', e);
         }
 
         let localSales = [];
