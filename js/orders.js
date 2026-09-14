@@ -1,4 +1,4 @@
-// js/orders.js - Gestão Completa de Pedidos com Total Diário no Cabeçalho
+// js/orders.js - Gestão Completa de Pedidos com Total Diário no Cabeçalho e Mensagens Detalhadas
 
 if (typeof window.escapeHtml !== 'function') {
     window.escapeHtml = function(text) {
@@ -384,6 +384,8 @@ const OrdersManager = {
 
         const subtotalVal = Number(o.subtotal || 0);
         const feeVal = Number(o.delivery_fee || 0);
+        const discountVal = Number(o.discount || 0);
+        const totalVal = Number(o.total || (subtotalVal + feeVal - discountVal));
 
         const bodyHtml = `
             <div style="background:#0F172A; padding:12px; border-radius:8px; margin-bottom:14px; border:1px solid #1E293B;">
@@ -426,9 +428,15 @@ const OrdersManager = {
                         </div>
                     </div>
                 ` : ''}
+                ${discountVal > 0 ? `
+                    <div style="display:flex; justify-content:space-between; font-size:12px; color:#EF4444; margin-bottom:6px;">
+                        <span>Desconto Aplicado:</span>
+                        <span>- R$ ${discountVal.toFixed(2).replace('.', ',')}</span>
+                    </div>
+                ` : ''}
                 <div style="display:flex; justify-content:space-between; font-size:15px; font-weight:800; color:#10B981; border-top:1px dashed #334155; padding-top:6px;">
                     <span>TOTAL DO PEDIDO:</span>
-                    <span>R$ ${Number(o.total || (subtotalVal + feeVal)).toFixed(2).replace('.', ',')}</span>
+                    <span>R$ ${totalVal.toFixed(2).replace('.', ',')}</span>
                 </div>
             </div>
 
@@ -469,7 +477,8 @@ const OrdersManager = {
         if (!o) return;
 
         const subtotal = Number(o.subtotal || 0);
-        const newTotal = subtotal + newFee;
+        const discount = Number(o.discount || 0);
+        const newTotal = Math.max(0, subtotal + newFee - discount);
 
         try {
             if (typeof dbClient !== 'undefined') {
@@ -518,13 +527,25 @@ const OrdersManager = {
             try { items = JSON.parse(items); } catch(e) { items = []; }
         }
 
+        // Formatação individual e transparente de cada item com seu valor
         const itemsTxt = (Array.isArray(items) && items.length > 0)
-            ? items.map(i => `• ${i.qty}x ${i.name}`).join('\n')
+            ? items.map(i => {
+                const qty = Number(i.qty || i.quantity || 1);
+                const name = i.name || i.title || 'Item';
+                const unitPrice = Number(i.unit_price || i.price || 0);
+                const itemTotal = Number(i.total || (qty * unitPrice) || 0);
+                const priceStr = itemTotal > 0 ? ` — R$ ${itemTotal.toFixed(2).replace('.', ',')}` : '';
+                const notesStr = i.notes ? `\n   └ 📌 ${i.notes}` : '';
+                return `• ${qty}x ${name}${priceStr}${notesStr}`;
+            }).join('\n')
             : '• Itens do pedido';
 
-        const subtotalVal = Number(o.subtotal || 0).toFixed(2).replace('.', ',');
-        const feeVal = Number(o.delivery_fee || 0).toFixed(2).replace('.', ',');
-        const totalVal = Number(o.total || (Number(o.subtotal || 0) + Number(o.delivery_fee || 0))).toFixed(2).replace('.', ',');
+        const subtotalVal = Number(o.subtotal || 0);
+        const feeVal = Number(o.delivery_fee || 0);
+        const discountVal = Number(o.discount || 0);
+        const totalVal = Number(o.total || (subtotalVal + feeVal - discountVal));
+
+        const fmt = (v) => Number(v || 0).toFixed(2).replace('.', ',');
         const payMethod = o.payment_method || o.reference || 'Não informado';
         const isPix = payMethod.toLowerCase().includes('pix');
 
@@ -541,22 +562,33 @@ const OrdersManager = {
             const address = o.address || o.delivery_address || 'A combinar';
             const number = o.number || 'S/N';
 
+            let financeBlock = `🛒 *Subtotal:* R$ ${fmt(subtotalVal)}\n` +
+                               `🛵 *Taxa de Entrega:* R$ ${fmt(feeVal)}\n`;
+            if (discountVal > 0) {
+                financeBlock += `🏷️ *Desconto:* -R$ ${fmt(discountVal)}\n`;
+            }
+            financeBlock += `💰 *TOTAL FINAL:* R$ ${fmt(totalVal)}`;
+
             msg = `Olá, *${firstName}*! Confirmamos o seu pedido com muito carinho! 🥟✨\n\n` +
                   `📋 *ITENS DO PEDIDO:*\n${itemsTxt}\n\n` +
                   `═══════════════════════\n` +
-                  `💵 *Subtotal:* R$ ${subtotalVal}\n` +
-                  `🛵 *Taxa de Entrega:* R$ ${feeVal}\n` +
-                  `💰 *TOTAL FINAL:* R$ ${totalVal}\n` +
+                  `${financeBlock}\n` +
                   `💳 *Pagamento:* ${payMethod}\n` +
                   `📍 *Entrega em:* ${address}, Nº ${number}\n` +
                   `${pixSection}\n` +
                   `Por favor, confira os dados acima. Se estiver tudo certinho, já colocaremos seu pedido em produção!\n\n` +
                   `_– Equipe ${storeName}_`;
         } else {
+            let financeBlock = `🛒 *Subtotal dos Itens:* R$ ${fmt(subtotalVal)}\n`;
+            if (discountVal > 0) {
+                financeBlock += `🏷️ *Desconto:* -R$ ${fmt(discountVal)}\n`;
+            }
+            financeBlock += `💰 *TOTAL FINAL:* R$ ${fmt(totalVal)}`;
+
             msg = `Olá, *${firstName}*! Recebemos seu pedido para retirada! 🏪✨\n\n` +
                   `📋 *ITENS DO PEDIDO:*\n${itemsTxt}\n\n` +
                   `═══════════════════════\n` +
-                  `💰 *TOTAL DOS ITENS:* R$ ${subtotalVal}\n` +
+                  `${financeBlock}\n` +
                   `💳 *Pagamento:* ${payMethod}\n` +
                   `${pixSection}\n` +
                   `Já estamos preparando tudo com capricho. Te avisaremos aqui no Whats assim que estiver prontinho para você vir buscar!\n\n` +
@@ -721,7 +753,8 @@ const OrdersManager = {
 
             const subtotalVal = Number(o.subtotal || 0).toFixed(2).replace('.', ',');
             const feeVal = Number(o.delivery_fee || 0).toFixed(2).replace('.', ',');
-            const totalVal = Number(o.total || (Number(o.subtotal || 0) + Number(o.delivery_fee || 0))).toFixed(2).replace('.', ',');
+            const discountVal = Number(o.discount || 0).toFixed(2).replace('.', ',');
+            const totalVal = Number(o.total || (Number(o.subtotal || 0) + Number(o.delivery_fee || 0) - Number(o.discount || 0))).toFixed(2).replace('.', ',');
 
             receiptEl.innerHTML = `
                 <div style="font-family:'Courier New', Courier, monospace; width:100%; max-width:300px; margin:0 auto; padding:10px; color:#000; background:#fff;">
@@ -742,7 +775,8 @@ const OrdersManager = {
 
                     <div style="border-bottom:1px dashed #000; margin:8px 0;"></div>
                     <div style="font-size:11px;">Subtotal: R$ ${subtotalVal}</div>
-                    <div style="font-size:11px;">Taxa Entrega: R$ ${feeVal}</div>
+                    ${o.order_type === 'delivery' ? `<div style="font-size:11px;">Taxa Entrega: R$ ${feeVal}</div>` : ''}
+                    ${Number(o.discount || 0) > 0 ? `<div style="font-size:11px;">Desconto: -R$ ${discountVal}</div>` : ''}
                     <div style="font-size:15px; font-weight:bold; margin-top:4px;">TOTAL: R$ ${totalVal}</div>
 
                     <div style="border-bottom:1px dashed #000; margin:8px 0;"></div>
