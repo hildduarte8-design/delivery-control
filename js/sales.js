@@ -1,4 +1,4 @@
-// js/sales.js - Vendas Manuais de Balcão (Busca por WhatsApp + Fidelidade + Cardápio Visual + Controle de Frete)
+// js/sales.js - Vendas Manuais de Balcão (Autocomplete Inteligente de Clientes + Fidelidade + Cardápio Visual + Controle de Frete)
 
 if (typeof window.escapeHtml !== 'function') {
     window.escapeHtml = function(text) {
@@ -32,6 +32,7 @@ const SalesManager = {
     productsCache: [],
     draftForm: null,
     selectedCategory: 'all',
+    selectedCustomer: null,
 
     async getCustomersList() {
         let list = [];
@@ -123,15 +124,13 @@ const SalesManager = {
 
     saveDraftForm() {
         const phoneEl = document.getElementById('sale_phone');
-        // TRAVA DE SEGURANÇA: Se sale_phone não existe na tela, significa que o formulário não está visível
-        // (por exemplo, estamos dentro do cardápio visual). NUNCA limpe o rascunho existente nesse caso!
         if (!phoneEl) return;
 
         this.draftForm = {
             createdAt: document.getElementById('sale_created_at')?.value || '',
+            searchQuery: document.getElementById('sale_customer_search_input')?.value || '',
             phone: phoneEl.value || '',
             clientName: document.getElementById('sale_client_name')?.value || '',
-            customerSelect: document.getElementById('sale_customer_select')?.value || '',
             address: document.getElementById('sale_address')?.value || '',
             paymentMethod: document.getElementById('sale_payment_method')?.value || 'Pix',
             deliveryFee: document.getElementById('sale_delivery_fee')?.value || '0.00',
@@ -144,6 +143,7 @@ const SalesManager = {
         if (!isRestoring) {
             this.currentSaleItems = [];
             this.draftForm = null;
+            this.selectedCustomer = null;
         }
 
         const customers = await this.getCustomersList();
@@ -156,6 +156,7 @@ const SalesManager = {
         now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
         const defaultDateTime = this.draftForm?.createdAt || now.toISOString().slice(0, 16);
 
+        const searchQueryVal = escapeHtml(this.draftForm?.searchQuery || '');
         const phoneVal = escapeHtml(this.draftForm?.phone || '');
         const clientNameVal = escapeHtml(this.draftForm?.clientName || '');
         const addressVal = escapeHtml(this.draftForm?.address || '');
@@ -163,17 +164,6 @@ const SalesManager = {
         const discountVal = escapeHtml(this.draftForm?.discount || '0.00');
         const paymentMethodVal = this.draftForm?.paymentMethod || 'Pix';
         const deliveryTypeVal = this.draftForm?.deliveryType || 'own';
-        const customerSelectVal = this.draftForm?.customerSelect || '';
-
-        const customerOptions = customers.map(c => {
-            const name = escapeHtml(c.name || 'Cliente');
-            const phone = escapeHtml(c.phone || c.whatsapp || '');
-            const stamps = Number(c.loyalty_stamps || c.loyaltyStamps || 0);
-            const badge = stamps >= 10 ? ' 🎁 (PASTEL GRÁTIS!)' : stamps > 0 ? ` 🎟️ (${stamps}/10)` : '';
-            const selected = String(c.id || name) === customerSelectVal ? 'selected' : '';
-
-            return `<option value="${escapeHtml(c.id || name)}" ${selected}>${name} ${phone ? '(' + phone + ')' : ''}${badge}</option>`;
-        }).join('');
 
         const productOptions = products.map(p => {
             const price = Number(p.price || 0);
@@ -189,28 +179,30 @@ const SalesManager = {
                     <input type="datetime-local" id="sale_created_at" value="${defaultDateTime}" style="font-size:12px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; box-sizing:border-box;">
                 </div>
 
-                <!-- WHATSAPP / TELEFONE -->
-                <div class="form-group" style="margin-bottom:10px;">
-                    <label style="font-size:12px; color:#25D366; font-weight:800;">📱 WhatsApp / Telefone do Cliente *</label>
-                    <input type="tel" id="sale_phone" value="${phoneVal}" placeholder="Digite o DDD + Número (ex: 33999999999)" oninput="SalesManager.lookupCustomerByPhone(this.value)" autofocus style="font-size:14px; font-weight:bold; padding:10px; background:#0F172A; color:#25D366; border:2px solid #25D366; border-radius:8px; width:100%; box-sizing:border-box;">
+                <!-- BUSCA UNIFICADA POR AUTOCOMPLETE -->
+                <div class="form-group" style="margin-bottom:10px; position:relative;">
+                    <label style="font-size:12px; color:#3B82F6; font-weight:800;">🔍 Buscar Cliente (Nome ou WhatsApp)</label>
+                    <input type="text" id="sale_customer_search_input" value="${searchQueryVal}" placeholder="Digite o Nome ou Número (ex: Maria ou 3399...)" oninput="SalesManager.handleCustomerSearch(this.value)" autocomplete="off" autofocus style="font-size:13px; font-weight:bold; padding:10px; background:#0F172A; color:#F1F5F9; border:2px solid #3B82F6; border-radius:8px; width:100%; box-sizing:border-box;">
+                    
+                    <!-- DROPDOWN FLUTUANTE DE RESULTADOS -->
+                    <div id="sale_customer_autocomplete_results" style="display:none; position:absolute; top:100%; left:0; right:0; background:#1E293B; border:1px solid #3B82F6; border-radius:0 0 8px 8px; max-height:200px; overflow-y:auto; z-index:9999; box-shadow:0 8px 20px rgba(0,0,0,0.6);">
+                    </div>
                 </div>
 
-                <!-- ALERTA DE FIDELIDADE / NOVO CLIENTE -->
-                <div id="sale_loyalty_alert" style="display:none; margin-bottom:10px; padding:8px 10px; border-radius:6px; font-size:12px; font-weight:bold;"></div>
-
+                <!-- CAMPOS DE DADOS DO CLIENTE -->
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:10px;">
                     <div class="form-group" style="margin:0;">
                         <label style="font-size:11px; color:#94A3B8;">Nome do Cliente *</label>
                         <input type="text" id="sale_client_name" value="${clientNameVal}" placeholder="Ex: Maria Souza" style="font-size:12px; padding:8px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; width:100%; box-sizing:border-box;">
                     </div>
                     <div class="form-group" style="margin:0;">
-                        <label style="font-size:11px; color:#94A3B8;">Buscar da Lista</label>
-                        <select id="sale_customer_select" onchange="SalesManager.onSelectCustomer(this.value)" style="font-size:12px; padding:8px; width:100%; background:#0F172A; color:#F1F5F9; border:1px solid #334155; border-radius:6px; box-sizing:border-box;">
-                            <option value="">-- Selecionar --</option>
-                            ${customerOptions}
-                        </select>
+                        <label style="font-size:11px; color:#25D366; font-weight:700;">📱 WhatsApp / Telefone *</label>
+                        <input type="tel" id="sale_phone" value="${phoneVal}" placeholder="DDD + Número" oninput="SalesManager.lookupCustomerByPhone(this.value)" style="font-size:12px; font-weight:bold; padding:8px; background:#0F172A; color:#25D366; border:1px solid #334155; border-radius:6px; width:100%; box-sizing:border-box;">
                     </div>
                 </div>
+
+                <!-- ALERTA DE FIDELIDADE / NOVO CLIENTE -->
+                <div id="sale_loyalty_alert" style="display:none; margin-bottom:10px; padding:8px 10px; border-radius:6px; font-size:12px; font-weight:bold;"></div>
 
                 <div class="form-group" style="margin-bottom:10px;">
                     <label style="font-size:11px; color:#94A3B8;">Endereço de Entrega / Observação</label>
@@ -302,12 +294,95 @@ const SalesManager = {
             this.lookupCustomerByPhone(phoneVal, true);
         }
 
+        // Fecha o dropdown de autocomplete ao clicar fora dele
+        document.addEventListener('click', (e) => {
+            const resultsBox = document.getElementById('sale_customer_autocomplete_results');
+            const searchInput = document.getElementById('sale_customer_search_input');
+            if (resultsBox && searchInput && !resultsBox.contains(e.target) && e.target !== searchInput) {
+                resultsBox.style.display = 'none';
+            }
+        });
+
         this.renderSelectedItemsList();
         this.updateSaleTotals();
     },
 
+    handleCustomerSearch(query) {
+        const resultsBox = document.getElementById('sale_customer_autocomplete_results');
+        if (!resultsBox) return;
+
+        const term = String(query || '').toLowerCase().trim();
+        const cleanTerm = term.replace(/\D/g, '');
+
+        if (term.length < 2) {
+            resultsBox.style.display = 'none';
+            return;
+        }
+
+        const matches = (this.customersCache || []).filter(c => {
+            const name = String(c.name || '').toLowerCase();
+            const phone = String(c.phone || c.whatsapp || '').replace(/\D/g, '');
+            return name.includes(term) || (cleanTerm && phone.includes(cleanTerm));
+        });
+
+        if (matches.length === 0) {
+            resultsBox.innerHTML = `
+                <div style="padding:10px; color:#94A3B8; font-size:12px; text-align:center;">
+                    ✨ <strong>Nenhum cliente encontrado.</strong><br>Continue preenchendo os dados abaixo para cadastrar.
+                </div>
+            `;
+            resultsBox.style.display = 'block';
+            return;
+        }
+
+        resultsBox.innerHTML = matches.slice(0, 10).map((c, idx) => {
+            const safeName = escapeHtml(c.name || 'Cliente');
+            const safePhone = escapeHtml(c.phone || c.whatsapp || 'Sem telefone');
+            const safeAddress = escapeHtml(c.address || c.delivery_address || '');
+            const stamps = Number(c.loyalty_stamps || c.loyaltyStamps || 0);
+            const badge = stamps >= 10 ? '🎁 PASTEL GRÁTIS!' : stamps > 0 ? `🎟️ ${stamps}/10` : '';
+
+            return `
+                <div onclick="SalesManager.selectCustomerFromAutocomplete(${idx})" style="padding:10px 12px; border-bottom:1px solid #334155; cursor:pointer; font-size:12px; transition:background 0.15s;" onmouseover="this.style.background='#0F172A'" onmouseout="this.style.background='transparent'">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <strong style="color:#F1F5F9; font-size:13px;">${safeName}</strong>
+                        ${badge ? `<span style="font-size:10px; background:#0F172A; color:${stamps >= 10 ? '#10B981' : '#F59E0B'}; padding:2px 6px; border-radius:10px; font-weight:bold;">${badge}</span>` : ''}
+                    </div>
+                    <div style="color:#25D366; font-size:11px; font-weight:bold; margin-top:2px;">📱 ${safePhone}</div>
+                    ${safeAddress ? `<div style="color:#94A3B8; font-size:11px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; margin-top:2px;">📍 ${safeAddress}</div>` : ''}
+                </div>
+            `;
+        }).join('');
+
+        // Salva os resultados filtrados temporariamente
+        this.currentAutocompleteMatches = matches;
+        resultsBox.style.display = 'block';
+    },
+
+    selectCustomerFromAutocomplete(index) {
+        const matches = this.currentAutocompleteMatches || [];
+        const customer = matches[index];
+        if (!customer) return;
+
+        this.selectedCustomer = customer;
+
+        const searchInput = document.getElementById('sale_customer_search_input');
+        const nameInput = document.getElementById('sale_client_name');
+        const phoneInput = document.getElementById('sale_phone');
+        const addressInput = document.getElementById('sale_address');
+        const resultsBox = document.getElementById('sale_customer_autocomplete_results');
+
+        if (searchInput) searchInput.value = customer.name || '';
+        if (nameInput) nameInput.value = customer.name || '';
+        if (phoneInput) phoneInput.value = customer.phone || customer.whatsapp || '';
+        if (addressInput) addressInput.value = customer.address || customer.delivery_address || '';
+
+        if (resultsBox) resultsBox.style.display = 'none';
+
+        this.displayLoyaltyAlert(customer);
+    },
+
     openVisualMenuModal() {
-        // Salva os dados do formulário ANTES de abrir a janela do cardápio visual
         this.saveDraftForm();
 
         const categories = Array.from(new Set((this.productsCache || []).map(p => p.category || 'Geral')));
@@ -474,13 +549,11 @@ const SalesManager = {
         if (customer) {
             const nameInput = document.getElementById('sale_client_name');
             const addressInput = document.getElementById('sale_address');
-            const selectEl = document.getElementById('sale_customer_select');
 
             if (!isRestoring) {
                 if (nameInput && !nameInput.value.trim()) nameInput.value = customer.name || '';
                 if (addressInput && !addressInput.value.trim()) addressInput.value = customer.address || customer.delivery_address || '';
             }
-            if (selectEl) selectEl.value = customer.id || customer.name;
 
             this.displayLoyaltyAlert(customer);
         } else if (clean.length >= 10) {
@@ -519,23 +592,6 @@ const SalesManager = {
             alertBox.style.color = '#94A3B8';
             alertBox.innerHTML = `👤 Cliente encontrado! Sem carimbos no momento.`;
         }
-    },
-
-    onSelectCustomer(val) {
-        if (!val || !this.customersCache) return;
-
-        const customer = this.customersCache.find(c => String(c.id) === String(val) || String(c.name) === String(val));
-        if (!customer) return;
-
-        const nameInput = document.getElementById('sale_client_name');
-        const phoneInput = document.getElementById('sale_phone');
-        const addressInput = document.getElementById('sale_address');
-
-        if (nameInput) nameInput.value = customer.name || '';
-        if (phoneInput) phoneInput.value = customer.phone || customer.whatsapp || '';
-        if (addressInput) addressInput.value = customer.address || customer.delivery_address || '';
-
-        this.displayLoyaltyAlert(customer);
     },
 
     addItemToSale() {
@@ -662,7 +718,6 @@ const SalesManager = {
 
         const netStoreAmount = delivery_type === 'third_party' ? Math.max(0, subtotal - discount) : total;
 
-        // Objeto local para estado interno
         const orderData = {
             id: orderId,
             client_name,
@@ -685,7 +740,6 @@ const SalesManager = {
             created_at: orderDate
         };
 
-        // Payload completo para Supabase
         const fullPayload = {
             id: orderId,
             client_name,
@@ -708,11 +762,8 @@ const SalesManager = {
 
         try {
             if (typeof dbClient !== 'undefined' && dbClient) {
-                // Tenta salvar com o payload completo
                 let { error } = await dbClient.from('orders').insert([fullPayload]);
 
-                // FALLBACK AUTOMÁTICO: Se o Supabase recusar por falta de alguma coluna opcional (como delivery_fee),
-                // envia o payload simplificado para GARANTIR a gravação do pedido no banco!
                 if (error) {
                     console.warn('Tentativa 1 falhou no Supabase, tentando payload simplificado de segurança:', error);
                     const fallbackPayload = {
@@ -735,7 +786,6 @@ const SalesManager = {
                     }
                 }
 
-                // Sincroniza a tabela de clientes
                 if (phone || client_name !== 'Cliente Balcão') {
                     try {
                         const cleanPhone = phone ? String(phone).replace(/\D/g, '') : '';
