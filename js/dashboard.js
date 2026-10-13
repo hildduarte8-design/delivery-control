@@ -1,22 +1,3 @@
-Abaixo está o arquivo **`js/dashboard.js`** totalmente atualizado e corrigido.
-
-### O que foi implementado:
-
-1. **Navegação e Filtro por Mês no Dashboard:**
-* O dashboard agora possui um **Seletor de Mês Interativo** no card de Saldo/Faturamento Mensal (com setinhas `◄` e `►` e seletor de calendário `<input type="month">`).
-* Você pode navegar entre os meses anteriores e futuros para analisar o faturamento, gastos e lucro líquido **mês a mês**, sem misturar os dados com o histórico acumulado de meses passados.
-
-
-2. **Correções de Quebra de Página no PDF do Cardápio (`exportMenuPDF`):**
-* Aplicamos `break-inside: avoid`, `page-break-inside: avoid` e `break-after: avoid` nos itens e nos títulos das categorias. Isso impede que cards de produtos ou nomes de categorias fiquem cortados no meio entre duas páginas.
-
-
-
----
-
-### Código Completo Atualizado (`js/dashboard.js`)
-
-```javascript
 // js/dashboard.js - Painel Principal, Navegação Mensal de Faturamento e Exportação de Cardápio em PDF
 
 if (typeof window.escapeHtml !== 'function') {
@@ -28,15 +9,15 @@ if (typeof window.escapeHtml !== 'function') {
 }
 
 function parseDateSafe(dateInput) {
-    if (!dateInput) return new Date();
+    if (!dateInput) return null;
     if (dateInput instanceof Date) return dateInput;
     const isoStr = String(dateInput).replace(' ', 'T');
     const d = new Date(isoStr);
-    return isNaN(d.getTime()) ? new Date() : d;
+    return isNaN(d.getTime()) ? null : d;
 }
 
 function getIFoodWeeklyCycle(referenceDate = new Date()) {
-    const d = parseDateSafe(referenceDate);
+    const d = parseDateSafe(referenceDate) || new Date();
     d.setHours(0, 0, 0, 0);
 
     const dayOfWeek = d.getDay();
@@ -68,13 +49,19 @@ async function exportMenuPDF() {
 
         let products = [];
         if (typeof dbClient !== 'undefined' && dbClient) {
-            const { data, error } = await dbClient
-                .from('products')
-                .select('*')
-                .eq('is_active', true)
-                .order('display_order', { ascending: true });
-            if (!error && data) products = data;
-        } else if (window.currentAdminProducts) {
+            try {
+                const { data, error } = await dbClient
+                    .from('products')
+                    .select('*')
+                    .eq('is_active', true)
+                    .order('display_order', { ascending: true });
+                if (!error && data) products = data;
+            } catch (e) {
+                console.warn('Erro ao buscar produtos para PDF:', e);
+            }
+        }
+        
+        if (products.length === 0 && window.currentAdminProducts) {
             products = window.currentAdminProducts.filter(p => p.is_active);
         }
 
@@ -186,16 +173,49 @@ async function renderDashboard() {
         let orders = [];
         let expenses = [];
 
+        // 1. Busca Pedidos do Supabase
         if (typeof dbClient !== 'undefined' && dbClient) {
-            const [ordersRes, expRes] = await Promise.all([
-                dbClient.from('orders').select('*').order('created_at', { ascending: false }),
-                dbClient.from('expenses').select('*')
-            ]);
-            orders = ordersRes.data || [];
-            expenses = expRes.data || [];
-        } else if (typeof state !== 'undefined') {
-            orders = state.sales || state.orders || [];
-            expenses = [...(state.expenses?.fixed || []), ...(state.expenses?.logistics || [])];
+            try {
+                const { data: oData, error: oErr } = await dbClient.from('orders').select('*').order('created_at', { ascending: false });
+                if (!oErr && oData) orders = oData;
+            } catch (errO) {
+                console.warn('Erro ao carregar orders do Supabase:', errO);
+            }
+
+            // 2. Busca Gastos do Supabase (Isolado para não travar em caso de erro)
+            try {
+                const { data: eData, error: eErr } = await dbClient.from('expenses').select('*');
+                if (!eErr && eData) expenses = eData;
+            } catch (errE) {
+                console.warn('Tabela de expenses não encontrada ou inacessível no Supabase:', errE);
+            }
+        }
+
+        // FALLBACK LOCAL: Se não vier nada do Supabase, lê do estado/localStorage
+        if (orders.length === 0) {
+            if (typeof state !== 'undefined' && Array.isArray(state.orders) && state.orders.length > 0) {
+                orders = state.orders;
+            } else if (typeof state !== 'undefined' && Array.isArray(state.sales) && state.sales.length > 0) {
+                orders = state.sales;
+            } else {
+                try {
+                    orders = JSON.parse(localStorage.getItem('dly_orders') || localStorage.getItem('dly_sales') || '[]');
+                } catch (e) {
+                    orders = [];
+                }
+            }
+        }
+
+        if (expenses.length === 0) {
+            if (typeof state !== 'undefined' && state.expenses) {
+                expenses = [...(state.expenses.fixed || []), ...(state.expenses.logistics || [])];
+            } else {
+                try {
+                    expenses = JSON.parse(localStorage.getItem('dly_expenses') || '[]');
+                } catch (e) {
+                    expenses = [];
+                }
+            }
         }
 
         const now = new Date();
@@ -204,14 +224,15 @@ async function renderDashboard() {
         // Descarta pedidos cancelados de todos os cálculos
         const validOrders = orders.filter(o => o.status !== 'cancelled');
 
-        // Inicializa o mês selecionado caso não esteja definido
-        if (!window.dashboardSelectedMonth) {
+        // Garante um mês selecionado válido
+        if (!window.dashboardSelectedMonth || typeof window.dashboardSelectedMonth !== 'string' || !window.dashboardSelectedMonth.includes('-')) {
             window.dashboardSelectedMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         }
 
         // 1. Entradas de Hoje
         const todayOrders = validOrders.filter(o => {
             const orderDate = parseDateSafe(o.created_at || o.date);
+            if (!orderDate) return false;
             const orderDateStr = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${String(orderDate.getDate()).padStart(2, '0')}`;
             return orderDateStr === todayStr;
         });
@@ -221,6 +242,7 @@ async function renderDashboard() {
         const todayExp = expenses.filter(e => {
             const dateVal = e.expense_date || e.created_at || e.date;
             const expDate = parseDateSafe(dateVal);
+            if (!expDate) return false;
             const expDateStr = `${expDate.getFullYear()}-${String(expDate.getMonth() + 1).padStart(2, '0')}-${String(expDate.getDate()).padStart(2, '0')}`;
             return expDateStr === todayStr;
         });
@@ -246,12 +268,12 @@ async function renderDashboard() {
 
         const weekOrders = validOrders.filter(o => {
             const d = parseDateSafe(o.created_at || o.date);
-            return d >= cycleStart && d <= cycleEnd;
+            return d && d >= cycleStart && d <= cycleEnd;
         });
 
         const weekExp = expenses.filter(e => {
             const d = parseDateSafe(e.expense_date || e.created_at || e.date);
-            return d >= cycleStart && d <= cycleEnd;
+            return d && d >= cycleStart && d <= cycleEnd;
         });
 
         const weekInVal = weekOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
@@ -280,18 +302,24 @@ async function renderDashboard() {
         }
 
         // 5. Saldo e Faturamento do Mês Selecionado (Com Filtro/Navegação por Mês)
-        const [selYear, selMonth] = window.dashboardSelectedMonth.split('-').map(Number);
+        let [selYear, selMonth] = window.dashboardSelectedMonth.split('-').map(Number);
+        if (isNaN(selYear) || isNaN(selMonth) || selMonth < 1 || selMonth > 12) {
+            selYear = now.getFullYear();
+            selMonth = now.getMonth() + 1;
+            window.dashboardSelectedMonth = `${selYear}-${String(selMonth).padStart(2, '0')}`;
+        }
+
         const startOfMonth = new Date(selYear, selMonth - 1, 1, 0, 0, 0, 0);
         const endOfMonth = new Date(selYear, selMonth, 0, 23, 59, 59, 999);
 
         const monthOrders = validOrders.filter(o => {
             const d = parseDateSafe(o.created_at || o.date);
-            return d >= startOfMonth && d <= endOfMonth;
+            return d && d >= startOfMonth && d <= endOfMonth;
         });
 
         const monthExp = expenses.filter(e => {
             const d = parseDateSafe(e.expense_date || e.created_at || e.date);
-            return d >= startOfMonth && d <= endOfMonth;
+            return d && d >= startOfMonth && d <= endOfMonth;
         });
 
         const monthInVal = monthOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
@@ -338,7 +366,8 @@ async function renderDashboard() {
                 movList.innerHTML = '<div style="color:#94A3B8; text-align:center; padding:15px; font-size:12px;">Nenhuma movimentação recente</div>';
             } else {
                 movList.innerHTML = recentOrders.map(o => {
-                    const timeStr = parseDateSafe(o.created_at || o.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                    const d = parseDateSafe(o.created_at || o.date);
+                    const timeStr = d ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
                     const valFormatted = Number(o.total || o.amount || 0).toFixed(2).replace('.', ',');
                     return `
                         <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #1E293B;">
@@ -353,13 +382,19 @@ async function renderDashboard() {
             }
         }
 
-        // 7. Renderiza Analytics
+        // 7. Renderiza Analytics de forma isolada
         if (window.AnalyticsManager && typeof window.AnalyticsManager.render === 'function') {
-            window.AnalyticsManager.render(orders);
+            try {
+                window.AnalyticsManager.render(orders);
+            } catch (errAnalytics) {
+                console.warn('Erro ao renderizar Analytics:', errAnalytics);
+                const analyticsEl = document.getElementById('analyticsContainer') || document.querySelector('[data-analytics-container]');
+                if (analyticsEl) analyticsEl.innerHTML = '<div style="color:#94A3B8; font-size:11px; padding:10px; text-align:center;">Estatísticas temporariamente indisponíveis.</div>';
+            }
         }
 
     } catch (e) {
-        console.error('Erro ao renderizar Dashboard:', e);
+        console.error('Erro geral ao renderizar Dashboard:', e);
     }
 }
 
@@ -370,5 +405,3 @@ window.exportMenuPDF = exportMenuPDF;
 document.addEventListener('DOMContentLoaded', () => {
     renderDashboard();
 });
-
-```
