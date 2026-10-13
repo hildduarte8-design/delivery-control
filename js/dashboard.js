@@ -1,4 +1,23 @@
-// js/dashboard.js - Painel Principal, Fechamento Financeiro e Exportação de Cardápio em PDF
+Abaixo está o arquivo **`js/dashboard.js`** totalmente atualizado e corrigido.
+
+### O que foi implementado:
+
+1. **Navegação e Filtro por Mês no Dashboard:**
+* O dashboard agora possui um **Seletor de Mês Interativo** no card de Saldo/Faturamento Mensal (com setinhas `◄` e `►` e seletor de calendário `<input type="month">`).
+* Você pode navegar entre os meses anteriores e futuros para analisar o faturamento, gastos e lucro líquido **mês a mês**, sem misturar os dados com o histórico acumulado de meses passados.
+
+
+2. **Correções de Quebra de Página no PDF do Cardápio (`exportMenuPDF`):**
+* Aplicamos `break-inside: avoid`, `page-break-inside: avoid` e `break-after: avoid` nos itens e nos títulos das categorias. Isso impede que cards de produtos ou nomes de categorias fiquem cortados no meio entre duas páginas.
+
+
+
+---
+
+### Código Completo Atualizado (`js/dashboard.js`)
+
+```javascript
+// js/dashboard.js - Painel Principal, Navegação Mensal de Faturamento e Exportação de Cardápio em PDF
 
 if (typeof window.escapeHtml !== 'function') {
     window.escapeHtml = function(text) {
@@ -34,9 +53,18 @@ function getIFoodWeeklyCycle(referenceDate = new Date()) {
     return { cycleStart, cycleEnd };
 }
 
+// Estado global para controle do mês selecionado no Dashboard (Formato YYYY-MM)
+window.dashboardSelectedMonth = window.dashboardSelectedMonth || null;
+
+function selectDashboardMonth(monthStr) {
+    if (!monthStr) return;
+    window.dashboardSelectedMonth = monthStr;
+    renderDashboard();
+}
+
 async function exportMenuPDF() {
     try {
-        if (typeof showToast === 'function') showToast('⌛ Gerando PDF do cardápio ampliado...', 'info');
+        if (typeof showToast === 'function') showToast('⌛ Gerando PDF do cardápio...', 'info');
 
         let products = [];
         if (typeof dbClient !== 'undefined' && dbClient) {
@@ -62,9 +90,9 @@ async function exportMenuPDF() {
             grouped[cat].push(p);
         });
 
-        // Container com preenchimento ajustado e fonte base bem visível
+        // Container A4 com regras CSS de proteção contra cortes de página
         const pdfContainer = document.createElement('div');
-        pdfContainer.style.cssText = 'padding: 8px; font-family: Arial, sans-serif; color: #1E293B; background: #FFFFFF; width: 100%; box-sizing: border-box;';
+        pdfContainer.style.cssText = 'padding: 12px; font-family: Arial, sans-serif; color: #1E293B; background: #FFFFFF; width: 100%; box-sizing: border-box;';
 
         let categoriesHtml = '';
         for (const [catName, catProds] of Object.entries(grouped)) {
@@ -74,21 +102,20 @@ async function exportMenuPDF() {
                 const finalPrice = discount > 0 ? originalPrice * (1 - discount / 100) : originalPrice;
                 const safeDesc = p.description ? escapeHtml(p.description) : '';
                 
-                // Foto ampliada para 85px x 85px com cantos arredondados
                 const imgHtml = p.image_url 
-                    ? `<img src="${escapeHtml(p.image_url)}" style="width: 85px; height: 85px; border-radius: 10px; object-fit: cover; flex-shrink: 0;" crossorigin="anonymous">` 
+                    ? `<img src="${escapeHtml(p.image_url)}" style="width: 80px; height: 80px; border-radius: 8px; object-fit: cover; flex-shrink: 0;" crossorigin="anonymous">` 
                     : '';
 
                 return `
-                    <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding: 14px 0; border-bottom: 1px dashed #CBD5E1; page-break-inside: avoid;">
-                        <div style="display:flex; align-items:flex-start; gap:14px; flex:1;">
+                    <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:14px; padding: 12px 0; border-bottom: 1px dashed #CBD5E1; break-inside: avoid; page-break-inside: avoid;">
+                        <div style="display:flex; align-items:flex-start; gap:12px; flex:1;">
                             ${imgHtml}
                             <div style="flex:1;">
-                                <strong style="font-size:20px; color:#0F172A; display:block; line-height:1.25; margin-bottom:4px;">${escapeHtml(p.name)}</strong>
-                                ${safeDesc ? `<span style="font-size:15px; color:#475569; display:block; line-height:1.4;">${safeDesc}</span>` : ''}
+                                <strong style="font-size:18px; color:#0F172A; display:block; line-height:1.25; margin-bottom:4px;">${escapeHtml(p.name)}</strong>
+                                ${safeDesc ? `<span style="font-size:14px; color:#475569; display:block; line-height:1.4;">${safeDesc}</span>` : ''}
                             </div>
                         </div>
-                        <div style="font-size:22px; font-weight:800; color:#0F172A; white-space:nowrap; padding-left:8px; align-self: flex-start;">
+                        <div style="font-size:20px; font-weight:800; color:#0F172A; white-space:nowrap; padding-left:8px; align-self: flex-start;">
                             R$ ${finalPrice.toFixed(2).replace('.', ',')}
                         </div>
                     </div>
@@ -96,8 +123,8 @@ async function exportMenuPDF() {
             }).join('');
 
             categoriesHtml += `
-                <div style="margin-bottom:26px; page-break-inside: avoid;">
-                    <h3 style="font-size:24px; color:#FF6B35; text-transform:uppercase; border-bottom:3px solid #FF6B35; padding-bottom:6px; margin-bottom:12px; margin-top:18px;">
+                <div style="margin-bottom:24px; break-inside: avoid; page-break-inside: avoid;">
+                    <h3 style="font-size:22px; color:#FF6B35; text-transform:uppercase; border-bottom:3px solid #FF6B35; padding-bottom:6px; margin-bottom:12px; margin-top:16px; break-after: avoid; page-break-after: avoid;">
                         📌 ${escapeHtml(catName)}
                     </h3>
                     ${itemsHtml}
@@ -106,9 +133,9 @@ async function exportMenuPDF() {
         }
 
         pdfContainer.innerHTML = `
-            <div style="text-align:center; margin-bottom:22px; border-bottom:3px solid #E2E8F0; padding-bottom:14px;">
-                <h1 style="margin:0; font-size:32px; color:#0F172A; font-weight:800;">📋 Cardápio Digital</h1>
-                <p style="margin:6px 0 0 0; font-size:15px; color:#64748B;">Atualizado em ${new Date().toLocaleDateString('pt-BR')}</p>
+            <div style="text-align:center; margin-bottom:20px; border-bottom:3px solid #E2E8F0; padding-bottom:12px;">
+                <h1 style="margin:0; font-size:28px; color:#0F172A; font-weight:800;">📋 Cardápio Digital</h1>
+                <p style="margin:4px 0 0 0; font-size:14px; color:#64748B;">Atualizado em ${new Date().toLocaleDateString('pt-BR')}</p>
             </div>
             ${categoriesHtml}
         `;
@@ -124,7 +151,7 @@ async function exportMenuPDF() {
         }
 
         const opt = {
-            margin: [4, 4, 4, 4], // Margem mínima (4mm)
+            margin: [8, 8, 8, 8],
             filename: 'Cardapio_Digital.pdf',
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: { scale: 2, useCORS: true, allowTaint: true },
@@ -139,6 +166,7 @@ async function exportMenuPDF() {
         if (typeof showToast === 'function') showToast('Erro ao gerar PDF.', 'error');
     }
 }
+
 async function renderDashboard() {
     const balanceValue = document.getElementById('balanceValue');
     const balanceTrend = document.getElementById('balanceTrend');
@@ -173,10 +201,15 @@ async function renderDashboard() {
         const now = new Date();
         const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-        // Filtro centralizado para descartar pedidos cancelados
+        // Descarta pedidos cancelados de todos os cálculos
         const validOrders = orders.filter(o => o.status !== 'cancelled');
 
-        // 1. Entradas de Hoje (Apenas Válidos)
+        // Inicializa o mês selecionado caso não esteja definido
+        if (!window.dashboardSelectedMonth) {
+            window.dashboardSelectedMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        }
+
+        // 1. Entradas de Hoje
         const todayOrders = validOrders.filter(o => {
             const orderDate = parseDateSafe(o.created_at || o.date);
             const orderDateStr = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}-${String(orderDate.getDate()).padStart(2, '0')}`;
@@ -196,7 +229,7 @@ async function renderDashboard() {
         if (inToday) inToday.textContent = `R$ ${todayIn.toFixed(2).replace('.', ',')}`;
         if (outToday) outToday.textContent = `R$ ${todayOut.toFixed(2).replace('.', ',')}`;
 
-        // 3. Saldo Atual Geral
+        // 3. Saldo Atual Geral (Acumulado de caixa da loja)
         const totalInGeral = validOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
         const totalOutGeral = expenses.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
         const currentBalance = totalInGeral - totalOutGeral;
@@ -208,7 +241,7 @@ async function renderDashboard() {
                 : 'Sem movimentações ainda';
         }
 
-        // 4. Saldo da Semana (Quinta a Quarta)
+        // 4. Saldo da Semana (Quinta a Quarta - Ciclo iFood)
         const { cycleStart, cycleEnd } = getIFoodWeeklyCycle(now);
 
         const weekOrders = validOrders.filter(o => {
@@ -246,18 +279,54 @@ async function renderDashboard() {
             }
         }
 
-        // 5. Saldo do Mês
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const monthOrders = validOrders.filter(o => parseDateSafe(o.created_at || o.date) >= startOfMonth);
-        const monthExp = expenses.filter(e => parseDateSafe(e.expense_date || e.created_at || e.date) >= startOfMonth);
+        // 5. Saldo e Faturamento do Mês Selecionado (Com Filtro/Navegação por Mês)
+        const [selYear, selMonth] = window.dashboardSelectedMonth.split('-').map(Number);
+        const startOfMonth = new Date(selYear, selMonth - 1, 1, 0, 0, 0, 0);
+        const endOfMonth = new Date(selYear, selMonth, 0, 23, 59, 59, 999);
+
+        const monthOrders = validOrders.filter(o => {
+            const d = parseDateSafe(o.created_at || o.date);
+            return d >= startOfMonth && d <= endOfMonth;
+        });
+
+        const monthExp = expenses.filter(e => {
+            const d = parseDateSafe(e.expense_date || e.created_at || e.date);
+            return d >= startOfMonth && d <= endOfMonth;
+        });
+
         const monthInVal = monthOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
         const monthOutVal = monthExp.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
         const monthNet = monthInVal - monthOutVal;
 
         if (monthBalance) monthBalance.textContent = `R$ ${monthNet.toFixed(2).replace('.', ',')}`;
-        if (monthRange) monthRange.textContent = now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+        // Renderiza o seletor de mês dinâmico no painel
+        if (monthRange) {
+            const prevMonthObj = new Date(selYear, selMonth - 2, 1);
+            const nextMonthObj = new Date(selYear, selMonth, 1);
+
+            const prevMonthStr = `${prevMonthObj.getFullYear()}-${String(prevMonthObj.getMonth() + 1).padStart(2, '0')}`;
+            const nextMonthStr = `${nextMonthObj.getFullYear()}-${String(nextMonthObj.getMonth() + 1).padStart(2, '0')}`;
+
+            const monthLabel = startOfMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+            const capitalizedMonth = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
+
+            monthRange.innerHTML = `
+                <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-top:4px;">
+                    <button onclick="selectDashboardMonth('${prevMonthStr}')" style="background:#0F172A; color:#F1F5F9; border:1px solid #334155; padding:2px 8px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:bold;">◄</button>
+                    
+                    <div style="position:relative; cursor:pointer;">
+                        <span style="font-weight:bold; color:#FF6B35; font-size:13px;">📅 ${capitalizedMonth}</span>
+                        <input type="month" value="${window.dashboardSelectedMonth}" onchange="selectDashboardMonth(this.value)" style="position:absolute; inset:0; opacity:0; width:100%; height:100%; cursor:pointer;">
+                    </div>
+
+                    <button onclick="selectDashboardMonth('${nextMonthStr}')" style="background:#0F172A; color:#F1F5F9; border:1px solid #334155; padding:2px 8px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:bold;">►</button>
+                </div>
+            `;
+        }
+
         if (monthBadge) {
-            monthBadge.textContent = monthNet >= 0 ? '🟢 Positivo' : '🔴 Deficit';
+            monthBadge.textContent = `${monthOrders.length} pedido(s) • ${monthNet >= 0 ? '🟢 Lucro' : '🔴 Prejuízo'}`;
             monthBadge.style.background = monthNet >= 0 ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)';
             monthBadge.style.color = monthNet >= 0 ? '#10B981' : '#EF4444';
         }
@@ -284,7 +353,7 @@ async function renderDashboard() {
             }
         }
 
-        // 7. Renderiza Analytics repassando o array de pedidos
+        // 7. Renderiza Analytics
         if (window.AnalyticsManager && typeof window.AnalyticsManager.render === 'function') {
             window.AnalyticsManager.render(orders);
         }
@@ -294,9 +363,12 @@ async function renderDashboard() {
     }
 }
 
+window.selectDashboardMonth = selectDashboardMonth;
 window.renderDashboard = renderDashboard;
 window.exportMenuPDF = exportMenuPDF;
 
 document.addEventListener('DOMContentLoaded', () => {
     renderDashboard();
 });
+
+```
