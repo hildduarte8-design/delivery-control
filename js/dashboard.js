@@ -1,4 +1,4 @@
-// js/dashboard.js - Painel Principal, Navegação Mensal de Faturamento e Exportação de Cardápio em PDF
+// js/dashboard.js - Painel Principal com Faturamento Filtrado pelo Mês Corrente e PDF sem Cortes
 
 if (typeof window.escapeHtml !== 'function') {
     window.escapeHtml = function(text) {
@@ -34,7 +34,6 @@ function getIFoodWeeklyCycle(referenceDate = new Date()) {
     return { cycleStart, cycleEnd };
 }
 
-// Estado global para controle do mês selecionado no Dashboard (Formato YYYY-MM)
 window.dashboardSelectedMonth = window.dashboardSelectedMonth || null;
 
 function selectDashboardMonth(monthStr) {
@@ -77,7 +76,6 @@ async function exportMenuPDF() {
             grouped[cat].push(p);
         });
 
-        // Container A4 com regras CSS de proteção contra cortes de página
         const pdfContainer = document.createElement('div');
         pdfContainer.style.cssText = 'padding: 12px; font-family: Arial, sans-serif; color: #1E293B; background: #FFFFFF; width: 100%; box-sizing: border-box;';
 
@@ -173,7 +171,6 @@ async function renderDashboard() {
         let orders = [];
         let expenses = [];
 
-        // 1. Busca Pedidos do Supabase
         if (typeof dbClient !== 'undefined' && dbClient) {
             try {
                 const { data: oData, error: oErr } = await dbClient.from('orders').select('*').order('created_at', { ascending: false });
@@ -182,7 +179,6 @@ async function renderDashboard() {
                 console.warn('Erro ao carregar orders do Supabase:', errO);
             }
 
-            // 2. Busca Gastos do Supabase (Isolado para não travar em caso de erro)
             try {
                 const { data: eData, error: eErr } = await dbClient.from('expenses').select('*');
                 if (!eErr && eData) expenses = eData;
@@ -191,7 +187,6 @@ async function renderDashboard() {
             }
         }
 
-        // FALLBACK LOCAL: Se não vier nada do Supabase, lê do estado/localStorage
         if (orders.length === 0) {
             if (typeof state !== 'undefined' && Array.isArray(state.orders) && state.orders.length > 0) {
                 orders = state.orders;
@@ -221,15 +216,49 @@ async function renderDashboard() {
         const now = new Date();
         const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-        // Descarta pedidos cancelados de todos os cálculos
         const validOrders = orders.filter(o => o.status !== 'cancelled');
 
-        // Garante um mês selecionado válido
         if (!window.dashboardSelectedMonth || typeof window.dashboardSelectedMonth !== 'string' || !window.dashboardSelectedMonth.includes('-')) {
             window.dashboardSelectedMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         }
 
-        // 1. Entradas de Hoje
+        let [selYear, selMonth] = window.dashboardSelectedMonth.split('-').map(Number);
+        if (isNaN(selYear) || isNaN(selMonth) || selMonth < 1 || selMonth > 12) {
+            selYear = now.getFullYear();
+            selMonth = now.getMonth() + 1;
+            window.dashboardSelectedMonth = `${selYear}-${String(selMonth).padStart(2, '0')}`;
+        }
+
+        const startOfMonth = new Date(selYear, selMonth - 1, 1, 0, 0, 0, 0);
+        const endOfMonth = new Date(selYear, selMonth, 0, 23, 59, 59, 999);
+
+        // Pedidos do mês selecionado
+        const monthOrders = validOrders.filter(o => {
+            const d = parseDateSafe(o.created_at || o.date);
+            return d && d >= startOfMonth && d <= endOfMonth;
+        });
+
+        const monthExp = expenses.filter(e => {
+            const d = parseDateSafe(e.expense_date || e.created_at || e.date);
+            return d && d >= startOfMonth && d <= endOfMonth;
+        });
+
+        const monthInVal = monthOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
+        const monthOutVal = monthExp.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
+        const monthNet = monthInVal - monthOutVal;
+
+        const monthLabel = startOfMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+        const capitalizedMonth = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
+
+        // 1. Destaque Principal (Top Card): Agora reflete o Mês Corrente/Selecionado
+        balanceValue.textContent = `R$ ${monthNet.toFixed(2).replace('.', ',')}`;
+        if (balanceTrend) {
+            balanceTrend.textContent = monthOrders.length > 0 
+                ? `${monthOrders.length} pedido(s) em ${capitalizedMonth}` 
+                : `Sem pedidos registrados em ${capitalizedMonth}`;
+        }
+
+        // 2. Entradas de Hoje
         const todayOrders = validOrders.filter(o => {
             const orderDate = parseDateSafe(o.created_at || o.date);
             if (!orderDate) return false;
@@ -238,7 +267,7 @@ async function renderDashboard() {
         });
         const todayIn = todayOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
 
-        // 2. Gastos de Hoje
+        // 3. Gastos de Hoje
         const todayExp = expenses.filter(e => {
             const dateVal = e.expense_date || e.created_at || e.date;
             const expDate = parseDateSafe(dateVal);
@@ -250,18 +279,6 @@ async function renderDashboard() {
 
         if (inToday) inToday.textContent = `R$ ${todayIn.toFixed(2).replace('.', ',')}`;
         if (outToday) outToday.textContent = `R$ ${todayOut.toFixed(2).replace('.', ',')}`;
-
-        // 3. Saldo Atual Geral (Acumulado de caixa da loja)
-        const totalInGeral = validOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
-        const totalOutGeral = expenses.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
-        const currentBalance = totalInGeral - totalOutGeral;
-
-        balanceValue.textContent = `R$ ${currentBalance.toFixed(2).replace('.', ',')}`;
-        if (balanceTrend) {
-            balanceTrend.textContent = validOrders.length > 0 
-                ? `${validOrders.length} pedido(s) válido(s) registrado(s)` 
-                : 'Sem movimentações ainda';
-        }
 
         // 4. Saldo da Semana (Quinta a Quarta - Ciclo iFood)
         const { cycleStart, cycleEnd } = getIFoodWeeklyCycle(now);
@@ -301,43 +318,15 @@ async function renderDashboard() {
             }
         }
 
-        // 5. Saldo e Faturamento do Mês Selecionado (Com Filtro/Navegação por Mês)
-        let [selYear, selMonth] = window.dashboardSelectedMonth.split('-').map(Number);
-        if (isNaN(selYear) || isNaN(selMonth) || selMonth < 1 || selMonth > 12) {
-            selYear = now.getFullYear();
-            selMonth = now.getMonth() + 1;
-            window.dashboardSelectedMonth = `${selYear}-${String(selMonth).padStart(2, '0')}`;
-        }
-
-        const startOfMonth = new Date(selYear, selMonth - 1, 1, 0, 0, 0, 0);
-        const endOfMonth = new Date(selYear, selMonth, 0, 23, 59, 59, 999);
-
-        const monthOrders = validOrders.filter(o => {
-            const d = parseDateSafe(o.created_at || o.date);
-            return d && d >= startOfMonth && d <= endOfMonth;
-        });
-
-        const monthExp = expenses.filter(e => {
-            const d = parseDateSafe(e.expense_date || e.created_at || e.date);
-            return d && d >= startOfMonth && d <= endOfMonth;
-        });
-
-        const monthInVal = monthOrders.reduce((acc, o) => acc + (Number(o.total || o.amount) || 0), 0);
-        const monthOutVal = monthExp.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
-        const monthNet = monthInVal - monthOutVal;
-
+        // 5. Card Secundário do Mês (Seletor Interativo)
         if (monthBalance) monthBalance.textContent = `R$ ${monthNet.toFixed(2).replace('.', ',')}`;
 
-        // Renderiza o seletor de mês dinâmico no painel
         if (monthRange) {
             const prevMonthObj = new Date(selYear, selMonth - 2, 1);
             const nextMonthObj = new Date(selYear, selMonth, 1);
 
             const prevMonthStr = `${prevMonthObj.getFullYear()}-${String(prevMonthObj.getMonth() + 1).padStart(2, '0')}`;
             const nextMonthStr = `${nextMonthObj.getFullYear()}-${String(nextMonthObj.getMonth() + 1).padStart(2, '0')}`;
-
-            const monthLabel = startOfMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-            const capitalizedMonth = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
 
             monthRange.innerHTML = `
                 <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-top:4px;">
@@ -359,7 +348,7 @@ async function renderDashboard() {
             monthBadge.style.color = monthNet >= 0 ? '#10B981' : '#EF4444';
         }
 
-        // 6. Últimas Movimentações (Apenas pedidos válidos)
+        // 6. Últimas Movimentações
         if (movList) {
             const recentOrders = validOrders.slice(0, 5);
             if (recentOrders.length === 0) {
@@ -382,7 +371,7 @@ async function renderDashboard() {
             }
         }
 
-        // 7. Renderiza Analytics de forma isolada
+        // 7. Renderiza Analytics
         if (window.AnalyticsManager && typeof window.AnalyticsManager.render === 'function') {
             try {
                 window.AnalyticsManager.render(orders);
