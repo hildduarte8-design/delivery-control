@@ -1,4 +1,4 @@
-// js/dashboard.js - Painel Principal com Faturamento Filtrado pelo Mês Corrente e PDF sem Cortes
+// js/dashboard.js - Painel Principal com Seletor de Mês no Card de Saldo Principal e PDF sem Cortes
 
 if (typeof window.escapeHtml !== 'function') {
     window.escapeHtml = function(text) {
@@ -250,12 +250,28 @@ async function renderDashboard() {
         const monthLabel = startOfMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
         const capitalizedMonth = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
 
-        // 1. Destaque Principal (Top Card): Agora reflete o Mês Corrente/Selecionado
+        const prevMonthObj = new Date(selYear, selMonth - 2, 1);
+        const nextMonthObj = new Date(selYear, selMonth, 1);
+        const prevMonthStr = `${prevMonthObj.getFullYear()}-${String(prevMonthObj.getMonth() + 1).padStart(2, '0')}`;
+        const nextMonthStr = `${nextMonthObj.getFullYear()}-${String(nextMonthObj.getMonth() + 1).padStart(2, '0')}`;
+
+        // 1. Destaque Principal (Top Card): Valor do Mês + Seletor de Mês Direto no Topo
         balanceValue.textContent = `R$ ${monthNet.toFixed(2).replace('.', ',')}`;
+        
         if (balanceTrend) {
-            balanceTrend.textContent = monthOrders.length > 0 
-                ? `${monthOrders.length} pedido(s) em ${capitalizedMonth}` 
-                : `Sem pedidos registrados em ${capitalizedMonth}`;
+            balanceTrend.innerHTML = `
+                <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-top:8px;">
+                    <button onclick="selectDashboardMonth('${prevMonthStr}')" title="Mês anterior" style="background:#0F172A; color:#F1F5F9; border:1px solid #334155; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:bold; min-height:30px;">◄</button>
+                    
+                    <div style="position:relative; cursor:pointer; background:#0F172A; border:1px solid #334155; padding:4px 12px; border-radius:6px;">
+                        <span style="font-weight:bold; color:#FF6B35; font-size:13px;">📅 ${capitalizedMonth}</span>
+                        <input type="month" value="${window.dashboardSelectedMonth}" onchange="selectDashboardMonth(this.value)" style="position:absolute; inset:0; opacity:0; width:100%; height:100%; cursor:pointer;">
+                    </div>
+
+                    <button onclick="selectDashboardMonth('${nextMonthStr}')" title="Próximo mês" style="background:#0F172A; color:#F1F5F9; border:1px solid #334155; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:bold; min-height:30px;">►</button>
+                </div>
+                <div style="font-size:11px; color:#94A3B8; margin-top:6px;">${monthOrders.length} pedido(s) registrado(s) neste mês</div>
+            `;
         }
 
         // 2. Entradas de Hoje
@@ -318,16 +334,10 @@ async function renderDashboard() {
             }
         }
 
-        // 5. Card Secundário do Mês (Seletor Interativo)
+        // 5. Card Secundário do Mês
         if (monthBalance) monthBalance.textContent = `R$ ${monthNet.toFixed(2).replace('.', ',')}`;
 
         if (monthRange) {
-            const prevMonthObj = new Date(selYear, selMonth - 2, 1);
-            const nextMonthObj = new Date(selYear, selMonth, 1);
-
-            const prevMonthStr = `${prevMonthObj.getFullYear()}-${String(prevMonthObj.getMonth() + 1).padStart(2, '0')}`;
-            const nextMonthStr = `${nextMonthObj.getFullYear()}-${String(nextMonthObj.getMonth() + 1).padStart(2, '0')}`;
-
             monthRange.innerHTML = `
                 <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-top:4px;">
                     <button onclick="selectDashboardMonth('${prevMonthStr}')" style="background:#0F172A; color:#F1F5F9; border:1px solid #334155; padding:2px 8px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:bold;">◄</button>
