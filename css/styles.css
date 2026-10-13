@@ -649,4 +649,30 @@ input[type="date"] {
     #pdf-menu-template h1 { font-size: 24px; text-align: center; margin-bottom: 5px; }
     #pdf-menu-template p { font-size: 12px; text-align: center; margin-bottom: 20px; color: #555; }
     .pdf-item-row { display: flex; justify-content: space-between; border-bottom: 1px dotted #ccc; padding: 8px 0; font-size: 14px; }
+    
+}
+/* =========================================================
+   SIMPLIFICAÇÃO DA TELA - OCULTAÇÃO DE MÓDULOS NÃO UTILIZADOS
+   ========================================================= */
+
+/* 1. Oculta os itens intermediários do Menu Flutuante (mantém 1º e último) */
+.fab-menu button:nth-child(2),
+.fab-menu button:nth-child(3),
+.fab-menu button:nth-child(4),
+.fab-menu button:nth-child(5),
+.fab-menu button:nth-child(6),
+.fab-menu-item:nth-child(2),
+.fab-menu-item:nth-child(3),
+.fab-menu-item:nth-child(4),
+.fab-menu-item:nth-child(5),
+.fab-menu-item:nth-child(6) {
+    display: none !important;
+}
+
+/* 2. Oculta o botão 'Gestão' da barra de navegação inferior */
+.bottom-nav button[onclick*="gestao"],
+.bottom-nav button[onclick*="Gestao"],
+.bottom-nav-item:nth-child(4),
+.nav-item:nth-child(4) {
+    display: none !important;
 }
